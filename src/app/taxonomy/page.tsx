@@ -3,6 +3,8 @@ import { TaxonomyForm } from './TaxonomyForm'
 import { TaxonomyList } from './TaxonomyList'
 import { TaxonomyManager } from './TaxonomyManager'
 
+export const dynamic = 'force-dynamic'
+
 export default async function TaxonomyPage() {
   const [categories, periods, materials, styles] = await Promise.all([
     getTaxonomies('category'),

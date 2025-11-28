@@ -2,6 +2,8 @@ import { getSearches } from './actions'
 import { SearchForm } from './SearchForm'
 import { SearchList } from './SearchList'
 
+export const dynamic = 'force-dynamic'
+
 export default async function SearchesPage() {
   const searches = await getSearches()
 
