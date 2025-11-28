@@ -15,7 +15,7 @@ export async function GET(request: Request) {
   return withErrorHandling(async () => {
     logInfo('CRON:scrape', 'Starting scheduled scraping job')
     
-    const result = await container.runScrapingUseCase.execute()
+    const result = await container.runListingScrapingUseCase.execute()
     
     logInfo('CRON:scrape', `Scraping completed: ${result.newListings} new listings`, result)
     
