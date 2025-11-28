@@ -4,10 +4,11 @@
   "description": "Le Bon Coin scraping bot with AI price estimation",
   "scripts": {
     "dev": "next dev",
+    "prebuild": "prisma generate",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "postinstall": "playwright install chromium",
+    "postinstall": "prisma generate && playwright install chromium",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
