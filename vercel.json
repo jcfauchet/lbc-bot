@@ -1,0 +1,26 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/scrape",
+      "schedule": "0 */2 * * *"
+    },
+    {
+      "path": "/api/cron/analyze",
+      "schedule": "15 */1 * * *"
+    },
+    {
+      "path": "/api/cron/scrapers",
+      "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/notify",
+      "schedule": "0 9 * * *"
+    }
+  ],
+  "functions": {
+    "src/app/api/cron/**/*.ts": {
+      "maxDuration": 300
+    }
+  }
+}
+

@@ -1,0 +1,258 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Search {
+  id        String   @id @default(cuid())
+  name      String
+  url       String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  listings  Listing[]
+
+  @@map("searches")
+}
+
+model Listing {
+  id          String    @id @default(cuid())
+  lbcId       String    @unique
+  searchId    String
+  url         String
+  title       String
+  priceCents  Int
+  city        String?
+  region      String?
+  publishedAt DateTime?
+  status      String    @default("new")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  search      Search           @relation(fields: [searchId], references: [id], onDelete: Cascade)
+  images      ListingImage[]
+  aiAnalysis  AiAnalysis?
+  notifications Notification[]
+  labels      ListingLabel[]
+
+  @@index([searchId])
+  @@index([lbcId])
+  @@index([status])
+  @@index([publishedAt])
+  @@map("listings")
+}
+
+model ListingImage {
+  id         String   @id @default(cuid())
+  listingId  String
+  urlRemote  String
+  pathLocal  String?
+  createdAt  DateTime @default(now())
+  
+  listing    Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@map("listing_images")
+}
+
+model AiAnalysis {
+  id             String   @id @default(cuid())
+  listingId      String   @unique
+  estMinCents    Int
+  estMaxCents    Int
+  marginCents    Int      @default(0)
+  description    String   @db.Text
+  confidence     Float?
+  provider       String   @default("openai")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  listing        Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([marginCents])
+  @@map("ai_analyses")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  listingId String
+  channel   String   @default("email")
+  status    String   @default("pending")
+  sentAt    DateTime?
+  error     String?  @db.Text
+  createdAt DateTime @default(now())
+  
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@index([status])
+  @@map("notifications")
+}
+
+model ListingLabel {
+  id        String   @id @default(cuid())
+  listingId String
+  label     String
+  comment   String?  @db.Text
+  createdAt DateTime @default(now())
+  
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@index([label])
+  @@map("listing_labels")
+}
+
+
+
+model ProductSource {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  baseUrl   String
+  startUrl  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  listings  ProductListing[]
+  priceHistory PriceHistory[]
+
+  @@map("product_sources")
+}
+
+model Product {
+  id           String   @id @default(cuid())
+  brand        String?
+  model        String?
+  categoryId   String?
+  category     TaxonomyCategory? @relation(fields: [categoryId], references: [id])
+  reference    String?
+  title        String?
+  canonicalKey String?  @unique
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  listings     ProductListing[]
+  images       ProductImage[]
+  priceHistory PriceHistory[]
+
+  @@index([categoryId])
+  @@map("products")
+}
+
+model ProductListing {
+  id              String   @id @default(cuid())
+  productId       String?
+  product         Product? @relation(fields: [productId], references: [id])
+  sourceId        String
+  source          ProductSource @relation(fields: [sourceId], references: [id])
+  sourceListingId String
+  url             String
+  title           String?
+  description     String?
+  categoryId      String?
+  category        TaxonomyCategory? @relation(fields: [categoryId], references: [id])
+  subCategory     String?  // Sub-category: "Chair", "Table", "Lamp", etc.
+  designer        String?  // Designer/Manufacturer name
+  periodId        String?
+  period          TaxonomyPeriod? @relation(fields: [periodId], references: [id])
+  materialId      String?
+  material        TaxonomyMaterial? @relation(fields: [materialId], references: [id])
+  styleId         String?
+  style           TaxonomyStyle? @relation(fields: [styleId], references: [id])
+  condition       String?
+  price           Float?
+  currency        String?
+  scrapedAt       DateTime
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  images          ProductImage[]
+
+  @@index([categoryId])
+  @@index([periodId])
+  @@index([materialId])
+  @@index([styleId])
+  @@unique([sourceId, sourceListingId])
+  @@map("product_listings")
+}
+
+model ProductImage {
+  id        String   @id @default(cuid())
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id])
+  listingId String?
+  listing   ProductListing? @relation(fields: [listingId], references: [id])
+  url       String
+  imageHash String?
+  createdAt DateTime @default(now())
+
+  @@map("product_images")
+}
+
+model PriceHistory {
+  id         String   @id @default(cuid())
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id])
+  sourceId   String?
+  source     ProductSource? @relation(fields: [sourceId], references: [id])
+  price      Float
+  currency   String
+  observedAt DateTime
+  createdAt  DateTime @default(now())
+
+  @@map("price_history")
+}
+
+model TaxonomyCategory {
+  id        String   @id @default(cuid())
+  value     String   @unique
+  order     Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  productListings ProductListing[]
+  products        Product[]
+
+  @@map("taxonomy_categories")
+}
+
+model TaxonomyPeriod {
+  id        String   @id @default(cuid())
+  value     String   @unique
+  order     Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  productListings ProductListing[]
+
+  @@map("taxonomy_periods")
+}
+
+model TaxonomyMaterial {
+  id        String   @id @default(cuid())
+  value     String   @unique
+  order     Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  productListings ProductListing[]
+
+  @@map("taxonomy_materials")
+}
+
+model TaxonomyStyle {
+  id        String   @id @default(cuid())
+  value     String   @unique
+  order     Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  productListings ProductListing[]
+
+  @@map("taxonomy_styles")
+}

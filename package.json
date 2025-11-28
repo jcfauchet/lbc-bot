@@ -1,0 +1,58 @@
+{
+  "name": "lbc-bot",
+  "version": "1.0.0",
+  "description": "Le Bon Coin scraping bot with AI price estimation",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "postinstall": "playwright install chromium",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate dev",
+    "db:studio": "prisma studio",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:clear": "tsx prisma/clear-db.ts",
+    "scrape": "tsx src/cli/scrape.ts",
+    "scrape:references": "tsx src/cli/run-scrapers.ts",
+    "analyze": "tsx src/cli/analyze.ts",
+    "notify": "tsx src/cli/notify.ts"
+  },
+  "dependencies": {
+    "@google/genai": "^1.30.0",
+    "@prisma/adapter-pg": "7.0.1",
+    "@prisma/client": "7.0.1",
+    "cloudinary": "^2.8.0",
+    "date-fns": "^4.1.0",
+    "dotenv": "^17.2.3",
+    "next": "^16.0.4",
+    "openai": "^4.73.0",
+    "pg": "^8.13.1",
+    "playwright": "^1.48.2",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "resend": "^4.0.1",
+    "winston": "^3.17.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.17",
+    "@types/node": "^22.10.1",
+    "@types/pg": "^8.11.10",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "autoprefixer": "^10.4.22",
+    "eslint": "^9.15.0",
+    "eslint-config-next": "^16.0.4",
+    "postcss": "^8.5.6",
+    "prisma": "7.0.1",
+    "tailwindcss": "^4.1.17",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "packageManager": "pnpm@10.12.4",
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  }
+}
