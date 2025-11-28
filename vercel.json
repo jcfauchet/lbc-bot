@@ -16,11 +16,6 @@
       "path": "/api/cron/notify",
       "schedule": "0 9 * * *"
     }
-  ],
-  "functions": {
-    "src/app/api/cron/**/*.ts": {
-      "maxDuration": 300
-    }
-  }
+  ]
 }
 
