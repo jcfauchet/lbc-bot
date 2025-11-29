@@ -84,37 +84,89 @@ MÉTHODOLOGIE D'ANALYSE :
 3. BENCHMARK : Base ton prix sur la valeur de marché actuelle (Market Value) pour une vente entre particuliers ou sur une plateforme spécialisée.
 
 INSTRUCTIONS DE SORTIE (JSON UNIQUEMENT) :
-Tu dois fournir ta réponse au format JSON en utilisant le schéma de sortie spécifié (estimatedMinPrice, estimatedMaxPrice, description, confidence).
+Tu dois fournir ta réponse UNIQUEMENT au format JSON valide, sans texte avant ou après, sans markdown, sans blocs de code.
+Le JSON doit respecter exactement ce schéma :
+{
+  "estimatedMinPrice": <nombre en euros>,
+  "estimatedMaxPrice": <nombre en euros>,
+  "description": "<texte d'analyse détaillé>",
+  "confidence": <nombre entre 0.1 et 1.0>
+}
+
+Exemple de réponse valide :
+{"estimatedMinPrice": 500, "estimatedMaxPrice": 1200, "description": "Chaise vintage en bois...", "confidence": 0.75}
     `.trim()
   }
 
   protected parseResponse(content: string): PriceEstimationResult {
-    try {
-      const jsonMatch = content.match(/\{[\s\S]*\}/)
-      const jsonString = jsonMatch ? jsonMatch[0] : content
+    if (!content || content.trim().length === 0) {
+      console.error('Empty response content')
+      throw new Error('Invalid response format: empty content')
+    }
 
-      const parsed = JSON.parse(jsonString)
+    let jsonString: string | null = null
+    let parsed: any = null
 
-      let confidence = 0.5
-      if (typeof parsed.confidence === 'number') {
-        confidence = parsed.confidence
-      } else if (typeof parsed.confidence === 'string') {
-        const match = parsed.confidence.match(/(\d+(?:\.\d+)?)/)
-        if (match) {
-          confidence = parseFloat(match[1])
-          if (confidence > 1) confidence = confidence / 100 // Handle percentages like "80"
+    const extractionStrategies = [
+      () => {
+        const markdownJsonMatch = content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/)
+        return markdownJsonMatch ? markdownJsonMatch[1] : null
+      },
+      () => {
+        const jsonMatch = content.match(/\{[\s\S]*\}/)
+        return jsonMatch ? jsonMatch[0] : null
+      },
+      () => {
+        const trimmed = content.trim()
+        return trimmed.startsWith('{') && trimmed.endsWith('}') ? trimmed : null
+      },
+    ]
+
+    for (const strategy of extractionStrategies) {
+      try {
+        jsonString = strategy()
+        if (jsonString) {
+          parsed = JSON.parse(jsonString)
+          if (parsed && typeof parsed === 'object') {
+            break
+          }
         }
+      } catch (e) {
+        continue
       }
+    }
 
-      return {
-        estimatedMinPrice: Money.fromEuros(parsed.estimatedMinPrice || 0),
-        estimatedMaxPrice: Money.fromEuros(parsed.estimatedMaxPrice || 0),
-        description: parsed.description || "Analyse de l'objet non disponible.",
-        confidence: Math.min(Math.max(confidence, 0.1), 1.0),
+    if (!parsed || typeof parsed !== 'object') {
+      console.error('Failed to extract valid JSON from response')
+      console.error('Response content (first 500 chars):', content.substring(0, 500))
+      throw new Error(`Invalid response format: could not parse JSON. Content preview: ${content.substring(0, 200)}`)
+    }
+
+    let confidence = 0.5
+    if (typeof parsed.confidence === 'number') {
+      confidence = parsed.confidence
+    } else if (typeof parsed.confidence === 'string') {
+      const match = parsed.confidence.match(/(\d+(?:\.\d+)?)/)
+      if (match) {
+        confidence = parseFloat(match[1])
+        if (confidence > 1) confidence = confidence / 100
       }
-    } catch (error) {
-      console.error('Failed to parse response:', content)
-      throw new Error('Invalid response format')
+    }
+
+    const estimatedMinPrice = parsed.estimatedMinPrice ?? parsed.minPrice ?? parsed.estimated_min_price ?? 0
+    const estimatedMaxPrice = parsed.estimatedMaxPrice ?? parsed.maxPrice ?? parsed.estimated_max_price ?? 0
+
+    if (typeof estimatedMinPrice !== 'number' || typeof estimatedMaxPrice !== 'number') {
+      console.error('Invalid price values in response:', { estimatedMinPrice, estimatedMaxPrice })
+      console.error('Full parsed response:', parsed)
+      throw new Error(`Invalid response format: price values must be numbers. Got min: ${estimatedMinPrice}, max: ${estimatedMaxPrice}`)
+    }
+
+    return {
+      estimatedMinPrice: Money.fromEuros(estimatedMinPrice),
+      estimatedMaxPrice: Money.fromEuros(estimatedMaxPrice),
+      description: parsed.description || parsed.analysis || "Analyse de l'objet non disponible.",
+      confidence: Math.min(Math.max(confidence, 0.1), 1.0),
     }
   }
 

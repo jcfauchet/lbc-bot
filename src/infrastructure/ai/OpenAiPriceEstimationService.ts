@@ -57,10 +57,18 @@ export class OpenAiPriceEstimationService extends BasePriceEstimationService {
       })
 
       const content = response.choices[0]?.message?.content || ''
+      if (!content) {
+        console.error('OpenAI returned empty content')
+        throw new Error('OpenAI returned empty response')
+      }
       return this.parseResponse(content)
     } catch (error) {
+      if (error instanceof Error && error.message.includes('Invalid response format')) {
+        console.error('OpenAI estimation error - parsing failed:', error.message)
+        throw error
+      }
       console.error('OpenAI estimation error:', error)
-      throw new Error('Failed to estimate price with OpenAI')
+      throw new Error(`Failed to estimate price with OpenAI: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 

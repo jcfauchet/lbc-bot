@@ -55,10 +55,18 @@ export class GeminiPriceEstimationService extends BasePriceEstimationService {
       })
 
       const content = response.text || ''
+      if (!content) {
+        console.error('Gemini returned empty content')
+        throw new Error('Gemini returned empty response')
+      }
       return this.parseResponse(content)
     } catch (error) {
+      if (error instanceof Error && error.message.includes('Invalid response format')) {
+        console.error('Gemini estimation error - parsing failed:', error.message)
+        throw error
+      }
       console.error('Gemini estimation error:', error)
-      throw new Error('Failed to estimate price with Gemini')
+      throw new Error(`Failed to estimate price with Gemini: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 
