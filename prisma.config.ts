@@ -1,6 +1,8 @@
 import 'dotenv/config'
 import { defineConfig } from 'prisma/config'
 
+const directUrl = process.env.DATABASE_URL
+
 export default defineConfig({
   schema: 'prisma/schema.prisma',
   migrations: {
@@ -8,7 +10,7 @@ export default defineConfig({
   },
   datasource: {
     url: process.env.DATABASE_URL!,
-    directUrl: process.env.DATABASE_DIRECT_URL,
+    ...(directUrl && { directUrl }),
   },
 })
 
