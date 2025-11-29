@@ -3,7 +3,7 @@ import { prisma } from '@/infrastructure/prisma/client';
 import { container } from '@/infrastructure/di/container';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 300; // 5 minutes max for scraping
+export const maxDuration = 800; // 13 minutes max for scraping (Vercel Pro limit)
 
 export async function GET(request: Request) {
   try {

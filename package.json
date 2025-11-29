@@ -5,9 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "prebuild": "prisma generate",
-    "build": "next build",
-    "postbuild": "tsx scripts/migrate.ts",
-    "prestart": "tsx scripts/migrate.ts",
+    "build": "prisma migrate deploy && next build",
     "start": "next start",
     "lint": "next lint",
     "postinstall": "prisma generate && (test -z \"$VERCEL\" && playwright install chromium || true)",
