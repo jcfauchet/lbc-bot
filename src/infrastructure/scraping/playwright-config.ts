@@ -4,14 +4,12 @@ export async function createBrowserForVercel(): Promise<Browser> {
   const isVercel = process.env.VERCEL === '1' || process.env.AWS_LAMBDA_FUNCTION_NAME;
   
   if (isVercel) {
-    const sparticuzChromium = await import('@sparticuz/chromium');
-    sparticuzChromium.setGraphicsMode(false);
+    const Chromium = (await import('@sparticuz/chromium')).default;
     
     const launchOptions: Parameters<typeof chromium.launch>[0] = {
-      args: sparticuzChromium.args,
-      defaultViewport: sparticuzChromium.defaultViewport,
-      executablePath: await sparticuzChromium.executablePath(),
-      headless: sparticuzChromium.headless,
+      args: Chromium.args,
+      executablePath: await Chromium.executablePath(),
+      headless: true,
     };
 
     return await chromium.launch(launchOptions);
