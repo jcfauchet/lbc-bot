@@ -3,6 +3,20 @@ import { chromium, Browser, BrowserContext } from 'playwright';
 export async function createBrowserForVercel(): Promise<Browser> {
   const isVercel = process.env.VERCEL === '1' || process.env.AWS_LAMBDA_FUNCTION_NAME;
   
+  if (isVercel) {
+    const sparticuzChromium = await import('@sparticuz/chromium');
+    sparticuzChromium.setGraphicsMode(false);
+    
+    const launchOptions: Parameters<typeof chromium.launch>[0] = {
+      args: sparticuzChromium.args,
+      defaultViewport: sparticuzChromium.defaultViewport,
+      executablePath: await sparticuzChromium.executablePath(),
+      headless: sparticuzChromium.headless,
+    };
+
+    return await chromium.launch(launchOptions);
+  }
+  
   const launchOptions: Parameters<typeof chromium.launch>[0] = {
     headless: true,
     args: [
@@ -16,10 +30,6 @@ export async function createBrowserForVercel(): Promise<Browser> {
       '--disable-gpu',
     ],
   };
-
-  if (isVercel) {
-    launchOptions.executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined;
-  }
 
   return await chromium.launch(launchOptions);
 }
