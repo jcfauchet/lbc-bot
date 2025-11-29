@@ -1,53 +1,46 @@
-import winston from 'winston'
 import { env } from '@/infrastructure/config/env'
 
-const logFormat = winston.format.combine(
-  winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
-  winston.format.errors({ stack: true }),
-  winston.format.printf(({ level, message, timestamp, stack }) => {
-    if (stack) {
-      return `${timestamp} [${level.toUpperCase()}]: ${message}\n${stack}`
-    }
-    return `${timestamp} [${level.toUpperCase()}]: ${message}`
-  })
-)
-
-export const logger = winston.createLogger({
-  level: env.NODE_ENV === 'development' ? 'debug' : 'info',
-  format: logFormat,
-  transports: [
-    new winston.transports.Console({
-      format: winston.format.combine(
-        winston.format.colorize(),
-        logFormat
-      ),
-    }),
-    new winston.transports.File({
-      filename: 'logs/error.log',
-      level: 'error',
-    }),
-    new winston.transports.File({
-      filename: 'logs/combined.log',
-    }),
-  ],
-})
+const getTimestamp = () => {
+  return new Date().toISOString().replace('T', ' ').substring(0, 19)
+}
 
 export function logError(context: string, error: unknown) {
   const errorMessage = error instanceof Error ? error.message : String(error)
   const errorStack = error instanceof Error ? error.stack : undefined
+  const timestamp = getTimestamp()
   
-  logger.error(`[${context}] ${errorMessage}`, { stack: errorStack })
+  console.error(`${timestamp} [ERROR]: [${context}] ${errorMessage}`)
+  if (errorStack) {
+    console.error(errorStack)
+  }
 }
 
 export function logInfo(context: string, message: string, meta?: any) {
-  logger.info(`[${context}] ${message}`, meta)
+  const timestamp = getTimestamp()
+  if (meta) {
+    console.log(`${timestamp} [INFO]: [${context}] ${message}`, meta)
+  } else {
+    console.log(`${timestamp} [INFO]: [${context}] ${message}`)
+  }
 }
 
 export function logDebug(context: string, message: string, meta?: any) {
-  logger.debug(`[${context}] ${message}`, meta)
+  if (env.NODE_ENV === 'development') {
+    const timestamp = getTimestamp()
+    if (meta) {
+      console.debug(`${timestamp} [DEBUG]: [${context}] ${message}`, meta)
+    } else {
+      console.debug(`${timestamp} [DEBUG]: [${context}] ${message}`)
+    }
+  }
 }
 
 export function logWarn(context: string, message: string, meta?: any) {
-  logger.warn(`[${context}] ${message}`, meta)
+  const timestamp = getTimestamp()
+  if (meta) {
+    console.warn(`${timestamp} [WARN]: [${context}] ${message}`, meta)
+  } else {
+    console.warn(`${timestamp} [WARN]: [${context}] ${message}`)
+  }
 }
 
