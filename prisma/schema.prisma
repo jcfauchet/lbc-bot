@@ -13,12 +13,12 @@ model Search {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  listings  Listing[]
+  listings  LbcProductListing[]
 
   @@map("searches")
 }
 
-model Listing {
+model LbcProductListing {
   id          String    @id @default(cuid())
   lbcId       String    @unique
   searchId    String
@@ -42,7 +42,7 @@ model Listing {
   @@index([lbcId])
   @@index([status])
   @@index([publishedAt])
-  @@map("listings")
+  @@map("lbc_product_listings")
 }
 
 model ListingImage {
@@ -52,7 +52,7 @@ model ListingImage {
   pathLocal  String?
   createdAt  DateTime @default(now())
   
-  listing    Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  listing    LbcProductListing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
 
   @@index([listingId])
   @@map("listing_images")
@@ -70,7 +70,7 @@ model AiAnalysis {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   
-  listing        Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  listing        LbcProductListing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
 
   @@index([marginCents])
   @@map("ai_analyses")
@@ -85,7 +85,7 @@ model Notification {
   error     String?  @db.Text
   createdAt DateTime @default(now())
   
-  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  listing   LbcProductListing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
 
   @@index([listingId])
   @@index([status])
@@ -99,7 +99,7 @@ model ListingLabel {
   comment   String?  @db.Text
   createdAt DateTime @default(now())
   
-  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  listing   LbcProductListing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
 
   @@index([listingId])
   @@index([label])
@@ -108,20 +108,20 @@ model ListingLabel {
 
 
 
-model ProductSource {
+model ReferenceSiteSource {
   id        String   @id @default(cuid())
   name      String   @unique
   baseUrl   String
   startUrl  String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  listings  ProductListing[]
+  listings  ReferenceProductListing[]
   priceHistory PriceHistory[]
 
-  @@map("product_sources")
+  @@map("reference_site_sources")
 }
 
-model Product {
+model ReferenceNormalizedProduct {
   id           String   @id @default(cuid())
   brand        String?
   model        String?
@@ -132,20 +132,20 @@ model Product {
   canonicalKey String?  @unique
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
-  listings     ProductListing[]
+  listings     ReferenceProductListing[]
   images       ProductImage[]
   priceHistory PriceHistory[]
 
   @@index([categoryId])
-  @@map("products")
+  @@map("reference_normalized_products")
 }
 
-model ProductListing {
+model ReferenceProductListing {
   id              String   @id @default(cuid())
   productId       String?
-  product         Product? @relation(fields: [productId], references: [id])
+  product         ReferenceNormalizedProduct? @relation(fields: [productId], references: [id])
   sourceId        String
-  source          ProductSource @relation(fields: [sourceId], references: [id])
+  source          ReferenceSiteSource @relation(fields: [sourceId], references: [id])
   sourceListingId String
   url             String
   title           String?
@@ -174,15 +174,15 @@ model ProductListing {
   @@index([materialId])
   @@index([styleId])
   @@unique([sourceId, sourceListingId])
-  @@map("product_listings")
+  @@map("reference_product_listings")
 }
 
 model ProductImage {
   id        String   @id @default(cuid())
   productId String?
-  product   Product? @relation(fields: [productId], references: [id])
+  product   ReferenceNormalizedProduct? @relation(fields: [productId], references: [id])
   listingId String?
-  listing   ProductListing? @relation(fields: [listingId], references: [id])
+  listing   ReferenceProductListing? @relation(fields: [listingId], references: [id])
   url       String
   imageHash String?
   createdAt DateTime @default(now())
@@ -193,9 +193,9 @@ model ProductImage {
 model PriceHistory {
   id         String   @id @default(cuid())
   productId  String
-  product    Product  @relation(fields: [productId], references: [id])
+  product    ReferenceNormalizedProduct  @relation(fields: [productId], references: [id])
   sourceId   String?
-  source     ProductSource? @relation(fields: [sourceId], references: [id])
+  source     ReferenceSiteSource? @relation(fields: [sourceId], references: [id])
   price      Float
   currency   String
   observedAt DateTime
@@ -212,8 +212,8 @@ model TaxonomyCategory {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  productListings ProductListing[]
-  products        Product[]
+  productListings ReferenceProductListing[]
+  products        ReferenceNormalizedProduct[]
 
   @@map("taxonomy_categories")
 }
@@ -226,7 +226,7 @@ model TaxonomyPeriod {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  productListings ProductListing[]
+  productListings ReferenceProductListing[]
 
   @@map("taxonomy_periods")
 }
@@ -239,7 +239,7 @@ model TaxonomyMaterial {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  productListings ProductListing[]
+  productListings ReferenceProductListing[]
 
   @@map("taxonomy_materials")
 }
@@ -252,7 +252,7 @@ model TaxonomyStyle {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  productListings ProductListing[]
+  productListings ReferenceProductListing[]
 
   @@map("taxonomy_styles")
 }

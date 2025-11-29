@@ -2,7 +2,7 @@ import { PrismaClient } from '@prisma/client'
 import { IListingImageRepository } from '@/domain/repositories/IListingImageRepository'
 import { ListingImage } from '@/domain/entities/ListingImage'
 
-export class PrismaListingImageRepository implements IListingImageRepository {
+export class PrismaLbcProductListingImageRepository implements IListingImageRepository {
   constructor(private prisma: PrismaClient) {}
 
   async save(image: ListingImage): Promise<ListingImage> {

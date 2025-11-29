@@ -146,7 +146,7 @@ async function main() {
   ]
 
   for (const source of sources) {
-    await prisma.productSource.upsert({
+    await prisma.referenceSiteSource.upsert({
       where: { name: source.name },
       update: { 
         baseUrl: source.baseUrl,

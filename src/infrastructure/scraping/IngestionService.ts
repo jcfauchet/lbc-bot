@@ -33,8 +33,8 @@ export class IngestionService {
 
     console.log(`Categorized as: ${JSON.stringify(categorization)}`);
 
-    // 1. Upsert ProductSource
-    const source = await this.prisma.productSource.upsert({
+    // 1. Upsert ReferenceSiteSource
+    const source = await this.prisma.referenceSiteSource.upsert({
       where: { name: raw.sourceName },
       update: {},
       create: {
@@ -57,8 +57,8 @@ export class IngestionService {
       ? await this.resolveStyleId(categorization.style)
       : null;
 
-    // 3. Upsert ProductListing
-    const listing = await this.prisma.productListing.upsert({
+    // 3. Upsert ReferenceProductListing
+    const listing = await this.prisma.referenceProductListing.upsert({
       where: {
         sourceId_sourceListingId: {
           sourceId: source.id,
@@ -109,7 +109,7 @@ export class IngestionService {
         ? await this.resolveCategoryId(raw.category)
         : categoryId;
 
-      const product = await this.prisma.product.upsert({
+      const product = await this.prisma.referenceNormalizedProduct.upsert({
         where: { canonicalKey },
         update: {
           updatedAt: new Date(),
@@ -126,7 +126,7 @@ export class IngestionService {
       productId = product.id;
 
       // Link Listing to Product
-      await this.prisma.productListing.update({
+      await this.prisma.referenceProductListing.update({
         where: { id: listing.id },
         data: { productId },
       });

@@ -4,7 +4,7 @@ import { Listing } from '@/domain/entities/Listing'
 import { ListingStatus } from '@/domain/value-objects/ListingStatus'
 import { Money } from '@/domain/value-objects/Money'
 
-export class PrismaListingRepository implements IListingRepository {
+export class PrismaLbcProductListingRepository implements IListingRepository {
   constructor(private prisma: PrismaClient) {}
 
   async save(listing: Listing): Promise<Listing> {
@@ -20,22 +20,22 @@ export class PrismaListingRepository implements IListingRepository {
       status: listing.status,
     }
 
-    const created = await this.prisma.listing.create({ data })
+    const created = await this.prisma.lbcProductListing.create({ data })
     return this.toDomain(created)
   }
 
   async findById(id: string): Promise<Listing | null> {
-    const listing = await this.prisma.listing.findUnique({ where: { id } })
+    const listing = await this.prisma.lbcProductListing.findUnique({ where: { id } })
     return listing ? this.toDomain(listing) : null
   }
 
   async findByLbcId(lbcId: string): Promise<Listing | null> {
-    const listing = await this.prisma.listing.findUnique({ where: { lbcId } })
+    const listing = await this.prisma.lbcProductListing.findUnique({ where: { lbcId } })
     return listing ? this.toDomain(listing) : null
   }
 
   async findBySearchId(searchId: string): Promise<Listing[]> {
-    const listings = await this.prisma.listing.findMany({
+    const listings = await this.prisma.lbcProductListing.findMany({
       where: { searchId },
       orderBy: { createdAt: 'desc' },
     })
@@ -43,7 +43,7 @@ export class PrismaListingRepository implements IListingRepository {
   }
 
   async findByStatus(status: ListingStatus): Promise<Listing[]> {
-    const listings = await this.prisma.listing.findMany({
+    const listings = await this.prisma.lbcProductListing.findMany({
       where: { status },
       orderBy: { createdAt: 'desc' },
     })
@@ -51,7 +51,7 @@ export class PrismaListingRepository implements IListingRepository {
   }
 
   async findWithoutAiAnalysis(): Promise<Listing[]> {
-    const listings = await this.prisma.listing.findMany({
+    const listings = await this.prisma.lbcProductListing.findMany({
       where: { aiAnalysis: null },
       orderBy: { createdAt: 'desc' },
     })
@@ -59,14 +59,14 @@ export class PrismaListingRepository implements IListingRepository {
   }
 
   async findAll(): Promise<Listing[]> {
-    const listings = await this.prisma.listing.findMany({
+    const listings = await this.prisma.lbcProductListing.findMany({
       orderBy: { createdAt: 'desc' },
     })
     return listings.map((l) => this.toDomain(l))
   }
 
   async update(listing: Listing): Promise<Listing> {
-    const updated = await this.prisma.listing.update({
+    const updated = await this.prisma.lbcProductListing.update({
       where: { id: listing.id },
       data: {
         status: listing.status,
@@ -77,7 +77,7 @@ export class PrismaListingRepository implements IListingRepository {
   }
 
   async delete(id: string): Promise<void> {
-    await this.prisma.listing.delete({ where: { id } })
+    await this.prisma.lbcProductListing.delete({ where: { id } })
   }
 
   private toDomain(raw: any): Listing {

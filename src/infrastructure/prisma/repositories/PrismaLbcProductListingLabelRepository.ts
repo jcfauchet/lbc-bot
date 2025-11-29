@@ -2,7 +2,7 @@ import { PrismaClient } from '@prisma/client'
 import { IListingLabelRepository } from '@/domain/repositories/IListingLabelRepository'
 import { ListingLabel } from '@/domain/entities/ListingLabel'
 
-export class PrismaListingLabelRepository implements IListingLabelRepository {
+export class PrismaLbcProductListingLabelRepository implements IListingLabelRepository {
   constructor(private prisma: PrismaClient) {}
 
   async save(label: ListingLabel): Promise<ListingLabel> {

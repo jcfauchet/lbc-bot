@@ -1,4 +1,4 @@
-import { PrismaClient, ProductListing } from '@prisma/client';
+import { PrismaClient, ReferenceProductListing } from '@prisma/client';
 import { ReferenceProduct } from '@/domain/services/IPriceEstimationService';
 
 export class ReferenceProductService {
@@ -65,7 +65,7 @@ export class ReferenceProductService {
     }
 
     // Search for products
-    const listings = await this.prisma.productListing.findMany({
+    const listings = await this.prisma.referenceProductListing.findMany({
       where,
       include: {
         source: true,
@@ -111,7 +111,7 @@ export class ReferenceProductService {
       .slice(0, 5); // Take top 5 keywords
   }
 
-  private toReferenceProduct(listing: ProductListing & {
+  private toReferenceProduct(listing: ReferenceProductListing & {
     source: { name: string };
     category?: { value: string } | null;
     period?: { value: string } | null;

@@ -2,12 +2,12 @@ import { PrismaClient } from '@prisma/client'
 import { prisma } from '@/infrastructure/prisma/client'
 import { env } from '@/infrastructure/config/env'
 
-import { PrismaListingRepository } from '@/infrastructure/prisma/repositories/PrismaListingRepository'
+import { PrismaLbcProductListingRepository } from '@/infrastructure/prisma/repositories/PrismaLbcProductListingRepository'
 import { PrismaSearchRepository } from '@/infrastructure/prisma/repositories/PrismaSearchRepository'
 import { PrismaAiAnalysisRepository } from '@/infrastructure/prisma/repositories/PrismaAiAnalysisRepository'
-import { PrismaListingImageRepository } from '@/infrastructure/prisma/repositories/PrismaListingImageRepository'
+import { PrismaLbcProductListingImageRepository } from '@/infrastructure/prisma/repositories/PrismaLbcProductListingImageRepository'
 import { PrismaNotificationRepository } from '@/infrastructure/prisma/repositories/PrismaNotificationRepository'
-import { PrismaListingLabelRepository } from '@/infrastructure/prisma/repositories/PrismaListingLabelRepository'
+import { PrismaLbcProductListingLabelRepository } from '@/infrastructure/prisma/repositories/PrismaLbcProductListingLabelRepository'
 import { PrismaTaxonomyRepository } from '@/infrastructure/prisma/repositories/PrismaTaxonomyRepository'
 
 import { LeBonCoinListingScraper } from '@/infrastructure/scraping/listings/LeBonCoinListingScraper'
@@ -32,12 +32,12 @@ export class Container {
 
   public readonly prisma: PrismaClient
 
-  public readonly listingRepository: PrismaListingRepository
+  public readonly listingRepository: PrismaLbcProductListingRepository
   public readonly searchRepository: PrismaSearchRepository
   public readonly aiAnalysisRepository: PrismaAiAnalysisRepository
-  public readonly listingImageRepository: PrismaListingImageRepository
+  public readonly listingImageRepository: PrismaLbcProductListingImageRepository
   public readonly notificationRepository: PrismaNotificationRepository
-  public readonly listingLabelRepository: PrismaListingLabelRepository
+  public readonly listingLabelRepository: PrismaLbcProductListingLabelRepository
   public readonly taxonomyRepository: PrismaTaxonomyRepository
 
   public readonly scraper: LeBonCoinListingScraper
@@ -56,12 +56,12 @@ export class Container {
   private constructor() {
     this.prisma = prisma
 
-    this.listingRepository = new PrismaListingRepository(this.prisma)
+    this.listingRepository = new PrismaLbcProductListingRepository(this.prisma)
     this.searchRepository = new PrismaSearchRepository(this.prisma)
     this.aiAnalysisRepository = new PrismaAiAnalysisRepository(this.prisma)
-    this.listingImageRepository = new PrismaListingImageRepository(this.prisma)
+    this.listingImageRepository = new PrismaLbcProductListingImageRepository(this.prisma)
     this.notificationRepository = new PrismaNotificationRepository(this.prisma)
-    this.listingLabelRepository = new PrismaListingLabelRepository(this.prisma)
+    this.listingLabelRepository = new PrismaLbcProductListingLabelRepository(this.prisma)
     this.taxonomyRepository = new PrismaTaxonomyRepository(this.prisma)
 
     this.scraper = new LeBonCoinListingScraper()

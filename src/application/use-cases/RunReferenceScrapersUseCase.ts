@@ -19,7 +19,7 @@ export class RunReferenceScrapersUseCase {
       return;
     }
 
-    // const pamonoSource = await this.prisma.productSource.findUnique({
+    // const pamonoSource = await this.prisma.referenceSiteSource.findUnique({
     //   where: { name: 'Pamono' },
     // });
 
@@ -30,7 +30,7 @@ export class RunReferenceScrapersUseCase {
     //   );
     // }
 
-    const firstDibsSource = await this.prisma.productSource.findUnique({
+    const firstDibsSource = await this.prisma.referenceSiteSource.findUnique({
       where: { name: '1stdibs' },
     });
 
