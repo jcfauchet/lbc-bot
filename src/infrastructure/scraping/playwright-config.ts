@@ -1,35 +1,22 @@
-import { chromium, Browser, BrowserContext } from 'playwright';
+import playwright, { chromium as chromiumOrigin, Browser, BrowserContext } from 'playwright-core';
+import chromium from '@sparticuz/chromium';
 
 export async function createBrowserForVercel(): Promise<Browser> {
   const isVercel = process.env.VERCEL === '1' || process.env.AWS_LAMBDA_FUNCTION_NAME;
   
   if (isVercel) {
-    const Chromium = (await import('@sparticuz/chromium')).default;
-    
-    const launchOptions: Parameters<typeof chromium.launch>[0] = {
-      args: Chromium.args,
-      executablePath: await Chromium.executablePath(),
+    return await playwright.chromium.launch({
       headless: true,
-    };
-
-    return await chromium.launch(launchOptions);
+      timeout: 120_000,
+      executablePath: await chromium.executablePath(),
+      args: chromium.args,
+    });
   }
   
-  const launchOptions: Parameters<typeof chromium.launch>[0] = {
+  return await chromiumOrigin.launch({
     headless: true,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-accelerated-2d-canvas',
-      '--no-first-run',
-      '--no-zygote',
-      '--single-process',
-      '--disable-gpu',
-    ],
-  };
-
-  return await chromium.launch(launchOptions);
+    timeout: 120_000,
+  });
 }
 
 export async function createBrowserContext(browser: Browser): Promise<BrowserContext> {

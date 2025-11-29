@@ -1,4 +1,4 @@
-import { Browser, Page, BrowserContext } from 'playwright'
+import { Browser, Page, BrowserContext } from 'playwright-core'
 import { IScraper, ScrapedListing } from '../types'
 import { env } from '../../config/env'
 import { createBrowserForVercel, createBrowserContext } from '../playwright-config'

@@ -1,5 +1,5 @@
 import { RawListing, SiteScraper } from '@/domain/scraping/types';
-import { Browser, Page } from 'playwright';
+import { Browser, Page } from 'playwright-core';
 import { createBrowserForVercel, createBrowserContext } from '../playwright-config';
 
 export class PamonoScraper implements SiteScraper {
