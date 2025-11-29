@@ -44,9 +44,6 @@ importers:
       playwright-core:
         specifier: ^1.57.0
         version: 1.57.0
-      prettier:
-        specifier: ^3.7.3
-        version: 3.7.3
       react:
         specifier: ^19.2.0
         version: 19.2.0
@@ -90,6 +87,9 @@ importers:
       postcss:
         specifier: ^8.5.6
         version: 8.5.6
+      prettier:
+        specifier: ^3.7.3
+        version: 3.7.3
       prisma:
         specifier: 7.0.1
         version: 7.0.1(@types/react@19.2.7)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(typescript@5.9.3)
