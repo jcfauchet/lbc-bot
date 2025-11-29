@@ -17,6 +17,7 @@ const envSchema = z.object({
   CLOUDINARY_API_SECRET: z.string().optional(),
   MIN_MARGIN_IN_EUR: z.coerce.number().min(50).default(100),
   MIN_LISTING_PRICE_EUR: z.coerce.number().min(0).default(50),
+  AI_PROVIDER: z.enum(['openai', 'gemini']).default('openai'),
 })
 
 export type Env = z.infer<typeof envSchema>

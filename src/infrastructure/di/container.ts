@@ -72,14 +72,14 @@ export class Container {
       this.storageService,
       this.listingImageRepository
     )
-    this.priceEstimationService = new OpenAiPriceEstimationService(
+    this.priceEstimationService = env.AI_PROVIDER === 'openai' ? new OpenAiPriceEstimationService(
       env.OPENAI_API_KEY,
       this.storageService
+    ) : new GeminiPriceEstimationService(
+      env.GOOGLE_GEMINI_API_KEY,
+      this.storageService
     )
-    // this.priceEstimationService = new GeminiPriceEstimationService(
-    //   env.GOOGLE_GEMINI_API_KEY,
-    //   this.storageService
-    // )
+    
     this.mailer = new ResendMailer(env.RESEND_API_KEY)
 
     const aiCategorizationService = new (require('@/infrastructure/ai/AiCategorizationService').AiCategorizationService)(env.OPENAI_API_KEY, this.taxonomyRepository)
