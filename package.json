@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "prebuild": "prisma generate",
-    "build": "prisma migrate deploy && next build",
+    "build": "MIGRATE=1 prisma migrate deploy && next build",
     "start": "next start",
     "lint": "next lint",
     "postinstall": "prisma generate && (test -z \"$VERCEL\" && playwright install chromium || true)",
