@@ -10,7 +10,7 @@ import { PrismaNotificationRepository } from '@/infrastructure/prisma/repositori
 import { PrismaListingLabelRepository } from '@/infrastructure/prisma/repositories/PrismaListingLabelRepository'
 import { PrismaTaxonomyRepository } from '@/infrastructure/prisma/repositories/PrismaTaxonomyRepository'
 
-import { PlaywrightScraper } from '@/infrastructure/scraping/PlaywrightLbcScraper'
+import { LeBonCoinListingScraper } from '@/infrastructure/scraping/listings/LeBonCoinListingScraper'
 import { LocalStorageService } from '@/infrastructure/storage/LocalStorageService'
 import { CloudinaryStorageService } from '@/infrastructure/storage/CloudinaryStorageService'
 import { IStorageService } from '@/infrastructure/storage/IStorageService'
@@ -40,7 +40,7 @@ export class Container {
   public readonly listingLabelRepository: PrismaListingLabelRepository
   public readonly taxonomyRepository: PrismaTaxonomyRepository
 
-  public readonly scraper: PlaywrightScraper
+  public readonly scraper: LeBonCoinListingScraper
   public readonly storageService: IStorageService
   public readonly imageDownloadService: ImageDownloadService
   public readonly priceEstimationService: IPriceEstimationService
@@ -64,7 +64,7 @@ export class Container {
     this.listingLabelRepository = new PrismaListingLabelRepository(this.prisma)
     this.taxonomyRepository = new PrismaTaxonomyRepository(this.prisma)
 
-    this.scraper = new PlaywrightScraper()
+    this.scraper = new LeBonCoinListingScraper()
     this.storageService = env.STORAGE_TYPE === 'cloudinary'
       ? new CloudinaryStorageService()
       : new LocalStorageService(env.STORAGE_LOCAL_PATH)

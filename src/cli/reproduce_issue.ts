@@ -1,8 +1,8 @@
 
-import { PlaywrightScraper } from '../infrastructure/scraping/PlaywrightLbcScraper'
+import { LeBonCoinListingScraper } from '../infrastructure/scraping/listings/LeBonCoinListingScraper'
 
 async function main() {
-  const scraper = new PlaywrightScraper()
+  const scraper = new LeBonCoinListingScraper()
   const url = 'https://www.leboncoin.fr/recherche?category=19&text=table+laiton&kst=r&from=rs'
   
   console.log(`Scraping URL: ${url}`)

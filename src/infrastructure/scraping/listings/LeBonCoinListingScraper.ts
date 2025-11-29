@@ -1,57 +1,42 @@
-import { chromium, Browser, Page } from 'playwright'
-import { IScraper, ScrapedListing } from './types'
-import { env } from '../config/env'
+import { Browser, Page, BrowserContext } from 'playwright'
+import { IScraper, ScrapedListing } from '../types'
+import { env } from '../../config/env'
+import { createBrowserForVercel, createBrowserContext } from '../playwright-config'
 
-export class PlaywrightScraper implements IScraper {
+export class LeBonCoinListingScraper implements IScraper {
   private browser: Browser | null = null
+  private context: BrowserContext | null = null
 
   async scrape(searchUrl: string): Promise<ScrapedListing[]> {
     try {
       await this.initBrowser()
-      const page = await this.browser!.newPage()
-
-      // Set a realistic user agent to avoid immediate blocking
-      await page.setExtraHTTPHeaders({
-        'User-Agent':
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      })
+      const page = await this.context!.newPage()
 
       await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 60000 })
 
-      // Handle cookie banner
       try {
         const cookieButton = await page.waitForSelector('#didomi-notice-agree-button, #didomi-notice-learn-more-button', { timeout: 5000 })
         if (cookieButton) {
-            // Try to refuse if possible, otherwise accept or learn more -> refuse
-            // For now, let's try to find "Refuser" or "Continuer sans accepter"
             const refuseButton = await page.$('button:has-text("Refuser"), button:has-text("Continuer sans accepter")')
             if (refuseButton) {
                 await refuseButton.click()
             } else {
-                 // Fallback: click the first available button found (likely Accept or Learn More)
-                 // If we clicked Learn More, we might need to look for Refuse again.
-                 // Simpler approach for now: just try to get past it.
                  await cookieButton.click()
-                 // If we clicked "En savoir plus" (Learn more), try to find "Refuser tout"
                  const refuseAll = await page.waitForSelector('button:has-text("Refuser tout")', { timeout: 2000 }).catch(() => null)
                  if (refuseAll) await refuseAll.click()
             }
         }
       } catch (e) {
-        // Cookie banner might not appear or is different, continue
         console.log('Cookie banner not found or handled:', e)
       }
 
-      // Wait for listings - try multiple selectors for different page layouts
       let listingsSelector = '';
       try {
-        // Try the mosaic layout first (with category parameter)
         await page.waitForSelector('ul[data-test-id="listing-mosaic"]', {
             timeout: 5000,
         });
         listingsSelector = 'ul[data-test-id="listing-mosaic"] > li';
       } catch (e) {
-        // Try alternative selector (without category parameter - uses listing-column)
         try {
           await page.waitForSelector('ul[data-test-id="listing-column"]', {
             timeout: 10000,
@@ -66,7 +51,6 @@ export class PlaywrightScraper implements IScraper {
 
       console.log(`Using selector: ${listingsSelector}`);
 
-      // Scroll to load lazy images
       await this.autoScroll(page);
 
       const listings = await page.$$eval(
@@ -76,11 +60,11 @@ export class PlaywrightScraper implements IScraper {
             const linkEl = el.querySelector('a');
             const titleEl = el.querySelector('h3') || 
                            el.querySelector('p[data-test-id="adcard-title"]') ||
-                           el.querySelector('[data-qa-id="adcard_title"]'); // Additional fallback
+                           el.querySelector('[data-qa-id="adcard_title"]');
             const priceEl = el.querySelector('[data-test-id="price"]') ||
-                           el.querySelector('[data-qa-id="adcard_price"]'); // Additional fallback
+                           el.querySelector('[data-qa-id="adcard_price"]');
             const imageEl = el.querySelector('[data-test-id="adcard-image"] img') ||
-                           el.querySelector('img[alt]'); // Additional fallback
+                           el.querySelector('img[alt]');
 
             const url = linkEl?.getAttribute('href') || '';
             const lbcId = url.split('/').pop()?.split('.')[0] || '';
@@ -152,11 +136,9 @@ export class PlaywrightScraper implements IScraper {
   }> {
     try {
       await this.initBrowser()
-      const page = await this.browser!.newPage()
+      const page = await this.context!.newPage()
 
       await page.goto(listingUrl, { waitUntil: 'domcontentloaded' })
-
-      // Handle cookie banner here too if needed, or reuse logic
 
       const description = await page
         .$eval('[data-qa-id="adview_description_container"]', (el) =>
@@ -192,22 +174,20 @@ export class PlaywrightScraper implements IScraper {
 
   private async initBrowser(): Promise<void> {
     if (!this.browser) {
-      const isDev = env.NODE_ENV === 'development'
-      this.browser = await chromium.launch({
-        headless: !isDev,
-        slowMo: isDev ? 100 : 0,
-        args: [
-          '--disable-blink-features=AutomationControlled',
-          '--disable-features=IsolateOrigins,site-per-process',
-        ],
-      })
+      this.browser = await createBrowserForVercel()
+      this.context = await createBrowserContext(this.browser)
     }
   }
 
   async close(): Promise<void> {
+    if (this.context) {
+      await this.context.close()
+      this.context = null
+    }
     if (this.browser) {
       await this.browser.close()
       this.browser = null
     }
   }
 }
+

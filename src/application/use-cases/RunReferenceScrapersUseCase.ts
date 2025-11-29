@@ -1,7 +1,7 @@
 import { IngestionService } from '@/infrastructure/scraping/IngestionService';
 import { SiteScraper } from '@/domain/scraping/types';
-import { PamonoScraper } from '@/infrastructure/scraping/scrapers/pamono.scraper';
-import { FirstDibsScraper } from '@/infrastructure/scraping/scrapers/1stdibs.scraper';
+import { PamonoScraper } from '@/infrastructure/scraping/reference/PamonoScraper';
+import { FirstDibsScraper } from '@/infrastructure/scraping/reference/FirstDibsScraper';
 import { PrismaClient } from '@prisma/client';
 
 export class RunReferenceScrapersUseCase {
