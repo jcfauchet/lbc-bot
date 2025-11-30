@@ -8,7 +8,7 @@ async function main() {
   console.log(`Scraping URL: ${url}`)
   
   try {
-    const listings = await scraper.scrape(url)
+    const listings = await scraper.search(url)
     console.log(`Found ${listings.length} listings`)
     
     if (listings.length > 0) {

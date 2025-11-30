@@ -1,6 +1,10 @@
 import {
   IPriceEstimationService,
   PriceEstimationResult,
+  SearchAnalysisResult,
+  PreEstimationResult,
+  FinalEstimationResult,
+  SearchTerm,
 } from '@/domain/services/IPriceEstimationService'
 import { Money } from '@/domain/value-objects/Money'
 import fs from 'fs/promises'
@@ -28,11 +32,24 @@ export abstract class BasePriceEstimationService
         Tu dois toujours répondre en utilisant strictement le format JSON spécifié dans le schéma de sortie.
       `
 
-  abstract estimatePrice(
+  abstract preEstimate(
     images: string[],
     title: string,
     description?: string
-  ): Promise<PriceEstimationResult>
+  ): Promise<PreEstimationResult>
+
+  abstract estimatePrice(
+    images: string[],
+    title: string,
+    description?: string,
+    referenceProducts?: any[]
+  ): Promise<FinalEstimationResult>
+
+  abstract analyzeForSearch(
+    images: string[],
+    title: string,
+    description?: string
+  ): Promise<SearchAnalysisResult>
 
   protected buildPrompt(
     title: string, 
@@ -90,12 +107,180 @@ Le JSON doit respecter exactement ce schéma :
   "estimatedMinPrice": <nombre en euros>,
   "estimatedMaxPrice": <nombre en euros>,
   "description": "<texte d'analyse détaillé>",
-  "confidence": <nombre entre 0.1 et 1.0>
+  "confidence": <nombre entre 0.1 et 1.0>,
+  "bestMatchSource": "<nom du partenaire qui a fourni le produit le plus proche>" (optionnel)
 }
 
 Exemple de réponse valide :
-{"estimatedMinPrice": 500, "estimatedMaxPrice": 1200, "description": "Chaise vintage en bois...", "confidence": 0.75}
+{"estimatedMinPrice": 500, "estimatedMaxPrice": 1200, "description": "Chaise vintage en bois...", "confidence": 0.75, "bestMatchSource": "Pamono"}
     `.trim()
+  }
+
+  protected buildPreEstimationPrompt(title: string, description?: string): string {
+    return `
+Analyse l'image et les informations ci-dessous pour faire une pré-estimation et déterminer si le produit mérite une analyse approfondie.
+
+CONTEXTE UTILISATEUR :
+Titre : ${title}
+${description ? `Description fournie : ${description}` : ''}
+
+TA MISSION :
+1. FILTRAGE : Détermine si ce produit est :
+   - Une "daube" (produit de mauvaise qualité, sans valeur)
+   - Un produit que nous ne gérons pas (hors catégorie design/vintage/arts décoratifs)
+   - Si c'est le cas, retourne shouldProceed: false
+
+2. PRÉ-ESTIMATION : Estime rapidement la fourchette de prix potentielle (marché secondaire)
+
+3. DÉTECTION DE DESIGNER : Identifie si tu as des soupçons forts (certitude 80%+) sur un designer ou fabricant connu
+
+4. GÉNÉRATION DE TERMES DE RECHERCHE : Si tu as identifié un designer avec certitude 80%+ et que la pré-estimation est prometteuse, génère jusqu'à 4 termes de recherche optimisés pour trouver ce produit sur des sites spécialisés (AuctionFR, Pamono, 1stdibs, Selency).
+   - Chaque terme doit inclure le nom du designer et des caractéristiques clés (matériaux, forme, style)
+   - Exemples : "table basse verre rectangulaire maison jansen", "chaise scandinave teck finn juhl"
+
+RÈGLES IMPORTANTES :
+- Si la pré-estimation est trop basse (< 500€), retourne isPromising: false
+- Si pas de soupçons de designer (certitude < 80%), retourne hasDesigner: false et shouldProceed: false
+- Les searchTerms ne doivent être générés que si hasDesigner: true ET isPromising: true
+- Maximum 4 searchTerms
+
+INSTRUCTIONS DE SORTIE (JSON UNIQUEMENT) :
+Tu dois fournir ta réponse UNIQUEMENT au format JSON valide, sans texte avant ou après.
+Le JSON doit respecter ce schéma :
+{
+  "estimatedMinPrice": <nombre en euros>,
+  "estimatedMaxPrice": <nombre en euros>,
+  "isPromising": <boolean>,
+  "hasDesigner": <boolean>,
+  "shouldProceed": <boolean>,
+  "searchTerms": [
+    {
+      "query": "terme de recherche 1",
+      "designer": "Nom du Designer",
+      "confidence": <nombre entre 0.8 et 1.0>
+    }
+  ],
+  "description": "<texte d'analyse>",
+  "confidence": <nombre entre 0.1 et 1.0>
+}
+
+Exemple :
+{"estimatedMinPrice": 2000, "estimatedMaxPrice": 5000, "isPromising": true, "hasDesigner": true, "shouldProceed": true, "searchTerms": [{"query": "table basse verre rectangulaire maison jansen", "designer": "Maison Jansen", "confidence": 0.85}], "description": "Table basse vintage...", "confidence": 0.75}
+    `.trim()
+  }
+
+  protected buildSearchPrompt(title: string, description?: string): string {
+    return `
+Analyse l'image et les informations ci-dessous pour identifier l'objet et générer une recherche précise.
+
+CONTEXTE UTILISATEUR :
+Titre : ${title}
+${description ? `Description fournie : ${description}` : ''}
+
+TA MISSION :
+1. Identifier l'objet, son style, sa période, et potentiellement son designer ou fabricant.
+2. Générer UNE SEULE chaîne de recherche (query) optimisée pour trouver cet objet précis sur un site d'enchères.
+   - Sois précis : "table basse verre rectangulaire maison jansen" est mieux que "table basse jansen".
+   - Inclus les matériaux, la forme, le designer si connu.
+3. Si tu es confiant sur le designer ou la marque, indique-le séparément.
+
+INSTRUCTIONS DE SORTIE (JSON UNIQUEMENT) :
+Tu dois fournir ta réponse UNIQUEMENT au format JSON valide, sans texte avant ou après.
+Le JSON doit respecter ce schéma :
+{
+  "searchQuery": "la chaine de recherche précise",
+  "designer": "Nom du Designer" (ou null si inconnu)
+}
+
+Exemple :
+{"searchQuery": "table basse rectangulaire laiton verre maison jansen", "designer": "Maison Jansen"}
+    `.trim()
+  }
+
+  protected parsePreEstimationResponse(content: string): PreEstimationResult {
+    if (!content || content.trim().length === 0) {
+      console.error('Empty response content')
+      throw new Error('Invalid response format: empty content')
+    }
+
+    let jsonString: string | null = null
+    let parsed: any = null
+
+    const extractionStrategies = [
+      () => {
+        const markdownJsonMatch = content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/)
+        return markdownJsonMatch ? markdownJsonMatch[1] : null
+      },
+      () => {
+        const jsonMatch = content.match(/\{[\s\S]*\}/)
+        return jsonMatch ? jsonMatch[0] : null
+      },
+      () => {
+        const trimmed = content.trim()
+        return trimmed.startsWith('{') && trimmed.endsWith('}') ? trimmed : null
+      },
+    ]
+
+    for (const strategy of extractionStrategies) {
+      try {
+        jsonString = strategy()
+        if (jsonString) {
+          parsed = JSON.parse(jsonString)
+          if (parsed && typeof parsed === 'object') {
+            break
+          }
+        }
+      } catch (e) {
+        continue
+      }
+    }
+
+    if (!parsed || typeof parsed !== 'object') {
+      console.error('Failed to extract valid JSON from response')
+      console.error('Response content (first 500 chars):', content.substring(0, 500))
+      throw new Error(`Invalid response format: could not parse JSON. Content preview: ${content.substring(0, 200)}`)
+    }
+
+    let confidence = 0.5
+    if (typeof parsed.confidence === 'number') {
+      confidence = parsed.confidence
+    } else if (typeof parsed.confidence === 'string') {
+      const match = parsed.confidence.match(/(\d+(?:\.\d+)?)/)
+      if (match) {
+        confidence = parseFloat(match[1])
+        if (confidence > 1) confidence = confidence / 100
+      }
+    }
+
+    const estimatedMinPrice = parsed.estimatedMinPrice ?? parsed.minPrice ?? parsed.estimated_min_price ?? 0
+    const estimatedMaxPrice = parsed.estimatedMaxPrice ?? parsed.maxPrice ?? parsed.estimated_max_price ?? 0
+
+    if (typeof estimatedMinPrice !== 'number' || typeof estimatedMaxPrice !== 'number') {
+      console.error('Invalid price values in response:', { estimatedMinPrice, estimatedMaxPrice })
+      console.error('Full parsed response:', parsed)
+      throw new Error(`Invalid response format: price values must be numbers. Got min: ${estimatedMinPrice}, max: ${estimatedMaxPrice}`)
+    }
+
+    const isPromising = parsed.isPromising ?? true
+    const hasDesigner = parsed.hasDesigner ?? false
+    const shouldProceed = parsed.shouldProceed ?? (isPromising && hasDesigner)
+    
+    const searchTerms: SearchTerm[] = (parsed.searchTerms || []).slice(0, 4).map((term: any) => ({
+      query: term.query || '',
+      designer: term.designer,
+      confidence: Math.min(Math.max(term.confidence || 0.8, 0.8), 1.0)
+    })).filter((term: SearchTerm) => term.query && term.confidence >= 0.8)
+
+    return {
+      estimatedMinPrice: Money.fromEuros(estimatedMinPrice),
+      estimatedMaxPrice: Money.fromEuros(estimatedMaxPrice),
+      isPromising,
+      hasDesigner,
+      shouldProceed,
+      searchTerms,
+      description: parsed.description || parsed.analysis || "Analyse de l'objet non disponible.",
+      confidence: Math.min(Math.max(confidence, 0.1), 1.0),
+    }
   }
 
   protected parseResponse(content: string): PriceEstimationResult {
@@ -162,12 +347,85 @@ Exemple de réponse valide :
       throw new Error(`Invalid response format: price values must be numbers. Got min: ${estimatedMinPrice}, max: ${estimatedMaxPrice}`)
     }
 
-    return {
+    const result: PriceEstimationResult = {
       estimatedMinPrice: Money.fromEuros(estimatedMinPrice),
       estimatedMaxPrice: Money.fromEuros(estimatedMaxPrice),
       description: parsed.description || parsed.analysis || "Analyse de l'objet non disponible.",
       confidence: Math.min(Math.max(confidence, 0.1), 1.0),
     }
+    
+    return result
+  }
+
+  protected parseFinalEstimationResponse(content: string, referenceProducts?: any[]): FinalEstimationResult {
+    const baseResult = this.parseResponse(content)
+    
+    let bestMatchSource: string | undefined
+    let bestMatchUrl: string | undefined
+    
+    if (referenceProducts && referenceProducts.length > 0) {
+      const parsed = this.extractJson(content)
+      if (parsed && parsed.bestMatchSource) {
+        bestMatchSource = parsed.bestMatchSource
+        const bestMatch = referenceProducts.find(p => p.source === bestMatchSource)
+        if (bestMatch) {
+          bestMatchUrl = bestMatch.url
+        }
+      }
+    }
+    
+    return {
+      ...baseResult,
+      bestMatchSource,
+      bestMatchUrl,
+    }
+  }
+
+  protected parseSearchResponse(content: string): SearchAnalysisResult {
+    const parsed = this.extractJson(content)
+    
+    if (!parsed || typeof parsed.searchQuery !== 'string') {
+      throw new Error('Invalid response format: missing or invalid searchQuery')
+    }
+
+    return {
+      searchQuery: parsed.searchQuery,
+      designer: parsed.designer || undefined
+    }
+  }
+
+  protected extractJson(content: string): any {
+    if (!content || content.trim().length === 0) return null
+
+    const extractionStrategies = [
+      () => {
+        const markdownJsonMatch = content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/)
+        return markdownJsonMatch ? markdownJsonMatch[1] : null
+      },
+      () => {
+        const jsonMatch = content.match(/\{[\s\S]*\}/)
+        return jsonMatch ? jsonMatch[0] : null
+      },
+      () => {
+        const trimmed = content.trim()
+        return trimmed.startsWith('{') && trimmed.endsWith('}') ? trimmed : null
+      },
+    ]
+
+    for (const strategy of extractionStrategies) {
+      try {
+        const jsonString = strategy()
+        if (jsonString) {
+          const parsed = JSON.parse(jsonString)
+          if (parsed && typeof parsed === 'object') {
+            return parsed
+          }
+        }
+      } catch (e) {
+        continue
+      }
+    }
+    return null
   }
 
   protected async readImageFile(

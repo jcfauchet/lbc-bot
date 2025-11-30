@@ -38,7 +38,7 @@ Si vous préférez utiliser un service externe pour le scraping :
 2. Modifier `src/infrastructure/scraping/playwright-config.ts` pour utiliser `chromium.connect()` :
 
 ```typescript
-export async function createBrowserForVercel(): Promise<Browser> {
+export async function createBrowser(): Promise<Browser> {
   const browserlessUrl = process.env.BROWSERLESS_URL;
   
   if (browserlessUrl) {

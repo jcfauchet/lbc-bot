@@ -11,6 +11,7 @@ export interface AiAnalysisProps {
   description: string
   confidence?: number
   provider: string
+  bestMatchSource?: string
   createdAt: Date
   updatedAt: Date
 }
@@ -26,6 +27,7 @@ export class AiAnalysis {
     description: string
     confidence?: number
     provider: string
+    bestMatchSource?: string
   }): AiAnalysis {
     return new AiAnalysis({
       id: crypto.randomUUID(),
@@ -77,6 +79,10 @@ export class AiAnalysis {
 
   get updatedAt(): Date {
     return this.props.updatedAt
+  }
+
+  get bestMatchSource(): string | undefined {
+    return this.props.bestMatchSource
   }
 }
 

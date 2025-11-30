@@ -1,6 +1,7 @@
 import { IListingRepository } from '@/domain/repositories/IListingRepository'
 import { IAiAnalysisRepository } from '@/domain/repositories/IAiAnalysisRepository'
 import { INotificationRepository } from '@/domain/repositories/INotificationRepository'
+import { IListingImageRepository } from '@/domain/repositories/IListingImageRepository'
 import { IMailer } from '@/infrastructure/mail/IMailer'
 import { EmailTemplates } from '@/infrastructure/mail/EmailTemplates'
 import { Notification, NotificationChannel } from '@/domain/entities/Notification'
@@ -12,6 +13,7 @@ export class RunNotificationUseCase {
     private listingRepository: IListingRepository,
     private aiAnalysisRepository: IAiAnalysisRepository,
     private notificationRepository: INotificationRepository,
+    private imageRepository: IListingImageRepository,
     private mailer: IMailer,
     private recipientEmail: string,
     private fromEmail: string,
@@ -31,6 +33,7 @@ export class RunNotificationUseCase {
     const listingsWithAnalysis: Array<{
       listing: Listing
       analysis: AiAnalysis
+      imageUrl?: string
     }> = []
 
     for (const analysis of goodAnalyses) {
@@ -45,7 +48,11 @@ export class RunNotificationUseCase {
         continue
       }
 
-      listingsWithAnalysis.push({ listing, analysis })
+      const images = await this.imageRepository.findByListingId(listing.id)
+      const firstImage = images[0]
+      const imageUrl = firstImage?.urlRemote
+
+      listingsWithAnalysis.push({ listing, analysis, imageUrl })
     }
 
     if (listingsWithAnalysis.length === 0) {

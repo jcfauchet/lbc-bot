@@ -28,7 +28,7 @@ export class RunListingScrapingUseCase {
     for (const search of searches) {
       try {
         console.log(`Scraping search: ${search.name}`)
-        const scrapedListings = await this.listingSource.scrape(search.url, search.name)
+        const scrapedListings = await this.listingSource.search(search.url, search.name)
 
         for (const scraped of scrapedListings) {
           const existing = await this.listingRepository.findByLbcId(
@@ -66,7 +66,7 @@ export class RunListingScrapingUseCase {
           console.log(`New listing saved: ${savedListing.title}`)
         }
 
-        await this.delay(2000)
+        await this.delay(200)
       } catch (error) {
         console.error(`Error scraping ${search.name}:`, error)
       }

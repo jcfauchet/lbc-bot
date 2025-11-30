@@ -1,13 +1,16 @@
 import {
   PriceEstimationResult,
   ReferenceProduct,
+  PreEstimationResult,
+  FinalEstimationResult,
+  SearchAnalysisResult,
 } from '@/domain/services/IPriceEstimationService'
 import {
   GoogleGenAI,
   Part,
   GenerateContentParameters,
 } from '@google/genai'
-import { BasePriceEstimationService } from './BasePriceEstimationService'
+import { BasePriceEstimationService } from '../BasePriceEstimationService'
 import { IStorageService } from '@/infrastructure/storage/IStorageService'
 
 export class GeminiPriceEstimationService extends BasePriceEstimationService {
@@ -23,12 +26,93 @@ export class GeminiPriceEstimationService extends BasePriceEstimationService {
     this.storageService = storageService
   }
 
+  async preEstimate(
+    images: string[],
+    title: string,
+    description?: string
+  ): Promise<PreEstimationResult> {
+    try {
+      const imageParts = await this.prepareImages(images)
+      const prompt = this.buildPreEstimationPrompt(title, description)
+
+      const generationConfig: GenerateContentParameters['config'] = {
+        temperature: 0.2,
+      }
+
+      const tools = [{ googleSearch: {} }]
+
+      const response = await this.ai.models.generateContent({
+        model: this.MODEL_NAME,
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: this.getSystemInstruction() }, { text: prompt }, ...imageParts],
+          },
+        ],
+        config: {
+          ...generationConfig,
+          tools: tools,
+        },
+      })
+
+      const content = response.text || ''
+      if (!content) {
+        console.error('Gemini returned empty content')
+        throw new Error('Gemini returned empty response')
+      }
+      return this.parsePreEstimationResponse(content)
+    } catch (error) {
+      console.error('Gemini pre-estimation error:', error)
+      throw new Error(`Failed to pre-estimate with Gemini: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
+  async analyzeForSearch(
+    images: string[],
+    title: string,
+    description?: string
+  ): Promise<SearchAnalysisResult> {
+    try {
+      const imageParts = await this.prepareImages(images)
+      const prompt = this.buildSearchPrompt(title, description)
+
+      const generationConfig: GenerateContentParameters['config'] = {
+        temperature: 0.2,
+      }
+
+      const tools = [{ googleSearch: {} }]
+
+      const response = await this.ai.models.generateContent({
+        model: this.MODEL_NAME,
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: this.getSystemInstruction() }, { text: prompt }, ...imageParts],
+          },
+        ],
+        config: {
+          ...generationConfig,
+          tools: tools,
+        },
+      })
+
+      const content = response.text || ''
+      if (!content) {
+        throw new Error('Gemini returned empty response')
+      }
+      return this.parseSearchResponse(content)
+    } catch (error) {
+      console.error('Gemini search analysis error:', error)
+      throw new Error(`Failed to analyze for search with Gemini: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
   async estimatePrice(
     images: string[],
     title: string,
     description?: string,
     referenceProducts: ReferenceProduct[] = []
-  ): Promise<PriceEstimationResult> {
+  ): Promise<FinalEstimationResult> {
     try {
       const imageParts = await this.prepareImages(images)
       const referenceImageParts = await this.prepareReferenceImages(referenceProducts)
@@ -59,7 +143,7 @@ export class GeminiPriceEstimationService extends BasePriceEstimationService {
         console.error('Gemini returned empty content')
         throw new Error('Gemini returned empty response')
       }
-      return this.parseResponse(content)
+      return this.parseFinalEstimationResponse(content, referenceProducts)
     } catch (error) {
       if (error instanceof Error && error.message.includes('Invalid response format')) {
         console.error('Gemini estimation error - parsing failed:', error.message)

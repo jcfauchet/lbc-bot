@@ -2,7 +2,6 @@ import 'dotenv/config'
 import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { Pool } from 'pg'
-import { TAXONOMY } from './taxonomy'
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL })
 const adapter = new PrismaPg(pool)
@@ -131,42 +130,31 @@ async function main() {
   console.log('✅ Search seed completed!')
   console.log(`Created ${createdSearches}, updated ${updatedSearches}`)
 
-  console.log('🌱 Starting ProductSource seed...')
-  const sources = [
-    { 
-      name: 'Pamono', 
-      baseUrl: 'https://www.pamono.fr/',
-      startUrl: 'https://www.pamono.fr/nouveautes',
-    },
-    {
-      name: '1stdibs',
-      baseUrl: 'https://www.1stdibs.com/',
-      startUrl: 'https://www.1stdibs.com/fr/new-arrivals',
-    }
-  ]
-
-  for (const source of sources) {
-    await prisma.referenceSiteSource.upsert({
-      where: { name: source.name },
-      update: { 
-        baseUrl: source.baseUrl,
-        startUrl: source.startUrl,
-      },
-      create: source,
-    })
-  }
-  console.log(`✅ ProductSource seed completed! Processed ${sources.length} sources.`)
-
-  console.log('🌱 Starting Taxonomy seed...')
+  console.log('🌱 Starting Category seed...')
   
   let createdCategories = 0
-  let createdPeriods = 0
-  let createdMaterials = 0
-  let createdStyles = 0
 
-  for (let i = 0; i < TAXONOMY.CATEGORIES.length; i++) {
-    const value = TAXONOMY.CATEGORIES[i]
-    await prisma.taxonomyCategory.upsert({
+  const CATEGORIES = [
+    'table_basse',
+    'table_repas',
+    'chaise',
+    'fauteuil',
+    'canapé',
+    'enfilade',
+    'commode',
+    'bibliothèque',
+    'bureau',
+    'lampe_de_table',
+    'lampadaire',
+    'suspension',
+    'applique',
+    'miroir',
+    'objet_déco',
+  ]
+
+  for (let i = 0; i < CATEGORIES.length; i++) {
+    const value = CATEGORIES[i]
+    await prisma.category.upsert({
       where: { value },
       update: { order: i, isActive: true },
       create: { value, order: i },
@@ -174,41 +162,8 @@ async function main() {
     createdCategories++
   }
 
-  for (let i = 0; i < TAXONOMY.PERIODS.length; i++) {
-    const value = TAXONOMY.PERIODS[i]
-    await prisma.taxonomyPeriod.upsert({
-      where: { value },
-      update: { order: i, isActive: true },
-      create: { value, order: i },
-    })
-    createdPeriods++
-  }
-
-  for (let i = 0; i < TAXONOMY.MATERIALS.length; i++) {
-    const value = TAXONOMY.MATERIALS[i]
-    await prisma.taxonomyMaterial.upsert({
-      where: { value },
-      update: { order: i, isActive: true },
-      create: { value, order: i },
-    })
-    createdMaterials++
-  }
-
-  for (let i = 0; i < TAXONOMY.STYLES.length; i++) {
-    const value = TAXONOMY.STYLES[i]
-    await prisma.taxonomyStyle.upsert({
-      where: { value },
-      update: { order: i, isActive: true },
-      create: { value, order: i },
-    })
-    createdStyles++
-  }
-
-  console.log(`✅ Taxonomy seed completed!`)
+  console.log(`✅ Category seed completed!`)
   console.log(`  - Categories: ${createdCategories}`)
-  console.log(`  - Periods: ${createdPeriods}`)
-  console.log(`  - Materials: ${createdMaterials}`)
-  console.log(`  - Styles: ${createdStyles}`)
 }
 
 main()

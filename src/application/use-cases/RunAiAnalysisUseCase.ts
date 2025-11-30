@@ -4,10 +4,8 @@ import { IListingImageRepository } from '@/domain/repositories/IListingImageRepo
 import { IPriceEstimationService } from '@/domain/services/IPriceEstimationService'
 import { ImageDownloadService } from '@/infrastructure/storage/ImageDownloadService'
 import { IStorageService } from '@/infrastructure/storage/IStorageService'
-import { ReferenceProductService } from '@/infrastructure/scraping/ReferenceProductService'
-import { AiCategorizationService } from '@/infrastructure/ai/AiCategorizationService'
 import { AiAnalysis } from '@/domain/entities/AiAnalysis'
-
+import { IReferenceScraper } from '@/infrastructure/scraping/reference/IReferenceScraper'
 
 export class RunAiAnalysisUseCase {
   constructor(
@@ -17,8 +15,7 @@ export class RunAiAnalysisUseCase {
     private priceEstimationService: IPriceEstimationService,
     private imageDownloadService: ImageDownloadService,
     private storageService: IStorageService,
-    private referenceProductService: ReferenceProductService,
-    private categorizationService: AiCategorizationService
+    private referenceScrapers: Map<string, IReferenceScraper>
   ) {}
 
   async execute(
@@ -48,31 +45,71 @@ export class RunAiAnalysisUseCase {
           continue
         }
 
-        // 1. Categorize the listing to find better references
-        console.log(`Categorizing listing: ${listing.title}`)
-        const categorization = await this.categorizationService.categorize(listing.title)
-        
-        // 2. Find similar reference products using categorization
-        console.log(`Fetching reference products for: ${listing.title}`)
-        const referenceProducts = await this.referenceProductService.findSimilarProducts(
+        console.log(`Pre-estimating listing: ${listing.title}`)
+        const preEstimation = await this.priceEstimationService.preEstimate(
+          imageUrls,
           listing.title,
-          categorization ? {
-            category: categorization.category,
-            period: categorization.period,
-            style: categorization.style,
-            material: categorization.material,
-            designer: categorization.designer
-          } : undefined,
-          10
+          undefined
         )
-        console.log(`Found ${referenceProducts.length} reference products`)
 
+        if (!preEstimation.shouldProceed) {
+          console.log(`Skipping listing ${listing.title} - shouldProceed: false (isPromising: ${preEstimation.isPromising}, hasDesigner: ${preEstimation.hasDesigner})`)
+          listing.markAsIgnored()
+          await this.listingRepository.update(listing)
+          continue
+        }
+
+        if (!preEstimation.isPromising) {
+          console.log(`Skipping listing ${listing.title} - Pre-estimation not promising (${preEstimation.estimatedMinPrice.getEuros()}€ - ${preEstimation.estimatedMaxPrice.getEuros()}€)`)
+          listing.markAsIgnored()
+          await this.listingRepository.update(listing)
+          continue
+        }
+
+        if (!preEstimation.hasDesigner || preEstimation.searchTerms.length === 0) {
+          console.log(`Skipping listing ${listing.title} - No designer identified or no search terms generated`)
+          listing.markAsIgnored()
+          await this.listingRepository.update(listing)
+          continue
+        }
+
+        console.log(`Found ${preEstimation.searchTerms.length} search terms, scraping partner sites...`)
+        const allScrapedReferences: any[] = []
+
+        for (const searchTerm of preEstimation.searchTerms) {
+          for (const [scraperName, scraper] of this.referenceScrapers.entries()) {
+            try {
+              console.log(`Scraping ${scraperName} with query: ${searchTerm.query}`)
+              const results = await scraper.scrape(searchTerm.query)
+              console.log(`Found ${results.length} results from ${scraperName}`)
+              allScrapedReferences.push(...results)
+            } catch (e) {
+              console.error(`Failed to scrape ${scraperName}:`, e)
+            }
+          }
+        }
+
+        if (allScrapedReferences.length === 0) {
+          console.log(`No reference products found, skipping final estimation for ${listing.title}`)
+          listing.markAsIgnored()
+          await this.listingRepository.update(listing)
+          continue
+        }
+
+        console.log(`Found ${allScrapedReferences.length} reference products, running final estimation...`)
         const estimation = await this.priceEstimationService.estimatePrice(
           imageUrls,
           listing.title,
           undefined,
-          referenceProducts
+          allScrapedReferences
         )
+
+        if (!estimation.confidence || estimation.confidence < 0.8) {
+          console.log(`Estimation confidence too low (${estimation.confidence}), skipping ${listing.title}`)
+          listing.markAsIgnored()
+          await this.listingRepository.update(listing)
+          continue
+        }
 
         if ('cleanupReferenceImages' in this.priceEstimationService && typeof this.priceEstimationService.cleanupReferenceImages === 'function') {
           await (this.priceEstimationService as any).cleanupReferenceImages()
@@ -88,6 +125,7 @@ export class RunAiAnalysisUseCase {
           description: estimation.description,
           confidence: estimation.confidence,
           provider: this.priceEstimationService.providerName,
+          bestMatchSource: estimation.bestMatchSource,
         })
 
         await this.aiAnalysisRepository.save(analysis)

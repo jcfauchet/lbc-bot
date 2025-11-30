@@ -23,21 +23,13 @@ async function clearTable(model: any, name: string) {
 async function main() {
   console.log('🗑️  Clearing all database data...')
 
-  await clearTable(prisma.priceHistory, 'PriceHistory')
-  await clearTable(prisma.productImage, 'ProductImage')
-  await clearTable(prisma.referenceProductListing, 'ReferenceProductListing')
-  await clearTable(prisma.referenceNormalizedProduct, 'ReferenceNormalizedProduct')
-  await clearTable(prisma.referenceSiteSource, 'ReferenceSiteSource')
+ 
   await clearTable(prisma.listingLabel, 'ListingLabel')
   await clearTable(prisma.notification, 'Notification')
   await clearTable(prisma.aiAnalysis, 'AiAnalysis')
   await clearTable(prisma.listingImage, 'ListingImage')
   await clearTable(prisma.lbcProductListing, 'LbcProductListing')
   await clearTable(prisma.search, 'Search')
-  await clearTable(prisma.taxonomyStyle, 'TaxonomyStyle')
-  await clearTable(prisma.taxonomyMaterial, 'TaxonomyMaterial')
-  await clearTable(prisma.taxonomyPeriod, 'TaxonomyPeriod')
-  await clearTable(prisma.taxonomyCategory, 'TaxonomyCategory')
 
   console.log('✅ Database cleared!')
 }

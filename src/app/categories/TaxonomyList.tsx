@@ -87,3 +87,4 @@ export function TaxonomyList({ items, onEdit }: CategoryListProps) {
     </div>
   )
 }
+

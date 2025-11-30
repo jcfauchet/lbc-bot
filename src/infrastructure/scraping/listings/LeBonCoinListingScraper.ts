@@ -2,14 +2,14 @@ import { Browser, Page, BrowserContext } from 'playwright-core'
 import { ScrapedListing } from '../types'
 import { IListingSource } from '@/domain/services/IListingSource'
 import { env } from '../../config/env'
-import { createBrowserForVercel, createBrowserContext } from '../playwright-config'
+import { createBrowser, createBrowserContext } from '../playwright-config'
 import { v2 as cloudinary } from 'cloudinary'
 
 export class LeBonCoinListingScraper implements IListingSource {
   private browser: Browser | null = null
   private context: BrowserContext | null = null
 
-  async scrape(searchUrl: string, searchName?: string): Promise<ScrapedListing[]> {
+  async search(searchUrl: string, searchName?: string): Promise<ScrapedListing[]> {
     try {
       await this.initBrowser()
       const page = await this.context!.newPage()
@@ -255,7 +255,7 @@ export class LeBonCoinListingScraper implements IListingSource {
 
   private async initBrowser(): Promise<void> {
     if (!this.browser) {
-      this.browser = await createBrowserForVercel()
+      this.browser = await createBrowser()
       this.context = await createBrowserContext(this.browser)
     }
   }

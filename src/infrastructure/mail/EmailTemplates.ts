@@ -3,14 +3,22 @@ import { AiAnalysis } from '@/domain/entities/AiAnalysis'
 
 export class EmailTemplates {
   static goodDealsDigest(
-    listings: Array<{ listing: Listing; analysis: AiAnalysis }>
+    listings: Array<{ listing: Listing; analysis: AiAnalysis; imageUrl?: string }>
   ): string {
     const listingRows = listings
       .map((item) => {
-        const { listing, analysis } = item
+        const { listing, analysis, imageUrl } = item
+        const imageHtml = imageUrl
+          ? `<div style="margin-bottom: 15px;">
+              <a href="${listing.url}">
+                <img src="${imageUrl}" alt="${listing.title}" style="max-width: 400px; width: 100%; height: auto; border-radius: 8px; border: 1px solid #ddd; display: block;" />
+              </a>
+            </div>`
+          : ''
         return `
           <tr style="border-bottom: 1px solid #eee;">
             <td style="padding: 20px;">
+              ${imageHtml}
               <h3 style="margin: 0 0 10px 0;">
                 <a href="${listing.url}" style="color: #0066cc; text-decoration: none;">
                   ${listing.title}

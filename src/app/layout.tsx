@@ -19,7 +19,7 @@ export default function RootLayout({
           <nav className="flex gap-4 justify-center items-center p-4 bg-gray-100">
             <Link href="/" className="text-blue-600 no-underline hover:underline">Home</Link>
             <Link href="/searches" className="text-blue-600 no-underline hover:underline">Searches</Link>
-            <Link href="/taxonomy" className="text-blue-600 no-underline hover:underline">Taxonomy</Link>
+            <Link href="/categories" className="text-blue-600 no-underline hover:underline">categories</Link>
           </nav>
         </header>
 

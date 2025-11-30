@@ -22,11 +22,50 @@ export interface ReferenceProduct {
 
 export interface IPriceEstimationService {
   readonly providerName: string
+  preEstimate(
+    images: string[],
+    title: string,
+    description?: string
+  ): Promise<PreEstimationResult>
+  
   estimatePrice(
     images: string[],
     title: string,
     description?: string,
     referenceProducts?: ReferenceProduct[]
-  ): Promise<PriceEstimationResult>
+  ): Promise<FinalEstimationResult>
+
+  analyzeForSearch(
+    images: string[],
+    title: string,
+    description?: string
+  ): Promise<SearchAnalysisResult>
+}
+
+export interface SearchAnalysisResult {
+  searchQuery: string
+  designer?: string
+}
+
+export interface PreEstimationResult {
+  estimatedMinPrice: Money
+  estimatedMaxPrice: Money
+  isPromising: boolean
+  hasDesigner: boolean
+  shouldProceed: boolean
+  searchTerms: SearchTerm[]
+  description: string
+  confidence?: number
+}
+
+export interface SearchTerm {
+  query: string
+  designer?: string
+  confidence: number
+}
+
+export interface FinalEstimationResult extends PriceEstimationResult {
+  bestMatchSource?: string
+  bestMatchUrl?: string
 }
 

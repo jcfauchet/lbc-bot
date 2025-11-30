@@ -11,23 +11,27 @@ import { PrismaLbcProductListingLabelRepository } from '@/infrastructure/prisma/
 import { PrismaTaxonomyRepository } from '@/infrastructure/prisma/repositories/PrismaTaxonomyRepository'
 
 import { LeBonCoinListingScraper } from '@/infrastructure/scraping/listings/LeBonCoinListingScraper'
+// import { AuctionFrScraper } from '@/infrastructure/scraping/reference/AuctionFr/AuctionFrScraper' // Disabled: Cloudflare challenge too difficult to bypass
+import { PamonoScraper } from '@/infrastructure/scraping/reference/Pamono/PamonoScraper'
+// import { SelencyScraper } from '@/infrastructure/scraping/reference/SelencyScraper'
+import { FirstDibsScraper } from '@/infrastructure/scraping/reference/FirstDibsScraper/FirstDibsScraper'
+import { IReferenceScraper } from '@/infrastructure/scraping/reference/IReferenceScraper'
 import { LeBonCoinApiClient } from '@/infrastructure/api/LeBonCoinApiClient'
 import { IListingSource } from '@/domain/services/IListingSource'
 import { LocalStorageService } from '@/infrastructure/storage/LocalStorageService'
 import { CloudinaryStorageService } from '@/infrastructure/storage/CloudinaryStorageService'
 import { IStorageService } from '@/infrastructure/storage/IStorageService'
 import { ImageDownloadService } from '@/infrastructure/storage/ImageDownloadService'
-import { OpenAiPriceEstimationService } from '@/infrastructure/ai/OpenAiPriceEstimationService'
+import { OpenAiPriceEstimationService } from '@/infrastructure/ai/OpenAi/OpenAiPriceEstimationService'
 import { ResendMailer } from '@/infrastructure/mail/ResendMailer'
 
 
 import { IPriceEstimationService } from '@/domain/services/IPriceEstimationService'
 
 import { RunListingScrapingUseCase } from '@/application/use-cases/RunListingScrapingUseCase'
-import { RunReferenceScrapersUseCase } from '@/application/use-cases/RunReferenceScrapersUseCase'
 import { RunAiAnalysisUseCase } from '@/application/use-cases/RunAiAnalysisUseCase'
 import { RunNotificationUseCase } from '@/application/use-cases/RunNotificationUseCase'
-import { GeminiPriceEstimationService } from '../ai/GeminiPriceEstimationService'
+import { GeminiPriceEstimationService } from '@/infrastructure/ai/Gemini/GeminiPriceEstimationService'
 
 export class Container {
   private static instance: Container
@@ -52,7 +56,6 @@ export class Container {
 
 
   public readonly runListingScrapingUseCase: RunListingScrapingUseCase
-  public readonly runReferenceScrapersUseCase: RunReferenceScrapersUseCase
   public readonly runAiAnalysisUseCase: RunAiAnalysisUseCase
   public readonly runNotificationUseCase: RunNotificationUseCase
 
@@ -91,9 +94,6 @@ export class Container {
     
     this.mailer = new ResendMailer(env.RESEND_API_KEY)
 
-    const aiCategorizationService = new (require('@/infrastructure/ai/AiCategorizationService').AiCategorizationService)(env.OPENAI_API_KEY, this.taxonomyRepository)
-    const ingestionService = new (require('@/infrastructure/scraping/IngestionService').IngestionService)(this.prisma, aiCategorizationService)
-
     this.runListingScrapingUseCase = new RunListingScrapingUseCase(
       this.searchRepository,
       this.listingRepository,
@@ -101,7 +101,10 @@ export class Container {
       this.listingSource
     )
 
-    this.runReferenceScrapersUseCase = new RunReferenceScrapersUseCase(ingestionService, this.prisma)
+    const referenceScrapers: Map<string, IReferenceScraper> = new Map()
+    // referenceScrapers.set('AuctionFR', new AuctionFrScraper()) // Disabled: Cloudflare challenge too difficult to bypass automatically
+    referenceScrapers.set('Pamono', new PamonoScraper())
+    referenceScrapers.set('1stdibs', new FirstDibsScraper())
 
     this.runAiAnalysisUseCase = new RunAiAnalysisUseCase(
       this.listingRepository,
@@ -110,14 +113,14 @@ export class Container {
       this.priceEstimationService,
       this.imageDownloadService,
       this.storageService,
-      new (require('@/infrastructure/scraping/ReferenceProductService').ReferenceProductService)(this.prisma),
-      aiCategorizationService
+      referenceScrapers
     )
 
     this.runNotificationUseCase = new RunNotificationUseCase(
       this.listingRepository,
       this.aiAnalysisRepository,
       this.notificationRepository,
+      this.listingImageRepository,
       this.mailer,
       env.NOTIFICATION_EMAIL_TO,
       env.NOTIFICATION_EMAIL_FROM,

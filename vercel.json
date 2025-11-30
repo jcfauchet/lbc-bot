@@ -9,10 +9,6 @@
       "schedule": "15 */1 * * *"
     },
     {
-      "path": "/api/cron/scrapers",
-      "schedule": "0 2 * * *"
-    },
-    {
       "path": "/api/cron/notify",
       "schedule": "0 9 * * *"
     }

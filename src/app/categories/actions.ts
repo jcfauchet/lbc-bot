@@ -27,7 +27,7 @@ export async function createCategory(formData: FormData) {
 
   await prisma.category.create({ data: validatedData })
 
-  revalidatePath('/taxonomy')
+  revalidatePath('/categories')
 }
 
 export async function updateCategory(id: string, formData: FormData) {
@@ -44,13 +44,13 @@ export async function updateCategory(id: string, formData: FormData) {
     data: validatedData,
   })
 
-  revalidatePath('/taxonomy')
+  revalidatePath('/categories')
 }
 
 export async function deleteCategory(id: string) {
   await prisma.category.delete({ where: { id } })
 
-  revalidatePath('/taxonomy')
+  revalidatePath('/categories')
 }
 
 export async function toggleCategoryStatus(id: string) {
@@ -65,5 +65,6 @@ export async function toggleCategoryStatus(id: string) {
     data: { isActive: !item.isActive },
   })
 
-  revalidatePath('/taxonomy')
+  revalidatePath('/categories')
 }
+

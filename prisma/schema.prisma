@@ -67,12 +67,14 @@ model AiAnalysis {
   description    String   @db.Text
   confidence     Float?
   provider       String   @default("openai")
+  bestMatchSource String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   
   listing        LbcProductListing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
 
   @@index([marginCents])
+  @@index([bestMatchSource])
   @@map("ai_analyses")
 }
 
@@ -108,103 +110,7 @@ model ListingLabel {
 
 
 
-model ReferenceSiteSource {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  baseUrl   String
-  startUrl  String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  listings  ReferenceProductListing[]
-  priceHistory PriceHistory[]
-
-  @@map("reference_site_sources")
-}
-
-model ReferenceNormalizedProduct {
-  id           String   @id @default(cuid())
-  brand        String?
-  model        String?
-  categoryId   String?
-  category     TaxonomyCategory? @relation(fields: [categoryId], references: [id])
-  reference    String?
-  title        String?
-  canonicalKey String?  @unique
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  listings     ReferenceProductListing[]
-  images       ProductImage[]
-  priceHistory PriceHistory[]
-
-  @@index([categoryId])
-  @@map("reference_normalized_products")
-}
-
-model ReferenceProductListing {
-  id              String   @id @default(cuid())
-  productId       String?
-  product         ReferenceNormalizedProduct? @relation(fields: [productId], references: [id])
-  sourceId        String
-  source          ReferenceSiteSource @relation(fields: [sourceId], references: [id])
-  sourceListingId String
-  url             String
-  title           String?
-  description     String?
-  categoryId      String?
-  category        TaxonomyCategory? @relation(fields: [categoryId], references: [id])
-  subCategory     String?  // Sub-category: "Chair", "Table", "Lamp", etc.
-  designer        String?  // Designer/Manufacturer name
-  periodId        String?
-  period          TaxonomyPeriod? @relation(fields: [periodId], references: [id])
-  materialId      String?
-  material        TaxonomyMaterial? @relation(fields: [materialId], references: [id])
-  styleId         String?
-  style           TaxonomyStyle? @relation(fields: [styleId], references: [id])
-  condition       String?
-  price           Float?
-  currency        String?
-  scrapedAt       DateTime
-  isActive        Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  images          ProductImage[]
-
-  @@index([categoryId])
-  @@index([periodId])
-  @@index([materialId])
-  @@index([styleId])
-  @@unique([sourceId, sourceListingId])
-  @@map("reference_product_listings")
-}
-
-model ProductImage {
-  id        String   @id @default(cuid())
-  productId String?
-  product   ReferenceNormalizedProduct? @relation(fields: [productId], references: [id])
-  listingId String?
-  listing   ReferenceProductListing? @relation(fields: [listingId], references: [id])
-  url       String
-  imageHash String?
-  createdAt DateTime @default(now())
-
-  @@map("product_images")
-}
-
-model PriceHistory {
-  id         String   @id @default(cuid())
-  productId  String
-  product    ReferenceNormalizedProduct  @relation(fields: [productId], references: [id])
-  sourceId   String?
-  source     ReferenceSiteSource? @relation(fields: [sourceId], references: [id])
-  price      Float
-  currency   String
-  observedAt DateTime
-  createdAt  DateTime @default(now())
-
-  @@map("price_history")
-}
-
-model TaxonomyCategory {
+model Category {
   id        String   @id @default(cuid())
   value     String   @unique
   order     Int      @default(0)
@@ -212,47 +118,5 @@ model TaxonomyCategory {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  productListings ReferenceProductListing[]
-  products        ReferenceNormalizedProduct[]
-
-  @@map("taxonomy_categories")
-}
-
-model TaxonomyPeriod {
-  id        String   @id @default(cuid())
-  value     String   @unique
-  order     Int      @default(0)
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  productListings ReferenceProductListing[]
-
-  @@map("taxonomy_periods")
-}
-
-model TaxonomyMaterial {
-  id        String   @id @default(cuid())
-  value     String   @unique
-  order     Int      @default(0)
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  productListings ReferenceProductListing[]
-
-  @@map("taxonomy_materials")
-}
-
-model TaxonomyStyle {
-  id        String   @id @default(cuid())
-  value     String   @unique
-  order     Int      @default(0)
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  productListings ReferenceProductListing[]
-
-  @@map("taxonomy_styles")
+  @@map("categories")
 }

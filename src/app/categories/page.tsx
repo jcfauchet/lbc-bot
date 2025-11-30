@@ -3,7 +3,7 @@ import { TaxonomyManager } from './TaxonomyManager'
 
 export const dynamic = 'force-dynamic'
 
-export default async function TaxonomyPage() {
+export default async function CategoriesPage() {
   const categories = await getCategories()
 
   return (

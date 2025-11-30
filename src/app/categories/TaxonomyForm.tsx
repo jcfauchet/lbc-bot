@@ -110,3 +110,4 @@ export function TaxonomyForm({ item, onSuccess }: CategoryFormProps) {
     </div>
   )
 }
+

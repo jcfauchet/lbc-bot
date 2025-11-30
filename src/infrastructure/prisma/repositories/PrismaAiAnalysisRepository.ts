@@ -15,6 +15,7 @@ export class PrismaAiAnalysisRepository implements IAiAnalysisRepository {
       description: analysis.description,
       confidence: analysis.confidence,
       provider: analysis.provider,
+      bestMatchSource: analysis.bestMatchSource,
     }
 
     const created = await this.prisma.aiAnalysis.create({ data })
@@ -58,6 +59,7 @@ export class PrismaAiAnalysisRepository implements IAiAnalysisRepository {
         marginCents: analysis.margin.getCents(),
         description: analysis.description,
         confidence: analysis.confidence,
+        bestMatchSource: analysis.bestMatchSource,
         updatedAt: new Date(),
       },
     })
@@ -78,6 +80,7 @@ export class PrismaAiAnalysisRepository implements IAiAnalysisRepository {
       description: raw.description,
       confidence: raw.confidence,
       provider: raw.provider,
+      bestMatchSource: raw.bestMatchSource,
       createdAt: raw.createdAt,
       updatedAt: raw.updatedAt,
     })

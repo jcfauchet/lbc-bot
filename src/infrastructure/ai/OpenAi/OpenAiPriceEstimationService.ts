@@ -2,8 +2,11 @@ import OpenAI from 'openai'
 import {
   PriceEstimationResult,
   ReferenceProduct,
+  SearchAnalysisResult,
+  PreEstimationResult,
+  FinalEstimationResult,
 } from '@/domain/services/IPriceEstimationService'
-import { BasePriceEstimationService } from './BasePriceEstimationService'
+import { BasePriceEstimationService } from '../BasePriceEstimationService'
 import { IStorageService } from '@/infrastructure/storage/IStorageService'
 
 export class OpenAiPriceEstimationService extends BasePriceEstimationService {
@@ -18,12 +21,98 @@ export class OpenAiPriceEstimationService extends BasePriceEstimationService {
     this.storageService = storageService
   }
 
+  async preEstimate(
+    images: string[],
+    title: string,
+    description?: string
+  ): Promise<PreEstimationResult> {
+    try {
+      const imageContents = await this.prepareImages(images)
+      const prompt = this.buildPreEstimationPrompt(title, description)
+
+      const response = await this.client.chat.completions.create({
+        model: 'gpt-4o',
+        response_format: { type: 'json_object' },
+        messages: [
+          {
+            role: 'system',
+            content: this.getSystemInstruction()
+          },
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: prompt },
+              ...imageContents.map((url) => ({
+                type: 'image_url' as const,
+                image_url: { url },
+              })),
+            ],
+          },
+        ],
+        max_tokens: 2000,
+        temperature: 0.2,
+      })
+
+      const content = response.choices[0]?.message?.content || ''
+      if (!content) {
+        throw new Error('OpenAI returned empty response')
+      }
+      return this.parsePreEstimationResponse(content)
+    } catch (error) {
+      console.error('OpenAI pre-estimation error:', error)
+      throw new Error(`Failed to pre-estimate with OpenAI: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
+  async analyzeForSearch(
+    images: string[],
+    title: string,
+    description?: string
+  ): Promise<SearchAnalysisResult> {
+    try {
+      const imageContents = await this.prepareImages(images)
+      const prompt = this.buildSearchPrompt(title, description)
+
+      const response = await this.client.chat.completions.create({
+        model: 'gpt-4o',
+        response_format: { type: 'json_object' },
+        messages: [
+          {
+            role: 'system',
+            content: this.getSystemInstruction()
+          },
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: prompt },
+              ...imageContents.map((url) => ({
+                type: 'image_url' as const,
+                image_url: { url },
+              })),
+            ],
+          },
+        ],
+        max_tokens: 1000,
+        temperature: 0.2,
+      })
+
+      const content = response.choices[0]?.message?.content || ''
+      if (!content) {
+        throw new Error('OpenAI returned empty response')
+      }
+      return this.parseSearchResponse(content)
+    } catch (error) {
+      console.error('OpenAI search analysis error:', error)
+      throw new Error(`Failed to analyze for search with OpenAI: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
   async estimatePrice(
     images: string[],
     title: string,
     description?: string,
     referenceProducts: ReferenceProduct[] = []
-  ): Promise<PriceEstimationResult> {
+  ): Promise<FinalEstimationResult> {
     try {
       const imageContents = await this.prepareImages(images)
       const referenceImageContents = await this.prepareReferenceImages(referenceProducts)
@@ -61,7 +150,7 @@ export class OpenAiPriceEstimationService extends BasePriceEstimationService {
         console.error('OpenAI returned empty content')
         throw new Error('OpenAI returned empty response')
       }
-      return this.parseResponse(content)
+      return this.parseFinalEstimationResponse(content, referenceProducts)
     } catch (error) {
       if (error instanceof Error && error.message.includes('Invalid response format')) {
         console.error('OpenAI estimation error - parsing failed:', error.message)

@@ -43,3 +43,4 @@ export function TaxonomyManager({ categories }: CategoryManagerProps) {
     </div>
   )
 }
+

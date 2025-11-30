@@ -54,12 +54,52 @@ interface LeBonCoinApiResponse {
   total_pages: number
 }
 
+const API_HEADERS = {
+  'Host': 'api.leboncoin.fr',
+  'Connection': 'keep-alive',
+  'Accept': 'application/json',
+  'User-Agent': 'LBC;iOS;16.4.1;iPhone;phone;AFACB532-200B-476A-98B3-B2346A97EA54;wifi;6.102.0;24.32.1930',
+  'api_key': 'ba0c2dad52b3ec',
+  'Accept-Language': 'fr-FR,fr;q=0.9',
+  'Content-Type': 'application/json',
+}
+
+interface SearchPayload {
+  filters: {
+    category?: { id: string }
+    enums?: Record<string, string[]>
+    keywords?: { text: string; type: 'all' | 'subject' }
+    ranges?: Record<string, { min?: number; max?: number }>
+    location: {
+      locations: Array<{
+        locationType: string
+        area: {
+          lat: number
+          lng: number
+          default_radius: number
+          radius: number
+        }
+      }>
+      shippable: boolean
+    }
+  }
+  limit: number
+  limit_alu: number
+  offset: number
+  disable_total: boolean
+  extend: boolean
+  listing_source: string
+  owner_type: string
+  sort_by: string
+  sort_order: string
+}
+
 export class LeBonCoinApiClient implements IListingSource {
   private readonly API_BASE_URL = 'https://api.leboncoin.fr'
   private readonly SEARCH_ENDPOINT = `${this.API_BASE_URL}/finder/search`
   private cookies: string = ''
 
-  async scrape(searchUrl: string, searchName?: string): Promise<ScrapedListing[]> {
+  async search(searchUrl: string, searchName?: string): Promise<ScrapedListing[]> {
     try {
       // Initialize session by visiting the main page to get cookies
       if (!this.cookies) {
@@ -75,17 +115,10 @@ export class LeBonCoinApiClient implements IListingSource {
         payload: JSON.stringify(payload, null, 2),
       })
 
-      // Make API request with headers similar to the TypeScript lib
       const response = await fetch(this.SEARCH_ENDPOINT, {
         method: 'POST',
         headers: {
-          'Host': 'api.leboncoin.fr',
-          'Connection': 'keep-alive',
-          'Accept': 'application/json',
-          'User-Agent': 'LBC;iOS;16.4.1;iPhone;phone;AFACB532-200B-476A-98B3-B2346A97EA54;wifi;6.102.0;24.32.1930',
-          'api_key': 'ba0c2dad52b3ec',
-          'Accept-Language': 'fr-FR,fr;q=0.9',
-          'Content-Type': 'application/json',
+          ...API_HEADERS,
           'Cookie': this.cookies,
         },
         body: JSON.stringify(payload),
@@ -159,14 +192,10 @@ export class LeBonCoinApiClient implements IListingSource {
     }
   }
 
-  private buildPayloadFromUrl(url: URL, searchName?: string): any {
+  private buildPayloadFromUrl(url: URL, searchName?: string): SearchPayload {
     const searchParams = url.searchParams
-    const payload: any = {
+    const payload: SearchPayload = {
       filters: {
-        category: undefined,
-        enums: {},
-        keywords: undefined,
-        ranges: {},
         location: {
           locations: [],
           shippable: true,
@@ -178,157 +207,115 @@ export class LeBonCoinApiClient implements IListingSource {
       disable_total: true,
       extend: true,
       listing_source: 'direct-search',
-      owner_type: 'all', // 'all', 'private', 'pro'
-      sort_by: 'time', // 'time', 'price', 'relevance'
-      sort_order: 'desc', // 'asc', 'desc'
+      owner_type: 'all',
+      sort_by: 'time',
+      sort_order: 'desc',
     }
 
-    // Text search - use searchName directly
     if (searchName) {
       payload.filters.keywords = {
         text: searchName,
-        type: 'all', // 'all' for full text search, 'subject' for title only
+        type: 'all',
       }
     }
 
-    // Category
     const category = searchParams.get('category')
     if (category) {
-      payload.filters.category = {
-        id: category,
-      }
+      payload.filters.category = { id: category }
     }
 
-    // Locations
     const locations = searchParams.get('locations')
     if (locations) {
-      payload.filters.location.locations = []
-
-      const locationParts = locations.split(',')
-      for (const location of locationParts) {
-        const parts = location.split('__')
-        if (parts.length >= 2) {
-          const areaValues = parts[1].split('_')
-          payload.filters.location.locations.push({
-            locationType: 'city',
-            area: {
-              lat: parseFloat(areaValues[0]),
-              lng: parseFloat(areaValues[1]),
-              default_radius: areaValues[2] ? parseInt(areaValues[2]) : 10000,
-              radius: areaValues[3] ? parseInt(areaValues[3]) : 10000,
-            },
-          })
-        }
-      }
+      payload.filters.location.locations = this.parseLocations(locations)
     }
 
-    // Sort
     const sort = searchParams.get('sort')
     if (sort) {
       payload.sort_by = sort
     }
 
-    // Order
     const order = searchParams.get('order')
     if (order) {
       payload.sort_order = order
     }
 
-    // Price range
-    const price = searchParams.get('price')
-    if (price) {
-      const [min, max] = price.split('-').map((p) => parseInt(p))
-      payload.filters.ranges.price = {}
-      if (min && !isNaN(min)) payload.filters.ranges.price.min = min
-      if (max && !isNaN(max)) payload.filters.ranges.price.max = max
+    const ranges = this.parseRanges(searchParams)
+    if (Object.keys(ranges).length > 0) {
+      payload.filters.ranges = ranges
     }
 
-    // Square range
-    const square = searchParams.get('square')
-    if (square) {
-      const [min, max] = square.split('-').map((s) => parseInt(s))
-      payload.filters.ranges.square = {}
-      if (min && !isNaN(min)) payload.filters.ranges.square.min = min
-      if (max && !isNaN(max)) payload.filters.ranges.square.max = max
-    }
-
-    // Enums (for filters like real_estate_type, etc.)
-    for (const [key, value] of searchParams.entries()) {
-      if (key !== 'text' && key !== 'category' && key !== 'locations' && key !== 'sort' && key !== 'order' && key !== 'price' && key !== 'square' && key !== 'page') {
-        if (value.includes(',')) {
-          // Multiple values
-          payload.filters.enums[key] = value.split(',')
-        } else if (!value.includes('-')) {
-          // Single enum value
-          payload.filters.enums[key] = [value]
-        }
-      }
-    }
-
-    // Always set ad_type to 'offer' by default (like the TypeScript lib does)
-    if (!payload.filters.enums.ad_type) {
-      payload.filters.enums.ad_type = ['offer']
-    }
-
-    // Clean up undefined values
-    if (!payload.filters.keywords) {
-      delete payload.filters.keywords
-    }
-    if (!payload.filters.category) {
-      delete payload.filters.category
-    }
-    if (Object.keys(payload.filters.ranges).length === 0) {
-      delete payload.filters.ranges
-    }
-    if (Object.keys(payload.filters.enums).length === 0) {
-      delete payload.filters.enums
-    }
-    if (payload.filters.location.locations.length === 0) {
-      // Keep location with shippable if no locations specified
+    const enums = this.parseEnums(searchParams)
+    if (Object.keys(enums).length > 0) {
+      payload.filters.enums = enums
     }
 
     return payload
   }
 
-  async scrapeDetails(listingUrl: string): Promise<{
-    description?: string
-    imageUrls: string[]
-  }> {
-    try {
-      // Extract ad ID from URL
-      const adIdMatch = listingUrl.match(/\/(\d+)\.htm/)
-      if (!adIdMatch) {
-        return { imageUrls: [] }
+  private parseLocations(locationsParam: string): SearchPayload['filters']['location']['locations'] {
+    const locations: SearchPayload['filters']['location']['locations'] = []
+    const locationParts = locationsParam.split(',')
+
+    for (const location of locationParts) {
+      const parts = location.split('__')
+      if (parts.length >= 2) {
+        const areaValues = parts[1].split('_')
+        locations.push({
+          locationType: 'city',
+          area: {
+            lat: parseFloat(areaValues[0]),
+            lng: parseFloat(areaValues[1]),
+            default_radius: areaValues[2] ? parseInt(areaValues[2]) : 10000,
+            radius: areaValues[3] ? parseInt(areaValues[3]) : 10000,
+          },
+        })
       }
-
-      const adId = adIdMatch[1]
-      const response = await fetch(`${this.API_BASE_URL}/api/adfinder/v1/classified/${adId}`, {
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-          'Origin': 'https://www.leboncoin.fr',
-          'Referer': 'https://www.leboncoin.fr/',
-        },
-      })
-
-      if (!response.ok) {
-        return { imageUrls: [] }
-      }
-
-      const data = await response.json()
-
-      return {
-        description: data.body || '',
-        imageUrls: data.images?.urls || [],
-      }
-    } catch (error) {
-      console.error('Detail scraping error:', error)
-      return { imageUrls: [] }
     }
+
+    return locations
   }
 
-  async close(): Promise<void> {
-    // No browser to close for API scraper
+  private parseRanges(searchParams: URLSearchParams): Record<string, { min?: number; max?: number }> {
+    const ranges: Record<string, { min?: number; max?: number }> = {}
+
+    const price = searchParams.get('price')
+    if (price) {
+      const [min, max] = price.split('-').map((p) => parseInt(p))
+      ranges.price = {}
+      if (min && !isNaN(min)) ranges.price.min = min
+      if (max && !isNaN(max)) ranges.price.max = max
+    }
+
+    const square = searchParams.get('square')
+    if (square) {
+      const [min, max] = square.split('-').map((s) => parseInt(s))
+      ranges.square = {}
+      if (min && !isNaN(min)) ranges.square.min = min
+      if (max && !isNaN(max)) ranges.square.max = max
+    }
+
+    return ranges
+  }
+
+  private parseEnums(searchParams: URLSearchParams): Record<string, string[]> {
+    const enums: Record<string, string[]> = {}
+    const excludedKeys = ['text', 'category', 'locations', 'sort', 'order', 'price', 'square', 'page']
+
+    for (const [key, value] of searchParams.entries()) {
+      if (!excludedKeys.includes(key)) {
+        if (value.includes(',')) {
+          enums[key] = value.split(',')
+        } else if (!value.includes('-')) {
+          enums[key] = [value]
+        }
+      }
+    }
+
+    if (!enums.ad_type) {
+      enums.ad_type = ['offer']
+    }
+
+    return enums
   }
 }
 
