@@ -97,6 +97,8 @@ ${description ? `Description fournie : ${description}` : ''}${referenceSection}
 
 Sois critique sur le titre et la description fournis. Si tu penses qu'elle est fausse, indique le.
 
+Pour déterminer le designer, base toi sur tes connaissances et les produits de référence plus que sur le nom et la description fournis qui peuvent être fausses ou inexactes (fournis par le vendeur).
+
 MÉTHODOLOGIE D'ANALYSE :
 1. ANALYSE VISUELLE : Identifie le style, les matériaux, et la qualité de fabrication. Cherche les signatures.
 2. IDENTIFICATION : Est-ce un designer connu ? Une attribution ? Ou un style générique ? **N'oublie pas d'utiliser l'outil de recherche pour les vérifications importantes.**
