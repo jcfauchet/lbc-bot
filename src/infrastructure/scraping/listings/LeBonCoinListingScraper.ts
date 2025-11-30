@@ -50,7 +50,11 @@ export class LeBonCoinListingScraper implements IScraper {
           listingsSelector = 'ul[data-test-id="listing-column"] > li';
         } catch (e2) {
           console.error('Listings container not found with either selector');
-          await page.screenshot({ path: 'debug_listings_not_found.png' });
+          console.error(`Page URL: ${page.url()}`);
+          const screenshotBase64 = await page.screenshot({ encoding: 'base64' }).catch(() => null);
+          if (screenshotBase64) {
+            console.error(`Screenshot (base64): data:image/png;base64,${screenshotBase64.substring(0, 100)}... (truncated)`);
+          }
           throw new Error('Could not find listings container');
         }
       }
@@ -140,12 +144,12 @@ export class LeBonCoinListingScraper implements IScraper {
 
     for (const indicator of botDetectionIndicators) {
       if (indicator.pattern.test(pageContent) || indicator.pattern.test(pageTitle)) {
-        const screenshot = await page.screenshot({ fullPage: true }).catch(() => null)
+        const screenshotBase64 = await page.screenshot({ fullPage: true, encoding: 'base64' }).catch(() => null)
         console.error(`⚠️ Bot detection detected: ${indicator.name}`)
         console.error(`Page URL: ${pageUrl}`)
         console.error(`Page title: ${pageTitle}`)
-        if (screenshot) {
-          console.error('Screenshot saved for debugging')
+        if (screenshotBase64) {
+          console.error(`Screenshot (base64): data:image/png;base64,${screenshotBase64.substring(0, 100)}... (truncated)`)
         }
         throw new Error(`Bot detection triggered: ${indicator.name}. Page may require manual verification.`)
       }

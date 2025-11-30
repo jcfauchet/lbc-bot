@@ -64,7 +64,11 @@ export class PamonoScraper implements SiteScraper {
 
     } catch (error) {
       console.error('Error during Pamono scrape:', error);
-      await page.screenshot({ path: 'pamono_error.png' });
+      console.error(`Page URL: ${page.url()}`);
+      const screenshotBase64 = await page.screenshot({ encoding: 'base64' }).catch(() => null);
+      if (screenshotBase64) {
+        console.error(`Screenshot (base64): data:image/png;base64,${screenshotBase64.substring(0, 100)}... (truncated)`);
+      }
     } finally {
       await browser.close();
     }
