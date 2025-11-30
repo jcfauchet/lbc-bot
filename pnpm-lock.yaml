@@ -18,8 +18,8 @@ importers:
         specifier: 7.0.1
         version: 7.0.1(prisma@7.0.1(@types/react@19.2.7)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(typescript@5.9.3))(typescript@5.9.3)
       '@sparticuz/chromium':
-        specifier: ^141.0.0
-        version: 141.0.0
+        specifier: ^133.0.0
+        version: 133.0.0
       cloudinary:
         specifier: ^2.8.0
         version: 2.8.0
@@ -39,11 +39,11 @@ importers:
         specifier: ^8.13.1
         version: 8.16.3
       playwright:
-        specifier: ^1.48.2
-        version: 1.57.0
+        specifier: ^1.53.0
+        version: 1.53.0
       playwright-core:
-        specifier: ^1.57.0
-        version: 1.57.0
+        specifier: ^1.53.0
+        version: 1.53.0
       react:
         specifier: ^19.2.0
         version: 19.2.0
@@ -745,9 +745,9 @@ packages:
   '@selderee/plugin-htmlparser2@0.11.0':
     resolution: {integrity: sha512-P33hHGdldxGabLFjPPpaTxVolMrzrcegejx+0GxjrIb9Zv48D8yAIA/QTDR2dFl7Uz7urX8aX6+5bCZslr+gWQ==}
 
-  '@sparticuz/chromium@141.0.0':
-    resolution: {integrity: sha512-JsTp4AqgStkqKki4dUpEM0GoisAjQhsqZ1lQTNMSKK5A9pw6BbIuIvv2HVYMYzSZGyDdQNJYBPPDg2eggCkezA==}
-    engines: {node: '>=20.11.0'}
+  '@sparticuz/chromium@133.0.0':
+    resolution: {integrity: sha512-wioNxMtSxRI+Y6ymc/UFPX9lY7A1SDgBezjFITH6arwe5CONfWosNDGpgflUGYajxxGktb1k3kjJ83jWzbccBw==}
+    engines: {node: '>= 16'}
 
   '@standard-schema/spec@1.0.0':
     resolution: {integrity: sha512-m2bOd0f2RT9k8QJx1JN85cZYyH1RqFBdlwtkSlf4tBDYLCiiZnv1fIIwacK6cqwXavOydf0NPToMQgpKq+dVlA==}
@@ -2446,13 +2446,13 @@ packages:
   pkg-types@2.3.0:
     resolution: {integrity: sha512-SIqCzDRg0s9npO5XQ3tNZioRY1uK06lA41ynBC1YmFTmnY6FjUjVt6s4LoADmwoig1qqD0oK8h1p/8mlMx8Oig==}
 
-  playwright-core@1.57.0:
-    resolution: {integrity: sha512-agTcKlMw/mjBWOnD6kFZttAAGHgi/Nw0CZ2o6JqWSbMlI219lAFLZZCyqByTsvVAJq5XA5H8cA6PrvBRpBWEuQ==}
+  playwright-core@1.53.0:
+    resolution: {integrity: sha512-mGLg8m0pm4+mmtB7M89Xw/GSqoNC+twivl8ITteqvAndachozYe2ZA7srU6uleV1vEdAHYqjq+SV8SNxRRFYBw==}
     engines: {node: '>=18'}
     hasBin: true
 
-  playwright@1.57.0:
-    resolution: {integrity: sha512-ilYQj1s8sr2ppEJ2YVadYBN0Mb3mdo9J0wQ+UuDhzYqURwSoW4n1Xs5vs7ORwgDGmyEh33tRMeS8KhdkMoLXQw==}
+  playwright@1.53.0:
+    resolution: {integrity: sha512-ghGNnIEYZC4E+YtclRn4/p6oYbdPiASELBIYkBXfaTVKreQUYbMUYQDwS12a8F0/HtIjr/CkGjtwABeFPGcS4Q==}
     engines: {node: '>=18'}
     hasBin: true
 
@@ -3569,7 +3569,7 @@ snapshots:
       domhandler: 5.0.3
       selderee: 0.11.0
 
-  '@sparticuz/chromium@141.0.0':
+  '@sparticuz/chromium@133.0.0':
     dependencies:
       follow-redirects: 1.15.11
       tar-fs: 3.1.1
@@ -5445,11 +5445,11 @@ snapshots:
       exsolve: 1.0.8
       pathe: 2.0.3
 
-  playwright-core@1.57.0: {}
+  playwright-core@1.53.0: {}
 
-  playwright@1.57.0:
+  playwright@1.53.0:
     dependencies:
-      playwright-core: 1.57.0
+      playwright-core: 1.53.0
     optionalDependencies:
       fsevents: 2.3.2
 

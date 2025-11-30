@@ -1,22 +1,22 @@
-import playwright, { chromium as chromiumOrigin, Browser, BrowserContext } from 'playwright-core';
-import chromium from '@sparticuz/chromium';
+import chromium from '@sparticuz/chromium'
+import playwright, { chromium as chromiumOrigin, Browser, BrowserContext } from 'playwright-core'
+
+export const defaultTimeout = 120_000
 
 export async function createBrowserForVercel(): Promise<Browser> {
-  const isVercel = process.env.VERCEL === '1' || process.env.AWS_LAMBDA_FUNCTION_NAME;
-  
-  if (isVercel) {
+  if (process.env.NODE_ENV !== 'development') {
     return await playwright.chromium.launch({
       headless: true,
-      timeout: 120_000,
+      timeout: defaultTimeout,
       executablePath: await chromium.executablePath(),
       args: chromium.args,
-    });
+    })
   }
   
   return await chromiumOrigin.launch({
-    headless: true,
-    timeout: 120_000,
-  });
+    headless: false,
+    timeout: defaultTimeout,
+  })
 }
 
 export async function createBrowserContext(browser: Browser): Promise<BrowserContext> {
