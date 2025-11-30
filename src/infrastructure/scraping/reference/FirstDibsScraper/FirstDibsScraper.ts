@@ -48,56 +48,6 @@ export class FirstDibsScraper implements IReferenceScraper {
     });
 
     const corsErrorCount = new Map<string, number>();
-    const botDetectionKeywords = ['bot', 'automation', 'captcha', 'blocked', 'suspicious', 'robot', 'crawler', 'scraper', 'webdriver', 'headless'];
-
-    page.on('console', (msg) => {
-      const type = msg.type();
-      const text = msg.text();
-      
-      const isCorsError = text.includes('CORS policy') || text.includes('ERR_FAILED');
-      const isBotDetection = botDetectionKeywords.some(keyword => 
-        text.toLowerCase().includes(keyword.toLowerCase())
-      );
-      
-      if (isCorsError) {
-        const key = text.substring(0, 100);
-        corsErrorCount.set(key, (corsErrorCount.get(key) || 0) + 1);
-        return;
-      }
-      
-      if (isBotDetection || type === 'error' || type === 'warning') {
-        console.log(`[Browser Console ${type}] ${text}`);
-      } else if (type === 'log' && text.length > 0) {
-        console.log(`[Browser Console ${type}] ${text}`);
-      }
-    });
-
-    page.on('pageerror', (error) => {
-      const errorText = error.message.toLowerCase();
-      const isBotDetection = botDetectionKeywords.some(keyword => 
-        errorText.includes(keyword.toLowerCase())
-      );
-      
-      if (isBotDetection || !errorText.includes('cors')) {
-        console.log(`[Browser Page Error] ${error.message}`);
-      }
-    });
-
-    page.on('requestfailed', (request) => {
-      const url = request.url();
-      const failure = request.failure();
-      if (failure && !url.includes('1stdibscdn.com')) {
-        console.log(`[Network Request Failed] ${request.method()} ${url} - ${failure.errorText}`);
-      }
-    });
-
-    page.on('response', (response) => {
-      const status = response.status();
-      const url = response.url();
-      if (status >= 400 && !url.includes('1stdibscdn.com')) {
-        console.log(`[Network Response ${status}] ${url}`);
-      }
-    });
 
     try {
       const searchUrl = `https://www.1stdibs.com/fr/search/furniture/?q=${encodeURIComponent(searchQuery)}`;
@@ -304,7 +254,6 @@ export class FirstDibsScraper implements IReferenceScraper {
           return diagnostics;
         });
         
-        console.log('[Diagnostic DOM]', JSON.stringify(domDiagnostic, null, 2));
         console.log('No results found on 1stdibs.');
         return [];
       }
@@ -415,7 +364,6 @@ export class FirstDibsScraper implements IReferenceScraper {
         return results;
       });
 
-      console.log(`Found ${productsFromList.length} products from list.`);
 
       for (const product of productsFromList.slice(0, 10)) {
         if (product.title && product.price) {

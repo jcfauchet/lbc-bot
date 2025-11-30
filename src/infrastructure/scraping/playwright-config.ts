@@ -4,15 +4,6 @@ import playwright, { chromium as chromiumOrigin, Browser, BrowserContext } from 
 export const defaultTimeout = 120_000
 
 export async function createBrowser(): Promise<Browser> {
-
-  const proxies = [
-    'http://user:pass@proxy1.example.com:8000',
-    'http://user:pass@proxy2.example.com:8000',
-    'http://user:pass@proxy3.example.com:8000'
-  ];
-  
-  const proxy = proxies[Math.floor(Math.random() * proxies.length)];
-
   
   if (process.env.NODE_ENV === 'production') {
     const chromiumArgs = [
@@ -34,9 +25,6 @@ export async function createBrowser(): Promise<Browser> {
       timeout: defaultTimeout,
       executablePath: await chromium.executablePath(),
       args: chromiumArgs,
-      proxy: {
-        server: proxy,
-      },
     })
   }
   
@@ -46,9 +34,6 @@ export async function createBrowser(): Promise<Browser> {
     args: [
       '--disable-blink-features=AutomationControlled',
     ],
-    proxy: {
-      server: proxy,
-    },
   })
 }
 

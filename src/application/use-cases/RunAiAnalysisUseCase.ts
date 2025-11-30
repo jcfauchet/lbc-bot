@@ -30,6 +30,12 @@ export class RunAiAnalysisUseCase {
     const batch = listingsWithoutAnalysis.slice(0, batchSize)
 
     const categories = await this.taxonomyRepository.getCategories()
+    console.log(`📋 Categories loaded from DB: ${categories.length} categories`)
+    if (categories.length > 0) {
+      console.log(`   Categories: ${categories.join(', ')}`)
+    } else {
+      console.warn(`⚠️  No categories found in database!`)
+    }
 
     let analyzed = 0
     let errors = 0
@@ -63,8 +69,12 @@ export class RunAiAnalysisUseCase {
           categories
         )
 
+        console.log(`  → Estimated price: ${preEstimation.estimatedMinPrice.getEuros()}€ - ${preEstimation.estimatedMaxPrice.getEuros()}€`)
+        console.log(`  → isPromising: ${preEstimation.isPromising}, hasDesigner: ${preEstimation.hasDesigner}, shouldProceed: ${preEstimation.shouldProceed}`)
+        console.log(`  → Confidence: ${((preEstimation.confidence || 0) * 100).toFixed(1)}%`)
+
         if (!preEstimation.shouldProceed) {
-          console.log(`Skipping listing ${listing.title} - shouldProceed: false (isPromising: ${preEstimation.isPromising}, hasDesigner: ${preEstimation.hasDesigner})`)
+          console.log(`  ❌ Skipping listing ${listing.title} - shouldProceed: false (isPromising: ${preEstimation.isPromising}, hasDesigner: ${preEstimation.hasDesigner})`)
           listing.markAsIgnored()
           await this.listingRepository.update(listing)
           continue

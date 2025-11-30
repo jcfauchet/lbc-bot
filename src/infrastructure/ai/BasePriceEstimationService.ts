@@ -119,21 +119,23 @@ Exemple de réponse valide :
   }
 
   protected buildPreEstimationPrompt(title: string, description?: string, categories?: string[]): string {
-    const categoriesText = categories && categories.length > 0
-      ? categories.join(', ')
-      : 'design/vintage/arts décoratifs'
+    let categoriesSection = ''
+    if (categories && categories.length > 0) {
+      const categoriesList = categories.map(c => `- ${c.replace(/_/g, ' ')}`).join('\n')
+      categoriesSection = `\nCATÉGORIES QUE NOUS GÉRONS (ces catégories incluent leurs variantes : table d'appoint = table basse, desserte = table basse, console = bibliothèque/enfilade, etc.) :\n${categoriesList}\n`
+    }
     
     return `
 Analyse l'image et les informations ci-dessous pour faire une pré-estimation et déterminer si le produit mérite une analyse approfondie.
 
 CONTEXTE UTILISATEUR :
 Titre : ${title}
-${description ? `Description fournie : ${description}` : ''}
+${description ? `Description fournie : ${description}` : ''}${categoriesSection}
 
 TA MISSION :
 1. FILTRAGE : Détermine si ce produit est :
    - Une "daube" (produit de mauvaise qualité, sans valeur)
-   - Un produit que nous ne gérons pas (hors catégorie ${categoriesText})
+   - Un produit qui ne correspond à aucune de nos catégories (ex: vêtements, électronique, jouets, voitures, etc.)
    - Si c'est le cas, retourne shouldProceed: false
 
 2. PRÉ-ESTIMATION : Estime rapidement la fourchette de prix potentielle (marché secondaire)
@@ -146,7 +148,7 @@ TA MISSION :
 
 RÈGLES IMPORTANTES :
 - Si la pré-estimation est trop basse (< ${env.MIN_MARGIN_IN_EUR}€), retourne isPromising: false
-- Si pas de soupçons de designer (certitude < 80%), retourne hasDesigner: false et shouldProceed: false
+- Si pas de soupçons de designer renommé (certitude < 65%), retourne hasDesigner: false et shouldProceed: false
 - Les searchTerms ne doivent être générés que si hasDesigner: true ET isPromising: true
 - Maximum 4 searchTerms
 
@@ -188,7 +190,7 @@ TA MISSION :
 2. Générer UNE SEULE chaîne de recherche (query) optimisée pour trouver cet objet précis sur un site d'enchères.
    - Sois précis : "table basse verre rectangulaire maison jansen" est mieux que "table basse jansen".
    - Inclus les matériaux, la forme, le designer si connu.
-3. Si tu es confiant sur le designer ou la marque, indique-le séparément.
+3. Si tu es confiant sur le designer ou la marque, indique-le séparément. Pour déterminer le designer, base toi sur tes connaissances plus que sur le nom et la description fournis qui peuvent être fausses ou inexactes (fournis par le vendeur).
 
 INSTRUCTIONS DE SORTIE (JSON UNIQUEMENT) :
 Tu dois fournir ta réponse UNIQUEMENT au format JSON valide, sans texte avant ou après.

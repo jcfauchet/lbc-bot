@@ -17,11 +17,6 @@ async function main() {
       isActive: true,
     },
     {
-      name: 'Table basse laiton ',
-      url: 'https://www.leboncoin.fr/recherche?text=Table+basse+laiton+',
-      isActive: true,
-    },
-    {
       name: 'Desserte laiton doré',
       url: 'https://www.leboncoin.fr/recherche?text=Desserte+laiton+dor%C3%A9',
       isActive: true,
