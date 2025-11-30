@@ -14,6 +14,10 @@ export class LeBonCoinListingScraper implements IScraper {
 
       await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 60000 })
 
+      await this.randomDelay(1000, 3000)
+
+      await this.checkForBotDetection(page)
+
       try {
         const cookieButton = await page.waitForSelector('#didomi-notice-agree-button, #didomi-notice-learn-more-button', { timeout: 5000 })
         if (cookieButton) {
@@ -26,8 +30,10 @@ export class LeBonCoinListingScraper implements IScraper {
                  if (refuseAll) await refuseAll.click()
             }
         }
-      } catch (e) {
-        console.log('Cookie banner not found or handled:', e)
+      } catch (e: any) {
+        if (e?.name !== 'TimeoutError') {
+          console.log('Cookie banner error:', e)
+        }
       }
 
       let listingsSelector = '';
@@ -108,6 +114,47 @@ export class LeBonCoinListingScraper implements IScraper {
     } catch (error) {
       console.error('Scraping error:', error)
       throw error
+    }
+  }
+
+  private async randomDelay(min: number, max: number): Promise<void> {
+    const delay = Math.floor(Math.random() * (max - min + 1)) + min
+    await new Promise(resolve => setTimeout(resolve, delay))
+  }
+
+  private async checkForBotDetection(page: Page): Promise<void> {
+    const pageContent = await page.content().catch(() => '')
+    const pageTitle = await page.title().catch(() => '')
+    const pageUrl = page.url()
+
+    const botDetectionIndicators = [
+      { pattern: /recaptcha/i, name: 'reCAPTCHA' },
+      { pattern: /hcaptcha/i, name: 'hCaptcha' },
+      { pattern: /cloudflare/i, name: 'Cloudflare' },
+      { pattern: /access denied/i, name: 'Access Denied' },
+      { pattern: /blocked/i, name: 'Blocked' },
+      { pattern: /robot/i, name: 'Robot detection' },
+      { pattern: /challenge/i, name: 'Challenge page' },
+      { pattern: /verify.*human/i, name: 'Human verification' },
+    ]
+
+    for (const indicator of botDetectionIndicators) {
+      if (indicator.pattern.test(pageContent) || indicator.pattern.test(pageTitle)) {
+        const screenshot = await page.screenshot({ fullPage: true }).catch(() => null)
+        console.error(`⚠️ Bot detection detected: ${indicator.name}`)
+        console.error(`Page URL: ${pageUrl}`)
+        console.error(`Page title: ${pageTitle}`)
+        if (screenshot) {
+          console.error('Screenshot saved for debugging')
+        }
+        throw new Error(`Bot detection triggered: ${indicator.name}. Page may require manual verification.`)
+      }
+    }
+
+    const recaptchaFrame = await page.$('iframe[src*="recaptcha"], iframe[src*="google.com/recaptcha"]').catch(() => null)
+    if (recaptchaFrame) {
+      console.error('⚠️ reCAPTCHA iframe detected on page')
+      throw new Error('reCAPTCHA detected on page. Manual intervention may be required.')
     }
   }
 
