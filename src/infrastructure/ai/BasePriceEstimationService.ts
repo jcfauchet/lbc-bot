@@ -8,6 +8,7 @@ import {
 } from '@/domain/services/IPriceEstimationService'
 import { Money } from '@/domain/value-objects/Money'
 import fs from 'fs/promises'
+import { env } from '../config/env'
 import path from 'path'
 
 export abstract class BasePriceEstimationService
@@ -35,7 +36,8 @@ export abstract class BasePriceEstimationService
   abstract preEstimate(
     images: string[],
     title: string,
-    description?: string
+    description?: string,
+    categories?: string[]
   ): Promise<PreEstimationResult>
 
   abstract estimatePrice(
@@ -116,7 +118,11 @@ Exemple de réponse valide :
     `.trim()
   }
 
-  protected buildPreEstimationPrompt(title: string, description?: string): string {
+  protected buildPreEstimationPrompt(title: string, description?: string, categories?: string[]): string {
+    const categoriesText = categories && categories.length > 0
+      ? categories.join(', ')
+      : 'design/vintage/arts décoratifs'
+    
     return `
 Analyse l'image et les informations ci-dessous pour faire une pré-estimation et déterminer si le produit mérite une analyse approfondie.
 
@@ -127,7 +133,7 @@ ${description ? `Description fournie : ${description}` : ''}
 TA MISSION :
 1. FILTRAGE : Détermine si ce produit est :
    - Une "daube" (produit de mauvaise qualité, sans valeur)
-   - Un produit que nous ne gérons pas (hors catégorie design/vintage/arts décoratifs)
+   - Un produit que nous ne gérons pas (hors catégorie ${categoriesText})
    - Si c'est le cas, retourne shouldProceed: false
 
 2. PRÉ-ESTIMATION : Estime rapidement la fourchette de prix potentielle (marché secondaire)
@@ -139,7 +145,7 @@ TA MISSION :
    - Exemples : "table basse verre rectangulaire maison jansen", "chaise scandinave teck finn juhl"
 
 RÈGLES IMPORTANTES :
-- Si la pré-estimation est trop basse (< 500€), retourne isPromising: false
+- Si la pré-estimation est trop basse (< ${env.MIN_MARGIN_IN_EUR}€), retourne isPromising: false
 - Si pas de soupçons de designer (certitude < 80%), retourne hasDesigner: false et shouldProceed: false
 - Les searchTerms ne doivent être générés que si hasDesigner: true ET isPromising: true
 - Maximum 4 searchTerms

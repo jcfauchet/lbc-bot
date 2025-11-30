@@ -2,6 +2,7 @@ import { IListingRepository } from '@/domain/repositories/IListingRepository'
 import { IAiAnalysisRepository } from '@/domain/repositories/IAiAnalysisRepository'
 import { IListingImageRepository } from '@/domain/repositories/IListingImageRepository'
 import { IPriceEstimationService } from '@/domain/services/IPriceEstimationService'
+import { ITaxonomyRepository } from '@/domain/repositories/ITaxonomyRepository'
 import { ImageDownloadService } from '@/infrastructure/storage/ImageDownloadService'
 import { IStorageService } from '@/infrastructure/storage/IStorageService'
 import { AiAnalysis } from '@/domain/entities/AiAnalysis'
@@ -16,7 +17,8 @@ export class RunAiAnalysisUseCase {
     private priceEstimationService: IPriceEstimationService,
     private imageDownloadService: ImageDownloadService,
     private storageService: IStorageService,
-    private referenceScrapers: Map<string, IReferenceScraper>
+    private referenceScrapers: Map<string, IReferenceScraper>,
+    private taxonomyRepository: ITaxonomyRepository
   ) {}
 
   async execute(
@@ -26,6 +28,8 @@ export class RunAiAnalysisUseCase {
       await this.listingRepository.findWithoutAiAnalysis()
 
     const batch = listingsWithoutAnalysis.slice(0, batchSize)
+
+    const categories = await this.taxonomyRepository.getCategories()
 
     let analyzed = 0
     let errors = 0
@@ -55,7 +59,8 @@ export class RunAiAnalysisUseCase {
         const preEstimation = await this.priceEstimationService.preEstimate(
           imageUrls,
           listing.title,
-          undefined
+          undefined,
+          categories
         )
 
         if (!preEstimation.shouldProceed) {

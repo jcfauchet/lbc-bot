@@ -29,11 +29,12 @@ export class GeminiPriceEstimationService extends BasePriceEstimationService {
   async preEstimate(
     images: string[],
     title: string,
-    description?: string
+    description?: string,
+    categories?: string[]
   ): Promise<PreEstimationResult> {
     try {
       const imageParts = await this.prepareImages(images)
-      const prompt = this.buildPreEstimationPrompt(title, description)
+      const prompt = this.buildPreEstimationPrompt(title, description, categories)
 
       const generationConfig: GenerateContentParameters['config'] = {
         temperature: 0.2,

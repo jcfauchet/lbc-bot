@@ -25,7 +25,8 @@ export interface IPriceEstimationService {
   preEstimate(
     images: string[],
     title: string,
-    description?: string
+    description?: string,
+    categories?: string[]
   ): Promise<PreEstimationResult>
   
   estimatePrice(

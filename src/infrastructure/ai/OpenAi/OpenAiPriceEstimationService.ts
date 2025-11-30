@@ -24,11 +24,12 @@ export class OpenAiPriceEstimationService extends BasePriceEstimationService {
   async preEstimate(
     images: string[],
     title: string,
-    description?: string
+    description?: string,
+    categories?: string[]
   ): Promise<PreEstimationResult> {
     try {
       const imageContents = await this.prepareImages(images)
-      const prompt = this.buildPreEstimationPrompt(title, description)
+      const prompt = this.buildPreEstimationPrompt(title, description, categories)
 
       const response = await this.client.chat.completions.create({
         model: 'gpt-4o',

@@ -113,7 +113,8 @@ export class Container {
       this.priceEstimationService,
       this.imageDownloadService,
       this.storageService,
-      referenceScrapers
+      referenceScrapers,
+      this.taxonomyRepository
     )
 
     this.runNotificationUseCase = new RunNotificationUseCase(
