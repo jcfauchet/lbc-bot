@@ -3,7 +3,7 @@ import { container } from '@/infrastructure/di/container'
 import { withErrorHandling } from '@/infrastructure/logger/ErrorHandler'
 import { logInfo } from '@/infrastructure/logger/logger'
 
-export const maxDuration = 900
+export const maxDuration = 800
 
 export async function GET(request: Request) {
   const authHeader = request.headers.get('authorization')
