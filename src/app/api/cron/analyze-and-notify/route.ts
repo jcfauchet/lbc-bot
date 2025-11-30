@@ -18,6 +18,11 @@ export async function GET(request: Request) {
     const result = await container.runAiAnalysisUseCase.execute(10)
     
     logInfo('CRON:analyze', `Analysis completed: ${result.analyzed} analyzed`, result)
+
+    const notificationResult = await container.runNotificationUseCase.execute()
+    
+    logInfo('CRON:analyze', `Notification completed: ${notificationResult.sent} sent`, notificationResult)
+
     
     return NextResponse.json({
       success: true,
