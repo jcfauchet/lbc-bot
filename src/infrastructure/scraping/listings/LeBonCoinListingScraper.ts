@@ -2,6 +2,7 @@ import { Browser, Page, BrowserContext } from 'playwright-core'
 import { IScraper, ScrapedListing } from '../types'
 import { env } from '../../config/env'
 import { createBrowserForVercel, createBrowserContext } from '../playwright-config'
+import { v2 as cloudinary } from 'cloudinary'
 
 export class LeBonCoinListingScraper implements IScraper {
   private browser: Browser | null = null
@@ -51,11 +52,71 @@ export class LeBonCoinListingScraper implements IScraper {
         } catch (e2) {
           console.error('Listings container not found with either selector');
           console.error(`Page URL: ${page.url()}`);
-          const screenshotBuffer = await page.screenshot().catch(() => null);
-          if (screenshotBuffer) {
-            const screenshotBase64 = screenshotBuffer.toString('base64');
-            console.error(`Screenshot (base64): data:image/png;base64,${screenshotBase64.substring(0, 100)}... (truncated)`);
+          console.error(`Page title: ${await page.title().catch(() => 'unknown')}`);
+          
+          // Log page structure for debugging - discover actual selectors on the page
+          const pageInfo = await page.evaluate(() => {
+            return {
+              bodyClasses: document.body.className,
+              bodyId: document.body.id,
+              allUlElements: Array.from(document.querySelectorAll('ul')).slice(0, 20).map(ul => ({
+                className: ul.className,
+                id: ul.id,
+                dataTestId: ul.getAttribute('data-test-id'),
+                dataQaId: ul.getAttribute('data-qa-id'),
+                childrenCount: ul.children.length,
+                firstChildTag: ul.firstElementChild?.tagName,
+              })),
+              elementsWithDataTestId: Array.from(document.querySelectorAll('[data-test-id]')).slice(0, 20).map(el => ({
+                tagName: el.tagName,
+                dataTestId: el.getAttribute('data-test-id'),
+                className: el.className,
+                id: el.id,
+              })),
+            };
+          }).catch(() => null);
+          
+          if (pageInfo) {
+            console.error('Page structure info:', JSON.stringify(pageInfo, null, 2));
           }
+          
+          // Capture screenshot and upload to Cloudinary for debugging
+          const screenshotBuffer = await page.screenshot({ fullPage: true }).catch(() => null);
+          if (screenshotBuffer && process.env.CLOUDINARY_CLOUD_NAME) {
+            try {
+              cloudinary.config({
+                cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+                api_key: process.env.CLOUDINARY_API_KEY,
+                api_secret: process.env.CLOUDINARY_API_SECRET,
+              });
+
+              const timestamp = Date.now();
+              const url = new URL(page.url());
+              const searchParams = url.searchParams.get('text') || 'unknown';
+              const filename = `debug_${timestamp}_${encodeURIComponent(searchParams.substring(0, 50))}.png`;
+
+              const result = await new Promise<string>((resolve, reject) => {
+                const uploadStream = cloudinary.uploader.upload_stream(
+                  {
+                    folder: 'debug',
+                    public_id: filename.replace('.png', ''),
+                    resource_type: 'image',
+                    overwrite: true,
+                  },
+                  (error, result) => {
+                    if (error) reject(error);
+                    else resolve(result!.secure_url);
+                  }
+                );
+                uploadStream.end(screenshotBuffer);
+              });
+
+              console.error(`📸 Debug screenshot uploaded to Cloudinary: ${result}`);
+            } catch (uploadError) {
+              console.error('Failed to upload screenshot to Cloudinary:', uploadError);
+            }
+          }
+          
           throw new Error('Could not find listings container');
         }
       }
