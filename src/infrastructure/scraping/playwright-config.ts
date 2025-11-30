@@ -52,7 +52,7 @@ export async function createBrowserContext(browser: Browser): Promise<BrowserCon
       get: () => ['fr-FR', 'fr', 'en-US', 'en'],
     });
     
-    window.chrome = {
+    (window as any).chrome = {
       runtime: {},
     };
     
