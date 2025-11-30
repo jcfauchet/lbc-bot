@@ -99,5 +99,10 @@ export class Listing {
     this.props.status = ListingStatus.IGNORED
     this.props.updatedAt = new Date()
   }
+
+  markAsAnalyzing(): void {
+    this.props.status = ListingStatus.ANALYZING
+    this.props.updatedAt = new Date()
+  }
 }
 

@@ -1,5 +1,6 @@
 export enum ListingStatus {
   NEW = 'new',
+  ANALYZING = 'analyzing',
   ANALYZED = 'analyzed',
   NOTIFIED = 'notified',
   ARCHIVED = 'archived',

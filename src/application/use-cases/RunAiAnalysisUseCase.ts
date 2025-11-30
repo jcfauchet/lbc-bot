@@ -6,6 +6,7 @@ import { ImageDownloadService } from '@/infrastructure/storage/ImageDownloadServ
 import { IStorageService } from '@/infrastructure/storage/IStorageService'
 import { AiAnalysis } from '@/domain/entities/AiAnalysis'
 import { IReferenceScraper } from '@/infrastructure/scraping/reference/IReferenceScraper'
+import { ListingStatus } from '@/domain/value-objects/ListingStatus'
 
 export class RunAiAnalysisUseCase {
   constructor(
@@ -32,6 +33,9 @@ export class RunAiAnalysisUseCase {
     for (const listing of batch) {
       try {
         console.log(`Analyzing listing: ${listing.title}`)
+        
+        listing.markAsAnalyzing()
+        await this.listingRepository.update(listing)
 
         await this.imageDownloadService.downloadListingImages(listing.id)
 
@@ -42,6 +46,8 @@ export class RunAiAnalysisUseCase {
 
         if (imageUrls.length === 0) {
           console.warn(`No images available for listing ${listing.id}`)
+          listing.markAsIgnored()
+          await this.listingRepository.update(listing)
           continue
         }
 
@@ -130,8 +136,10 @@ export class RunAiAnalysisUseCase {
 
         await this.aiAnalysisRepository.save(analysis)
 
-        listing.markAsAnalyzed()
-        await this.listingRepository.update(listing)
+        if (listing.status !== ListingStatus.ANALYZED) {
+          listing.markAsAnalyzed()
+          await this.listingRepository.update(listing)
+        }
 
         for (const image of images) {
           if (image.pathLocal && image.pathLocal.startsWith('http')) {
@@ -153,6 +161,10 @@ export class RunAiAnalysisUseCase {
         await this.delay(1000)
       } catch (error) {
         console.error(`Error analyzing listing ${listing.id}:`, error)
+        if (listing.status === ListingStatus.ANALYZING) {
+          listing.markAsIgnored()
+          await this.listingRepository.update(listing)
+        }
         errors++
       }
     }

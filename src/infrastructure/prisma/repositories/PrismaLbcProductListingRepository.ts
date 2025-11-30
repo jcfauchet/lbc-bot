@@ -54,7 +54,9 @@ export class PrismaLbcProductListingRepository implements IListingRepository {
     const listings = await this.prisma.lbcProductListing.findMany({
       where: { 
         aiAnalysis: null,
-        status: { not: ListingStatus.IGNORED }
+        status: { 
+          notIn: [ListingStatus.IGNORED, ListingStatus.ANALYZING]
+        }
       },
       orderBy: { createdAt: 'desc' },
     })
