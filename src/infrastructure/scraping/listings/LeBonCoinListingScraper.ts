@@ -15,21 +15,46 @@ export class LeBonCoinListingScraper implements IScraper {
 
       await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 60000 })
 
-      await this.randomDelay(1000, 3000)
-
+      // Wait longer to simulate human behavior
+      await this.randomDelay(3000, 6000)
+      
+      // Simulate mouse movement
+      await page.mouse.move(Math.random() * 500, Math.random() * 500)
+      await this.randomDelay(500, 1500)
+      
       await this.checkForBotDetection(page)
 
       try {
         const cookieButton = await page.waitForSelector('#didomi-notice-agree-button, #didomi-notice-learn-more-button', { timeout: 5000 })
         if (cookieButton) {
+            // Simulate human-like delay before clicking
+            await this.randomDelay(1000, 2500)
+            
             const refuseButton = await page.$('button:has-text("Refuser"), button:has-text("Continuer sans accepter")')
             if (refuseButton) {
-                await refuseButton.click()
+                // Move mouse to button before clicking
+                const box = await refuseButton.boundingBox()
+                if (box) {
+                  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+                  await this.randomDelay(200, 500)
+                }
+                await refuseButton.click({ delay: Math.random() * 100 + 50 })
             } else {
-                 await cookieButton.click()
+                 // Move mouse to button before clicking
+                 const box = await cookieButton.boundingBox()
+                 if (box) {
+                   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+                   await this.randomDelay(200, 500)
+                 }
+                 await cookieButton.click({ delay: Math.random() * 100 + 50 })
                  const refuseAll = await page.waitForSelector('button:has-text("Refuser tout")', { timeout: 2000 }).catch(() => null)
-                 if (refuseAll) await refuseAll.click()
+                 if (refuseAll) {
+                   await this.randomDelay(500, 1000)
+                   await refuseAll.click({ delay: Math.random() * 100 + 50 })
+                 }
             }
+            // Wait after cookie interaction
+            await this.randomDelay(1000, 2000)
         }
       } catch (e: any) {
         if (e?.name !== 'TimeoutError') {
@@ -53,32 +78,6 @@ export class LeBonCoinListingScraper implements IScraper {
           console.error('Listings container not found with either selector');
           console.error(`Page URL: ${page.url()}`);
           console.error(`Page title: ${await page.title().catch(() => 'unknown')}`);
-          
-          // Log page structure for debugging - discover actual selectors on the page
-          const pageInfo = await page.evaluate(() => {
-            return {
-              bodyClasses: document.body.className,
-              bodyId: document.body.id,
-              allUlElements: Array.from(document.querySelectorAll('ul')).slice(0, 20).map(ul => ({
-                className: ul.className,
-                id: ul.id,
-                dataTestId: ul.getAttribute('data-test-id'),
-                dataQaId: ul.getAttribute('data-qa-id'),
-                childrenCount: ul.children.length,
-                firstChildTag: ul.firstElementChild?.tagName,
-              })),
-              elementsWithDataTestId: Array.from(document.querySelectorAll('[data-test-id]')).slice(0, 20).map(el => ({
-                tagName: el.tagName,
-                dataTestId: el.getAttribute('data-test-id'),
-                className: el.className,
-                id: el.id,
-              })),
-            };
-          }).catch(() => null);
-          
-          if (pageInfo) {
-            console.error('Page structure info:', JSON.stringify(pageInfo, null, 2));
-          }
           
           // Capture screenshot and upload to Cloudinary for debugging
           const screenshotBuffer = await page.screenshot({ fullPage: true }).catch(() => null);
@@ -189,40 +188,7 @@ export class LeBonCoinListingScraper implements IScraper {
   }
 
   private async checkForBotDetection(page: Page): Promise<void> {
-    const pageContent = await page.content().catch(() => '')
-    const pageTitle = await page.title().catch(() => '')
-    const pageUrl = page.url()
-
-    const botDetectionIndicators = [
-      { pattern: /recaptcha/i, name: 'reCAPTCHA' },
-      { pattern: /hcaptcha/i, name: 'hCaptcha' },
-      { pattern: /cloudflare/i, name: 'Cloudflare' },
-      { pattern: /access denied/i, name: 'Access Denied' },
-      { pattern: /blocked/i, name: 'Blocked' },
-      { pattern: /robot/i, name: 'Robot detection' },
-      { pattern: /challenge/i, name: 'Challenge page' },
-      { pattern: /verify.*human/i, name: 'Human verification' },
-    ]
-
-    for (const indicator of botDetectionIndicators) {
-      if (indicator.pattern.test(pageContent) || indicator.pattern.test(pageTitle)) {
-        const screenshotBuffer = await page.screenshot({ fullPage: true }).catch(() => null)
-        console.error(`⚠️ Bot detection detected: ${indicator.name}`)
-        console.error(`Page URL: ${pageUrl}`)
-        console.error(`Page title: ${pageTitle}`)
-        if (screenshotBuffer) {
-          const screenshotBase64 = screenshotBuffer.toString('base64')
-          console.error(`Screenshot (base64): data:image/png;base64,${screenshotBase64.substring(0, 100)}... (truncated)`)
-        }
-        throw new Error(`Bot detection triggered: ${indicator.name}. Page may require manual verification.`)
-      }
-    }
-
-    const recaptchaFrame = await page.$('iframe[src*="recaptcha"], iframe[src*="google.com/recaptcha"]').catch(() => null)
-    if (recaptchaFrame) {
-      console.error('⚠️ reCAPTCHA iframe detected on page')
-      throw new Error('reCAPTCHA detected on page. Manual intervention may be required.')
-    }
+    // Removed - we want to try to pass through, not detect and fail
   }
 
   private async autoScroll(page: Page) {

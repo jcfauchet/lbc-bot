@@ -40,27 +40,71 @@ export async function createBrowserContext(browser: Browser): Promise<BrowserCon
   });
 
   await context.addInitScript(() => {
+    // Remove webdriver flag
     Object.defineProperty(navigator, 'webdriver', {
       get: () => false,
     });
     
+    // Add realistic plugins
     Object.defineProperty(navigator, 'plugins', {
-      get: () => [1, 2, 3, 4, 5],
+      get: () => {
+        const plugins = [];
+        for (let i = 0; i < 3; i++) {
+          plugins.push({
+            name: `Plugin ${i}`,
+            description: `Plugin ${i} Description`,
+            filename: `plugin${i}.dll`,
+            length: 1,
+          });
+        }
+        return plugins;
+      },
     });
     
+    // Set languages
     Object.defineProperty(navigator, 'languages', {
       get: () => ['fr-FR', 'fr', 'en-US', 'en'],
     });
     
+    // Add chrome object
     (window as any).chrome = {
       runtime: {},
+      loadTimes: function() {},
+      csi: function() {},
+      app: {},
     };
     
+    // Override permissions API
     Object.defineProperty(navigator, 'permissions', {
       get: () => ({
         query: () => Promise.resolve({ state: 'granted' }),
       }),
     });
+    
+    // Override platform
+    Object.defineProperty(navigator, 'platform', {
+      get: () => 'MacIntel',
+    });
+    
+    // Add hardwareConcurrency
+    Object.defineProperty(navigator, 'hardwareConcurrency', {
+      get: () => 8,
+    });
+    
+    // Add deviceMemory
+    Object.defineProperty(navigator, 'deviceMemory', {
+      get: () => 8,
+    });
+    
+    // Override getBattery if it exists
+    if ((navigator as any).getBattery) {
+      (navigator as any).getBattery = () => Promise.resolve({
+        charging: true,
+        chargingTime: 0,
+        dischargingTime: Infinity,
+        level: 1,
+      });
+    }
   });
 
   return context;
