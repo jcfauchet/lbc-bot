@@ -11,6 +11,8 @@ import { PrismaLbcProductListingLabelRepository } from '@/infrastructure/prisma/
 import { PrismaTaxonomyRepository } from '@/infrastructure/prisma/repositories/PrismaTaxonomyRepository'
 
 import { LeBonCoinListingScraper } from '@/infrastructure/scraping/listings/LeBonCoinListingScraper'
+import { LeBonCoinApiClient } from '@/infrastructure/api/LeBonCoinApiClient'
+import { IListingSource } from '@/domain/services/IListingSource'
 import { LocalStorageService } from '@/infrastructure/storage/LocalStorageService'
 import { CloudinaryStorageService } from '@/infrastructure/storage/CloudinaryStorageService'
 import { IStorageService } from '@/infrastructure/storage/IStorageService'
@@ -41,6 +43,7 @@ export class Container {
   public readonly taxonomyRepository: PrismaTaxonomyRepository
 
   public readonly scraper: LeBonCoinListingScraper
+  public readonly listingSource: IListingSource
   public readonly storageService: IStorageService
   public readonly imageDownloadService: ImageDownloadService
   public readonly priceEstimationService: IPriceEstimationService
@@ -65,6 +68,12 @@ export class Container {
     this.taxonomyRepository = new PrismaTaxonomyRepository(this.prisma)
 
     this.scraper = new LeBonCoinListingScraper()
+    
+    // Choose listing source based on environment variable
+    this.listingSource = env.LBC_SOURCE_TYPE === 'api'
+      ? new LeBonCoinApiClient()
+      : this.scraper
+    
     this.storageService = env.STORAGE_TYPE === 'cloudinary'
       ? new CloudinaryStorageService()
       : new LocalStorageService(env.STORAGE_LOCAL_PATH)
@@ -89,7 +98,7 @@ export class Container {
       this.searchRepository,
       this.listingRepository,
       this.listingImageRepository,
-      this.scraper
+      this.listingSource
     )
 
     this.runReferenceScrapersUseCase = new RunReferenceScrapersUseCase(ingestionService, this.prisma)

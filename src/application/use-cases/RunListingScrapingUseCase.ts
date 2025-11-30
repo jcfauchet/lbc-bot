@@ -1,7 +1,7 @@
 import { ISearchRepository } from '@/domain/repositories/ISearchRepository'
 import { IListingRepository } from '@/domain/repositories/IListingRepository'
 import { IListingImageRepository } from '@/domain/repositories/IListingImageRepository'
-import { IScraper } from '@/infrastructure/scraping/types'
+import { IListingSource } from '@/domain/services/IListingSource'
 import { Listing } from '@/domain/entities/Listing'
 import { ListingImage } from '@/domain/entities/ListingImage'
 import { Money } from '@/domain/value-objects/Money'
@@ -12,7 +12,7 @@ export class RunListingScrapingUseCase {
     private searchRepository: ISearchRepository,
     private listingRepository: IListingRepository,
     private imageRepository: IListingImageRepository,
-    private scraper: IScraper
+    private listingSource: IListingSource
   ) {}
 
   async execute(): Promise<{
@@ -28,7 +28,7 @@ export class RunListingScrapingUseCase {
     for (const search of searches) {
       try {
         console.log(`Scraping search: ${search.name}`)
-        const scrapedListings = await this.scraper.scrape(search.url)
+        const scrapedListings = await this.listingSource.scrape(search.url, search.name)
 
         for (const scraped of scrapedListings) {
           const existing = await this.listingRepository.findByLbcId(

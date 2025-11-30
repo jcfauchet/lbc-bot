@@ -18,6 +18,7 @@ const envSchema = z.object({
   MIN_MARGIN_IN_EUR: z.coerce.number().min(50).default(100),
   MIN_LISTING_PRICE_EUR: z.coerce.number().min(0).default(50),
   AI_PROVIDER: z.enum(['openai', 'gemini']).default('openai'),
+  LBC_SOURCE_TYPE: z.enum(['scraper', 'api']).default('api'),
 })
 
 export type Env = z.infer<typeof envSchema>
