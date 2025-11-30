@@ -52,7 +52,10 @@ export class PrismaLbcProductListingRepository implements IListingRepository {
 
   async findWithoutAiAnalysis(): Promise<Listing[]> {
     const listings = await this.prisma.lbcProductListing.findMany({
-      where: { aiAnalysis: null },
+      where: { 
+        aiAnalysis: null,
+        status: { not: ListingStatus.IGNORED }
+      },
       orderBy: { createdAt: 'desc' },
     })
     return listings.map((l) => this.toDomain(l))
