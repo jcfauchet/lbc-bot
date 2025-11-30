@@ -68,8 +68,9 @@ export class FirstDibsScraper implements SiteScraper {
     } catch (error) {
       console.error('Error during 1stdibs scrape:', error);
       console.error(`Page URL: ${page.url()}`);
-      const screenshotBase64 = await page.screenshot({ encoding: 'base64' }).catch(() => null);
-      if (screenshotBase64) {
+      const screenshotBuffer = await page.screenshot().catch(() => null);
+      if (screenshotBuffer) {
+        const screenshotBase64 = screenshotBuffer.toString('base64');
         console.error(`Screenshot (base64): data:image/png;base64,${screenshotBase64.substring(0, 100)}... (truncated)`);
       }
     } finally {
