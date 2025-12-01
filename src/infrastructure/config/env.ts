@@ -7,7 +7,10 @@ const envSchema = z.object({
   GOOGLE_GEMINI_API_KEY: z.string().min(1),
   RESEND_API_KEY: z.string().min(1),
   NOTIFICATION_EMAIL_FROM: z.string().email(),
-  NOTIFICATION_EMAIL_TO: z.string().email(),
+  NOTIFICATION_EMAIL_TO: z
+    .string()
+    .transform((v) => v.split(',').map((s) => s.trim()))
+    .pipe(z.array(z.string().email())),
   CRON_SECRET: z.string().min(1).optional(),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   STORAGE_TYPE: z.enum(['local', 'cloudinary']).default('local'),
