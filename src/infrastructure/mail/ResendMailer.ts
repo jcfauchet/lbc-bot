@@ -9,13 +9,17 @@ export class ResendMailer implements IMailer {
   }
 
   async send(data: EmailData): Promise<void> {
+    const to = Array.isArray(data.to) ? data.to : [data.to]
+    
     try {
-      await this.client.emails.send({
-        from: `LBC Bot <${data.from}>`,
-        to: data.to,
-        subject: data.subject,
-        html: data.html,
-      })
+      for (const email of to) {
+        await this.client.emails.send({
+          from: data.from || 'LBC Bot <bot@yourdomain.com>',
+          to: email,
+          subject: data.subject,
+          html: data.html,
+        })
+      }
     } catch (error) {
       console.error('Failed to send email:', error)
       throw new Error('Email sending failed')
