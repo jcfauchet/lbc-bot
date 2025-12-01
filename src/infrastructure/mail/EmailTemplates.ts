@@ -39,6 +39,7 @@ export class EmailTemplates {
                 <strong>Estimation:</strong> ${analysis.estimatedMinPrice.toString()} - ${analysis.estimatedMaxPrice.toString()}
                 <br>
                 <strong>Marge estimée (min):</strong> ${analysis.estimatedMinPrice.minus(listing.price).toString()}
+                ${imageUrl ? `<br><a href="https://lens.google.com/upload?url=${encodeURIComponent(imageUrl)}" style="color: #0066cc; text-decoration: none; display: inline-block; margin-top: 5px;">🔍 Recherche Google Lens</a>` : ''}
               </div>
               <p style="margin: 10px 0; color: #333;">
                 ${analysis.description}
