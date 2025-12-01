@@ -1,6 +1,5 @@
 import { Money } from '../value-objects/Money'
-
-
+import { SearchTerm } from '../services/IPriceEstimationService'
 
 export interface AiAnalysisProps {
   id: string
@@ -12,6 +11,7 @@ export interface AiAnalysisProps {
   confidence?: number
   provider: string
   bestMatchSource?: string
+  searchTerms?: SearchTerm[]
   createdAt: Date
   updatedAt: Date
 }
@@ -28,6 +28,7 @@ export class AiAnalysis {
     confidence?: number
     provider: string
     bestMatchSource?: string
+    searchTerms?: SearchTerm[]
   }): AiAnalysis {
     return new AiAnalysis({
       id: crypto.randomUUID(),
@@ -83,6 +84,10 @@ export class AiAnalysis {
 
   get bestMatchSource(): string | undefined {
     return this.props.bestMatchSource
+  }
+
+  get searchTerms(): SearchTerm[] | undefined {
+    return this.props.searchTerms
   }
 }
 

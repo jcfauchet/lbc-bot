@@ -91,14 +91,46 @@ export abstract class BasePriceEstimationService
     return `
 Analyse l'image et les informations ci-dessous en suivant scrupuleusement cette méthodologie d'expert :
 
-CONTEXTE UTILISATEUR :
+CONTEXTE UTILISATEUR (à titre indicatif, ne doit pas servir à influencer l'estimation) :
 Titre : ${title}
 ${description ? `Description fournie : ${description}` : ''}${referenceSection}
 
-Sois critique sur le titre et la description fournis. Si tu penses qu'elle est fausse, indique le.
+Sois critique sur le titre et la description fournis. Si tu penses qu'elle est fausse, tiens en compte dans l'estimation. Celle-ci étant fournie par le vendeur, elles peuvent être inexactes.
 
 Pour déterminer le designer, base toi sur tes connaissances et les produits de référence plus que sur le nom et la description fournis qui peuvent être fausses ou inexactes (fournis par le vendeur).
 
+${this.getAnalysisInstructions()}
+    `.trim()
+  }
+
+  protected buildUserContext(title: string, description?: string): string {
+    return `
+Analyse l'image et les informations ci-dessous en suivant scrupuleusement cette méthodologie d'expert :
+
+CONTEXTE UTILISATEUR (Info du vendeur):
+Titre : ${title}
+${description ? `Description fournie : ${description}` : ''}
+
+Sois critique sur le titre et la description fournis. Si tu penses qu'elle est fausse, tiens en compte dans l'estimation. Celle-ci étant fournie par le vendeur, elles peuvent être inexactes.
+
+Pour déterminer le designer, base toi sur tes connaissances et les produits de référence plus que sur le nom et la description fournis qui peuvent être fausses ou inexactes (fournis par le vendeur).
+    `.trim()
+  }
+
+  protected formatReferenceProduct(ref: any, index: number): string {
+    const details = [];
+    if (ref.designer) details.push(`Designer: ${ref.designer}`);
+    if (ref.period) details.push(`Période: ${ref.period}`);
+    if (ref.material) details.push(`Matériau: ${ref.material}`);
+    if (ref.style) details.push(`Style: ${ref.style}`);
+    
+    const detailsStr = details.length > 0 ? ` (${details.join(', ')})` : '';
+    
+    return `PRODUIT DE RÉFÉRENCE #${index + 1} :\n${ref.title}${detailsStr} - ${ref.price} ${ref.currency} [${ref.source}]`;
+  }
+
+  protected getAnalysisInstructions(): string {
+    return `
 MÉTHODOLOGIE D'ANALYSE :
 1. ANALYSE VISUELLE : Identifie le style, les matériaux, et la qualité de fabrication. Cherche les signatures.
 2. IDENTIFICATION : Est-ce un designer connu ? Une attribution ? Ou un style générique ? **N'oublie pas d'utiliser l'outil de recherche pour les vérifications importantes.**
@@ -130,7 +162,7 @@ Exemple de réponse valide :
     return `
 Analyse l'image et les informations ci-dessous pour faire une pré-estimation et déterminer si le produit mérite une analyse approfondie.
 
-CONTEXTE UTILISATEUR :
+CONTEXTE UTILISATEUR (Info du vendeur) :
 Titre : ${title}
 ${description ? `Description fournie : ${description}` : ''}${categoriesSection}
 
@@ -142,15 +174,15 @@ TA MISSION :
 
 2. PRÉ-ESTIMATION : Estime rapidement la fourchette de prix potentielle (marché secondaire)
 
-3. DÉTECTION DE DESIGNER : Identifie si tu as des soupçons forts (certitude 80%+) sur un designer ou fabricant connu
+3. DÉTECTION DE DESIGNER : Identifie si tu as des soupçons forts (certitude 80%+) sur un designer ou fabricant connu, pour identifier le designer, base toi sur tes connaissances et sur l'analyse de la photo, plus que sur le nom et la description fournis qui peuvent être fausses ou inexactes (fournis par le vendeur).
 
-4. GÉNÉRATION DE TERMES DE RECHERCHE : Si tu as identifié un designer avec certitude 80%+ et que la pré-estimation est prometteuse, génère jusqu'à 4 termes de recherche optimisés pour trouver ce produit sur des sites spécialisés (AuctionFR, Pamono, 1stdibs, Selency).
+4. GÉNÉRATION DE TERMES DE RECHERCHE : Si tu as identifié un designer ou des designers avec certitude 80%+ et que la pré-estimation est prometteuse, génère jusqu'à 4 termes de recherche optimisés pour trouver ce produit sur des sites spécialisés (AuctionFR, Pamono, 1stdibs, Selency), ça peut être des recherches sur des designes différents si tu as un doute.
    - Chaque terme doit inclure le nom du designer et des caractéristiques clés (matériaux, forme, style)
    - Exemples : "table basse verre rectangulaire maison jansen", "chaise scandinave teck finn juhl"
 
 RÈGLES IMPORTANTES :
 - Si la pré-estimation est trop basse (< ${env.MIN_MARGIN_IN_EUR}€), retourne isPromising: false
-- Si pas de soupçons de designer renommé (certitude < 65%), retourne hasDesigner: false et shouldProceed: false
+- Si pas de soupçons de designer renommé (certitude < 80%), retourne hasDesigner: false et shouldProceed: false
 - Les searchTerms ne doivent être générés que si hasDesigner: true ET isPromising: true
 - Maximum 4 searchTerms
 
@@ -165,8 +197,11 @@ Le JSON doit respecter ce schéma :
   "shouldProceed": <boolean>,
   "searchTerms": [
     {
-      "query": "terme de recherche 1",
-      "designer": "Nom du Designer",
+      "query": "table basse verre rectangulaire maison jansen",
+      "confidence": <nombre entre 0.8 et 1.0>
+    },
+    {
+      "query": "table basse verre rectangulaire maison charles",
       "confidence": <nombre entre 0.8 et 1.0>
     }
   ],

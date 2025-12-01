@@ -7,6 +7,7 @@ import { ImageDownloadService } from '@/infrastructure/storage/ImageDownloadServ
 import { IStorageService } from '@/infrastructure/storage/IStorageService'
 import { AiAnalysis } from '@/domain/entities/AiAnalysis'
 import { IReferenceScraper } from '@/infrastructure/scraping/reference/IReferenceScraper'
+import { GoogleImageScraper } from '@/infrastructure/scraping/reference/Google/GoogleImageScraper'
 import { ListingStatus } from '@/domain/value-objects/ListingStatus'
 
 export class RunAiAnalysisUseCase {
@@ -18,7 +19,8 @@ export class RunAiAnalysisUseCase {
     private imageDownloadService: ImageDownloadService,
     private storageService: IStorageService,
     private referenceScrapers: Map<string, IReferenceScraper>,
-    private taxonomyRepository: ITaxonomyRepository
+    private taxonomyRepository: ITaxonomyRepository,
+    private googleImageScraper?: GoogleImageScraper
   ) {}
 
   async execute(
@@ -97,6 +99,17 @@ export class RunAiAnalysisUseCase {
         console.log(`Found ${preEstimation.searchTerms.length} search terms, scraping partner sites...`)
         const allScrapedReferences: any[] = []
 
+        if (this.googleImageScraper && imageUrls.length > 0) {
+          try {
+            console.log(`Scraping Google Image with image: ${imageUrls[0]}`)
+            const googleResults = await this.googleImageScraper.scrape(imageUrls[0])
+            console.log(`Found ${googleResults.length} results from Google Image`)
+            allScrapedReferences.push(...googleResults)
+          } catch (e) {
+            console.error(`Failed to scrape Google Image:`, e)
+          }
+        }
+
         for (const searchTerm of preEstimation.searchTerms) {
           for (const [scraperName, scraper] of this.referenceScrapers.entries()) {
             try {
@@ -147,6 +160,7 @@ export class RunAiAnalysisUseCase {
           confidence: estimation.confidence,
           provider: this.priceEstimationService.providerName,
           bestMatchSource: estimation.bestMatchSource,
+          searchTerms: preEstimation.searchTerms,
         })
 
         await this.aiAnalysisRepository.save(analysis)

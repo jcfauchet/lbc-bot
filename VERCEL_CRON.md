@@ -29,9 +29,8 @@ Les crons sont définis dans `vercel.json` :
 
 | Tâche | Route | Fréquence | Description |
 |-------|-------|-----------|-------------|
-| **Scraping** | `/api/cron/scrape` | Toutes les 2h | Scrape les annonces Le Bon Coin |
-| **Analyse** | `/api/cron/analyze` | Toutes les heures à :15 | Analyse avec l'IA et calcule les scores |
-| **Notification** | `/api/cron/notify` | Tous les jours à 9h | Envoie l'email avec les bonnes affaires |
+| **Scraping** | `/api/cron/scrape` | Toutes les h | Scrape les annonces Le Bon Coin |
+| **Analyse And Notify** | `/api/cron/analyze-and-notify` | Toutes les 10 minutes | Analyse avec l'IA et calcule les scores et envoie les notifications |
 
 ## 🔒 Sécurité
 

@@ -116,11 +116,36 @@ export class GeminiPriceEstimationService extends BasePriceEstimationService {
   ): Promise<FinalEstimationResult> {
     try {
       const imageParts = await this.prepareImages(images)
-      const referenceImageParts = await this.prepareReferenceImages(referenceProducts)
-      const prompt = this.buildPrompt(title, description, referenceProducts)
+      const referenceImagesMap = await this.prepareReferenceImages(referenceProducts)
+
+      const userParts: Part[] = [
+        { text: this.getSystemInstruction() },
+        { text: this.buildUserContext(title, description) },
+        ...imageParts,
+      ]
+
+      if (referenceProducts.length > 0) {
+        userParts.push({
+          text: '\n\nPRODUITS DE RÉFÉRENCE SIMILAIRES :\nVoici des produits similaires trouvés sur des sites spécialisés. Je vais te présenter chaque produit avec ses détails et son image correspondante (si disponible).',
+        })
+
+        for (let i = 0; i < Math.min(referenceProducts.length, 5); i++) {
+          const ref = referenceProducts[i]
+          userParts.push({
+            text: this.formatReferenceProduct(ref, i),
+          })
+
+          const refImagePart = referenceImagesMap.get(i)
+          if (refImagePart) {
+            userParts.push(refImagePart)
+          }
+        }
+      }
+
+      userParts.push({ text: this.getAnalysisInstructions() })
 
       const generationConfig: GenerateContentParameters['config'] = {
-          temperature: 0.2,
+        temperature: 0.2,
       }
 
       const tools = [{ googleSearch: {} }]
@@ -130,7 +155,7 @@ export class GeminiPriceEstimationService extends BasePriceEstimationService {
         contents: [
           {
             role: 'user',
-            parts: [{ text: this.getSystemInstruction() }, { text: prompt }, ...imageParts, ...referenceImageParts],
+            parts: userParts,
           },
         ],
         config: {
@@ -186,46 +211,52 @@ export class GeminiPriceEstimationService extends BasePriceEstimationService {
     return preparedParts
   }
 
-  private async prepareReferenceImages(referenceProducts: ReferenceProduct[]): Promise<Part[]> {
-    const preparedParts: Part[] = []
+  private async prepareReferenceImages(
+    referenceProducts: ReferenceProduct[]
+  ): Promise<Map<number, Part>> {
+    const preparedParts = new Map<number, Part>()
     this.uploadedReferenceImageUrls = []
 
     const isCloudinary = process.env.STORAGE_TYPE === 'cloudinary'
 
-    for (const ref of referenceProducts.slice(0, 5)) {
+    for (let i = 0; i < Math.min(referenceProducts.length, 5); i++) {
+      const ref = referenceProducts[i]
       if (ref.imageUrls && ref.imageUrls.length > 0) {
-        for (const imageUrl of ref.imageUrls.slice(0, 1)) {
-          if (imageUrl.startsWith('http')) {
-            try {
-              let finalUrl = imageUrl
-              
-              if (isCloudinary && this.storageService) {
-                try {
-                  const cloudinaryUrl = await this.storageService.saveImage(
-                    imageUrl,
-                    `reference_${ref.url.split('/').pop() || 'unknown'}`,
-                    0
-                  )
-                  finalUrl = cloudinaryUrl
-                  this.uploadedReferenceImageUrls.push(cloudinaryUrl)
-                } catch (error) {
-                  console.error(`Failed to upload reference image ${imageUrl}:`, error)
-                }
-              }
+        const imageUrl = ref.imageUrls[0]
+        if (imageUrl.startsWith('http')) {
+          try {
+            let finalUrl = imageUrl
 
-              const response = await fetch(finalUrl)
-              const buffer = await response.arrayBuffer()
-              const base64 = Buffer.from(buffer).toString('base64')
-              const mimeType = response.headers.get('content-type') || 'image/jpeg'
-              preparedParts.push({
-                inlineData: {
-                  data: base64,
-                  mimeType: mimeType,
-                },
-              })
-            } catch (error) {
-              console.error(`Failed to fetch reference image ${imageUrl}:`, error)
+            if (isCloudinary && this.storageService) {
+              try {
+                const cloudinaryUrl = await this.storageService.saveImage(
+                  imageUrl,
+                  `reference_${ref.url.split('/').pop() || 'unknown'}`,
+                  0
+                )
+                finalUrl = cloudinaryUrl
+                this.uploadedReferenceImageUrls.push(cloudinaryUrl)
+              } catch (error) {
+                console.error(
+                  `Failed to upload reference image ${imageUrl}:`,
+                  error
+                )
+              }
             }
+
+            const response = await fetch(finalUrl)
+            const buffer = await response.arrayBuffer()
+            const base64 = Buffer.from(buffer).toString('base64')
+            const mimeType =
+              response.headers.get('content-type') || 'image/jpeg'
+            preparedParts.set(i, {
+              inlineData: {
+                data: base64,
+                mimeType: mimeType,
+              },
+            })
+          } catch (error) {
+            console.error(`Failed to fetch reference image ${imageUrl}:`, error)
           }
         }
       }

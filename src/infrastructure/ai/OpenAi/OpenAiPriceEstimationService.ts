@@ -116,8 +116,40 @@ export class OpenAiPriceEstimationService extends BasePriceEstimationService {
   ): Promise<FinalEstimationResult> {
     try {
       const imageContents = await this.prepareImages(images)
-      const referenceImageContents = await this.prepareReferenceImages(referenceProducts)
-      const prompt = this.buildPrompt(title, description, referenceProducts)
+      const referenceImagesMap = await this.prepareReferenceImages(referenceProducts)
+
+      const userContent: any[] = [
+        { type: 'text', text: this.buildUserContext(title, description) },
+        ...imageContents.map((url) => ({
+          type: 'image_url' as const,
+          image_url: { url },
+        })),
+      ]
+
+      if (referenceProducts.length > 0) {
+        userContent.push({
+          type: 'text',
+          text: '\n\nPRODUITS DE RÉFÉRENCE SIMILAIRES :\nVoici des produits similaires trouvés sur des sites spécialisés. Je vais te présenter chaque produit avec ses détails et son image correspondante (si disponible).',
+        })
+
+        for (let i = 0; i < Math.min(referenceProducts.length, 5); i++) {
+          const ref = referenceProducts[i]
+          userContent.push({
+            type: 'text',
+            text: this.formatReferenceProduct(ref, i),
+          })
+
+          const refImageUrl = referenceImagesMap.get(i)
+          if (refImageUrl) {
+            userContent.push({
+              type: 'image_url',
+              image_url: { url: refImageUrl },
+            })
+          }
+        }
+      }
+
+      userContent.push({ type: 'text', text: this.getAnalysisInstructions() })
 
       const response = await this.client.chat.completions.create({
         model: 'gpt-4o',
@@ -125,21 +157,11 @@ export class OpenAiPriceEstimationService extends BasePriceEstimationService {
         messages: [
           {
             role: 'system',
-            content: this.getSystemInstruction()
+            content: this.getSystemInstruction(),
           },
           {
             role: 'user',
-            content: [
-              { type: 'text', text: prompt },
-              ...imageContents.map((url) => ({
-                type: 'image_url' as const,
-                image_url: { url },
-              })),
-              ...referenceImageContents.map((url) => ({
-                type: 'image_url' as const,
-                image_url: { url },
-              })),
-            ],
+            content: userContent,
           },
         ],
         max_tokens: 1000,
@@ -180,32 +202,37 @@ export class OpenAiPriceEstimationService extends BasePriceEstimationService {
   }
 
 
-  private async prepareReferenceImages(referenceProducts: ReferenceProduct[]): Promise<string[]> {
-    const preparedImages: string[] = []
+  private async prepareReferenceImages(
+    referenceProducts: ReferenceProduct[]
+  ): Promise<Map<number, string>> {
+    const preparedImages = new Map<number, string>()
     this.uploadedReferenceImageUrls = []
 
     const isCloudinary = process.env.STORAGE_TYPE === 'cloudinary'
 
-    for (const ref of referenceProducts.slice(0, 5)) {
+    for (let i = 0; i < Math.min(referenceProducts.length, 5); i++) {
+      const ref = referenceProducts[i]
       if (ref.imageUrls && ref.imageUrls.length > 0) {
-        for (const imageUrl of ref.imageUrls.slice(0, 1)) {
-          if (imageUrl.startsWith('http')) {
-            if (isCloudinary && this.storageService) {
-              try {
-                const cloudinaryUrl = await this.storageService.saveImage(
-                  imageUrl,
-                  `reference_${ref.url.split('/').pop() || 'unknown'}`,
-                  0
-                )
-                preparedImages.push(cloudinaryUrl)
-                this.uploadedReferenceImageUrls.push(cloudinaryUrl)
-              } catch (error) {
-                console.error(`Failed to upload reference image ${imageUrl}:`, error)
-                preparedImages.push(imageUrl)
-              }
-            } else {
-              preparedImages.push(imageUrl)
+        const imageUrl = ref.imageUrls[0]
+        if (imageUrl.startsWith('http')) {
+          if (isCloudinary && this.storageService) {
+            try {
+              const cloudinaryUrl = await this.storageService.saveImage(
+                imageUrl,
+                `reference_${ref.url.split('/').pop() || 'unknown'}`,
+                0
+              )
+              preparedImages.set(i, cloudinaryUrl)
+              this.uploadedReferenceImageUrls.push(cloudinaryUrl)
+            } catch (error) {
+              console.error(
+                `Failed to upload reference image ${imageUrl}:`,
+                error
+              )
+              preparedImages.set(i, imageUrl)
             }
+          } else {
+            preparedImages.set(i, imageUrl)
           }
         }
       }
