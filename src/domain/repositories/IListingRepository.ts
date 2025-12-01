@@ -11,6 +11,6 @@ export interface IListingRepository {
   findAll(): Promise<Listing[]>
   update(listing: Listing): Promise<Listing>
   delete(id: string): Promise<void>
-  deleteOlderThan(days: number): Promise<number>
+  deleteIgnoredOlderThan(days: number): Promise<number>
 }
 

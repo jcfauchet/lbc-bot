@@ -85,7 +85,7 @@ export class PrismaLbcProductListingRepository implements IListingRepository {
     await this.prisma.lbcProductListing.delete({ where: { id } })
   }
 
-  async deleteOlderThan(days: number): Promise<number> {
+  async deleteIgnoredOlderThan(days: number): Promise<number> {
     const cutoffDate = new Date()
     cutoffDate.setDate(cutoffDate.getDate() - days)
     
@@ -94,6 +94,9 @@ export class PrismaLbcProductListingRepository implements IListingRepository {
         createdAt: {
           lt: cutoffDate,
         },
+        status: {
+          equals: ListingStatus.IGNORED
+        }
       },
     })
     

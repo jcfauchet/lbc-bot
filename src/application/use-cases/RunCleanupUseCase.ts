@@ -7,7 +7,7 @@ export class RunCleanupUseCase {
   ) {}
 
   async execute(): Promise<{ deleted: number }> {
-    const deleted = await this.listingRepository.deleteOlderThan(this.daysOld)
+    const deleted = await this.listingRepository.deleteIgnoredOlderThan(this.daysOld)
     
     return { deleted }
   }
