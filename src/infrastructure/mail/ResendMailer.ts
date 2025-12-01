@@ -11,7 +11,7 @@ export class ResendMailer implements IMailer {
   async send(data: EmailData): Promise<void> {
     try {
       await this.client.emails.send({
-        from: data.from || 'LBC Bot <bot@yourdomain.com>',
+        from: `LBC Bot <${data.from}>`,
         to: data.to,
         subject: data.subject,
         html: data.html,
