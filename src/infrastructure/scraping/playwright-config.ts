@@ -18,6 +18,8 @@ export async function createBrowser(): Promise<Browser> {
       '--disable-infobars',
       '--window-size=1920,1080',
       '--start-maximized',
+      '--disable-gpu',
+      '--disable-extensions',
     ]
     
     return await playwright.chromium.launch({
@@ -178,6 +180,8 @@ export async function createStealthBrowser(): Promise<Browser> {
       '--disable-infobars',
       '--window-size=1920,1080',
       '--start-maximized',
+      '--disable-gpu',
+      '--disable-extensions',
       '--disable-automation',
       '--disable-save-password-bubble',
     ]
@@ -233,6 +237,18 @@ export async function createStealthBrowserContext(browser: Browser): Promise<Bro
   });
 
   await context.addInitScript(() => {
+    // Cache objects to avoid recreating them on every access
+    const plugins: any[] = [];
+    for (let i = 0; i < 5; i++) {
+      plugins.push({
+        name: `Plugin ${i}`,
+        description: `Plugin ${i} Description`,
+        filename: `plugin${i}.dll`,
+        length: 1,
+      });
+    }
+    const languages = ['fr-FR', 'fr', 'en-US', 'en'];
+
     Object.defineProperty(navigator, 'webdriver', {
       get: () => false,
       configurable: true,
@@ -246,39 +262,17 @@ export async function createStealthBrowserContext(browser: Browser): Promise<Bro
       configurable: false,
     });
     
-    if ((window as any).__playwright) {
-      delete (window as any).__playwright;
-    }
-    
-    if ((window as any).__pw) {
-      delete (window as any).__pw;
-    }
-    
-    if ((document as any).$cdc) {
-      delete (document as any).$cdc;
-    }
-    
-    if ((document as any).__$webdriver) {
-      delete (document as any).__$webdriver;
-    }
+    if ((window as any).__playwright) delete (window as any).__playwright;
+    if ((window as any).__pw) delete (window as any).__pw;
+    if ((document as any).$cdc) delete (document as any).$cdc;
+    if ((document as any).__$webdriver) delete (document as any).__$webdriver;
     
     Object.defineProperty(navigator, 'plugins', {
-      get: () => {
-        const plugins = [];
-        for (let i = 0; i < 5; i++) {
-          plugins.push({
-            name: `Plugin ${i}`,
-            description: `Plugin ${i} Description`,
-            filename: `plugin${i}.dll`,
-            length: 1,
-          });
-        }
-        return plugins;
-      },
+      get: () => plugins,
     });
     
     Object.defineProperty(navigator, 'languages', {
-      get: () => ['fr-FR', 'fr', 'en-US', 'en'],
+      get: () => languages,
     });
     
     (window as any).chrome = {
@@ -332,7 +326,9 @@ export async function createStealthBrowserContext(browser: Browser): Promise<Bro
       get: () => 'default',
     });
     
-    delete (window as any).navigator.__proto__.webdriver;
+    try {
+        delete (window as any).navigator.__proto__.webdriver;
+    } catch (e) {}
     
     const originalQuery = window.document.querySelector;
     window.document.querySelector = function(selector: string) {

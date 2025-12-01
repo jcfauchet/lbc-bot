@@ -169,11 +169,7 @@ export class GoogleImageScraper implements IReferenceScraper {
       
       console.log(`Current URL: ${page.url()}`);
       if (uniqueResults.length === 0) {
-        console.log('No results found. Taking screenshot...');
-        await page.screenshot({ path: 'google-lens-debug.png', fullPage: true });
-        const content = await page.content();
-        const fs = await import('fs');
-        fs.writeFileSync('google-lens-debug.html', content);
+        console.log('No results found.');
       }
 
       console.log(`Found ${uniqueResults.length} products on Google Lens.`);

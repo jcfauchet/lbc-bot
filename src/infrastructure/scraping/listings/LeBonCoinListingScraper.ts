@@ -80,43 +80,6 @@ export class LeBonCoinListingScraper implements IListingSource {
           console.error(`Page URL: ${page.url()}`);
           console.error(`Page title: ${await page.title().catch(() => 'unknown')}`);
           
-          // Capture screenshot and upload to Cloudinary for debugging
-          const screenshotBuffer = await page.screenshot({ fullPage: true }).catch(() => null);
-          if (screenshotBuffer && process.env.CLOUDINARY_CLOUD_NAME) {
-            try {
-              cloudinary.config({
-                cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-                api_key: process.env.CLOUDINARY_API_KEY,
-                api_secret: process.env.CLOUDINARY_API_SECRET,
-              });
-
-              const timestamp = Date.now();
-              const url = new URL(page.url());
-              const searchParams = url.searchParams.get('text') || 'unknown';
-              const filename = `debug_${timestamp}_${encodeURIComponent(searchParams.substring(0, 50))}.png`;
-
-              const result = await new Promise<string>((resolve, reject) => {
-                const uploadStream = cloudinary.uploader.upload_stream(
-                  {
-                    folder: 'debug',
-                    public_id: filename.replace('.png', ''),
-                    resource_type: 'image',
-                    overwrite: true,
-                  },
-                  (error, result) => {
-                    if (error) reject(error);
-                    else resolve(result!.secure_url);
-                  }
-                );
-                uploadStream.end(screenshotBuffer);
-              });
-
-              console.error(`📸 Debug screenshot uploaded to Cloudinary: ${result}`);
-            } catch (uploadError) {
-              console.error('Failed to upload screenshot to Cloudinary:', uploadError);
-            }
-          }
-          
           throw new Error('Could not find listings container');
         }
       }

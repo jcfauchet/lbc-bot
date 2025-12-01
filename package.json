@@ -19,9 +19,8 @@
     "scrape:references": "tsx src/cli/run-scrapers.ts",
     "analyze": "tsx src/cli/analyze.ts",
     "notify": "tsx src/cli/notify.ts",
-    "test": "vitest",
-    "test:ui": "vitest --ui",
-    "test:run": "vitest run"
+    "test": "vitest --run",
+    "test:ui": "vitest --ui"
   },
   "dependencies": {
     "@google/genai": "^1.30.0",
