@@ -1,5 +1,5 @@
 export interface EmailData {
-  to: string
+  to: string | string[]
   subject: string
   html: string
   from?: string

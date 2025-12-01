@@ -15,7 +15,7 @@ export class RunNotificationUseCase {
     private notificationRepository: INotificationRepository,
     private imageRepository: IListingImageRepository,
     private mailer: IMailer,
-    private recipientEmail: string,
+    private recipientEmails: string[],
     private fromEmail: string,
     private minMargin: number = 60
   ) {}
@@ -73,7 +73,7 @@ export class RunNotificationUseCase {
       const html = EmailTemplates.goodDealsDigest(listingsWithAnalysis)
 
       await this.mailer.send({
-        to: this.recipientEmail,
+        to: this.recipientEmails,
         from: this.fromEmail,
         subject: `🎯 ${listingsWithAnalysis.length} bonne${listingsWithAnalysis.length > 1 ? 's' : ''} affaire${listingsWithAnalysis.length > 1 ? 's' : ''} trouvée${listingsWithAnalysis.length > 1 ? 's' : ''}`,
         html,
