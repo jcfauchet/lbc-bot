@@ -32,7 +32,7 @@ export class OpenAiPriceEstimationService extends BasePriceEstimationService {
       const prompt = this.buildPreEstimationPrompt(title, description, categories)
 
       const response = await this.client.chat.completions.create({
-        model: 'gpt-4o-mini',
+        model: 'gpt-5-mini',
         response_format: { type: 'json_object' },
         messages: [
           {
@@ -75,7 +75,7 @@ export class OpenAiPriceEstimationService extends BasePriceEstimationService {
       const prompt = this.buildSearchPrompt(title, description)
 
       const response = await this.client.chat.completions.create({
-        model: 'gpt-4o',
+        model: 'gpt-5.1',
         response_format: { type: 'json_object' },
         messages: [
           {
@@ -152,7 +152,7 @@ export class OpenAiPriceEstimationService extends BasePriceEstimationService {
       userContent.push({ type: 'text', text: this.getAnalysisInstructions() })
 
       const response = await this.client.chat.completions.create({
-        model: 'gpt-4o',
+        model: 'gpt-5.1',
         response_format: { type: 'json_object' },
         messages: [
           {
