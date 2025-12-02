@@ -14,6 +14,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="fr">
+      <head>
+        <title>LBC Bot - Le Bon Coin Sourcing</title>
+        <meta name="robots" content="noindex, nofollow" />
+      </head>
       <body>
         <header>
           <nav className="flex gap-4 justify-center items-center p-4 bg-gray-100">
