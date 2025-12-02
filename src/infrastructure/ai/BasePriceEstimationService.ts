@@ -174,15 +174,15 @@ TA MISSION :
 
 2. PRÉ-ESTIMATION : Estime rapidement la fourchette de prix potentielle (marché secondaire)
 
-3. DÉTECTION DE DESIGNER : Identifie si tu as des soupçons forts (certitude 80%+) sur un designer ou fabricant connu, pour identifier le designer, base toi sur tes connaissances et sur l'analyse de la photo, plus que sur le nom et la description fournis qui peuvent être fausses ou inexactes (fournis par le vendeur).
+3. DÉTECTION DE DESIGNER : Identifie si tu as des soupçons forts (certitude ${Math.round(env.SEARCH_TERM_MIN_CONFIDENCE * 100)}%+) sur un designer ou fabricant connu, pour identifier le designer, base toi sur tes connaissances et sur l'analyse de la photo, plus que sur le nom et la description fournis qui peuvent être fausses ou inexactes (fournis par le vendeur).
 
-4. GÉNÉRATION DE TERMES DE RECHERCHE : Si tu as identifié un designer ou des designers avec certitude 80%+ et que la pré-estimation est prometteuse, génère jusqu'à 4 termes de recherche optimisés pour trouver ce produit sur des sites spécialisés (AuctionFR, Pamono, 1stdibs, Selency), ça peut être des recherches sur des designes différents si tu as un doute.
+4. GÉNÉRATION DE TERMES DE RECHERCHE : Si tu as identifié un designer ou des designers avec certitude ${Math.round(env.SEARCH_TERM_MIN_CONFIDENCE * 100)}%+ et que la pré-estimation est prometteuse, génère jusqu'à 4 termes de recherche optimisés pour trouver ce produit sur des sites spécialisés (AuctionFR, Pamono, 1stdibs, Selency), ça peut être des recherches sur des designes différents si tu as un doute.
    - Chaque terme doit inclure le nom du designer et des caractéristiques clés (matériaux, forme, style)
    - Exemples : "table basse verre rectangulaire maison jansen", "chaise scandinave teck finn juhl"
 
 RÈGLES IMPORTANTES :
 - Si la pré-estimation est trop basse (< ${env.MIN_MARGIN_IN_EUR}€), retourne isPromising: false
-- Si pas de soupçons de designer renommé (certitude < 80%), retourne hasDesigner: false et shouldProceed: false
+- Si pas de soupçons de designer renommé (certitude < ${Math.round(env.SEARCH_TERM_MIN_CONFIDENCE * 100)}%), retourne hasDesigner: false et shouldProceed: false
 - Les searchTerms ne doivent être générés que si hasDesigner: true ET isPromising: true
 - Maximum 4 searchTerms
 
@@ -198,11 +198,11 @@ Le JSON doit respecter ce schéma :
   "searchTerms": [
     {
       "query": "table basse verre rectangulaire maison jansen",
-      "confidence": <nombre entre 0.8 et 1.0>
+      "confidence": <nombre entre ${env.SEARCH_TERM_MIN_CONFIDENCE} et 1.0>
     },
     {
       "query": "table basse verre rectangulaire maison charles",
-      "confidence": <nombre entre 0.8 et 1.0>
+      "confidence": <nombre entre ${env.SEARCH_TERM_MIN_CONFIDENCE} et 1.0>
     }
   ],
   "description": "<texte d'analyse>",
@@ -310,11 +310,12 @@ Exemple :
     const hasDesigner = parsed.hasDesigner ?? false
     const shouldProceed = parsed.shouldProceed ?? (isPromising && hasDesigner)
     
+    const minConfidence = env.SEARCH_TERM_MIN_CONFIDENCE
     const searchTerms: SearchTerm[] = (parsed.searchTerms || []).slice(0, 4).map((term: any) => ({
       query: term.query || '',
       designer: term.designer,
-      confidence: Math.min(Math.max(term.confidence || 0.8, 0.8), 1.0)
-    })).filter((term: SearchTerm) => term.query && term.confidence >= 0.8)
+      confidence: Math.min(Math.max(term.confidence || minConfidence, minConfidence), 1.0)
+    })).filter((term: SearchTerm) => term.query && term.confidence >= minConfidence)
 
     return {
       estimatedMinPrice: Money.fromEuros(estimatedMinPrice),
