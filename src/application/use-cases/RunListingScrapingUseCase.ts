@@ -6,14 +6,30 @@ import { Listing } from '@/domain/entities/Listing'
 import { ListingImage } from '@/domain/entities/ListingImage'
 import { Money } from '@/domain/value-objects/Money'
 import { ListingStatus } from '@/domain/value-objects/ListingStatus'
+import { Search } from '@/domain/entities/Search'
+import { ScrapedListing } from '@/infrastructure/scraping/types'
 
 export class RunListingScrapingUseCase {
   constructor(
     private searchRepository: ISearchRepository,
     private listingRepository: IListingRepository,
     private imageRepository: IListingImageRepository,
-    private listingSource: IListingSource
+    private listingSourceApi: IListingSource,
+    private listingSourceScraper: IListingSource
   ) {}
+
+  private async getListings(search: Search): Promise<ScrapedListing[]> {
+    try {
+      const scrapedListingsByApi = await this.listingSourceApi.search(search.url, search.name)
+      return scrapedListingsByApi
+    } catch (error) {
+      console.error(`Error getting listings for search: ${search.name}`, error)
+
+      console.log('--> Trying to scrape with scraper...')
+      const scrapedListingsByScraper = await this.listingSourceScraper.search(search.url, search.name)
+      return scrapedListingsByScraper
+    }
+  }
 
   async execute(): Promise<{
     totalSearches: number
@@ -28,7 +44,7 @@ export class RunListingScrapingUseCase {
     for (const search of searches) {
       try {
         console.log(`Scraping search: ${search.name}`)
-        const scrapedListings = await this.listingSource.search(search.url, search.name)
+        const scrapedListings = await this.getListings(search)
 
         for (const scraped of scrapedListings) {
           const existing = await this.listingRepository.findByLbcId(

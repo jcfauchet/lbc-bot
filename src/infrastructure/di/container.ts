@@ -51,7 +51,8 @@ export class Container {
   public readonly taxonomyRepository: PrismaTaxonomyRepository
 
   public readonly scraper: LeBonCoinListingScraper
-  public readonly listingSource: IListingSource
+  public readonly listingSourceApi: IListingSource
+  public readonly listingSourceScraper: IListingSource
   public readonly storageService: IStorageService
   public readonly imageDownloadService: ImageDownloadService
   public readonly priceEstimationService: IPriceEstimationService
@@ -80,9 +81,8 @@ export class Container {
     this.scraper = new LeBonCoinListingScraper()
     
     // Choose listing source based on environment variable
-    this.listingSource = env.LBC_SOURCE_TYPE === 'api'
-      ? new LeBonCoinApiClient()
-      : this.scraper
+    this.listingSourceApi = new LeBonCoinApiClient()
+    this.listingSourceScraper = new LeBonCoinListingScraper()
     
     this.storageService = env.STORAGE_TYPE === 'cloudinary'
       ? new CloudinaryStorageService()
@@ -105,7 +105,8 @@ export class Container {
       this.searchRepository,
       this.listingRepository,
       this.listingImageRepository,
-      this.listingSource
+      this.listingSourceApi,
+      this.listingSourceScraper
     )
 
     const referenceScrapers: Map<string, IReferenceScraper> = new Map()
