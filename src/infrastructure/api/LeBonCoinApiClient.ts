@@ -1,6 +1,7 @@
 import { env } from '../config/env'
 import { ScrapedListing } from '../scraping/types'
 import { IListingSource } from '@/domain/services/IListingSource'
+import { CATEGORIES_TO_EXCLUDE_FROM_LBC } from '../config/constants'
 
 interface LeBonCoinApiResponse {
   ads: Array<{
@@ -63,6 +64,7 @@ const API_HEADERS = {
   'Accept-Language': 'fr-FR,fr;q=0.9',
   'Content-Type': 'application/json',
 }
+
 
 interface SearchPayload {
   filters: {
@@ -151,6 +153,14 @@ export class LeBonCoinApiClient implements IListingSource {
             if (publicationDate < twentyFourHoursAgo) {
               return false
             }
+          }
+
+          console.log(`Ad ${ad.list_id} in category ${ad.category_name}`)
+
+          if (CATEGORIES_TO_EXCLUDE.includes(ad.category_name)) {
+            console.log(`Excluding ad ${ad.list_id} in category ${ad.category_name}`)
+
+            return false
           }
           
           return true

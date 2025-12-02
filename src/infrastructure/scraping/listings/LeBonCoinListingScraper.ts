@@ -4,6 +4,7 @@ import { IListingSource } from '@/domain/services/IListingSource'
 import { env } from '../../config/env'
 import { createBrowser, createBrowserContext } from '../playwright-config'
 import { v2 as cloudinary } from 'cloudinary'
+import { CATEGORIES_SLUG_TO_EXCLUDE_FROM_LBC, CATEGORIES_TO_EXCLUDE_FROM_LBC } from '@/infrastructure/config/constants'
 
 export class LeBonCoinListingScraper implements IListingSource {
   private browser: Browser | null = null
@@ -148,11 +149,20 @@ export class LeBonCoinListingScraper implements IListingSource {
 
       return listings
         .filter((l) => l.lbcId && l.title)
+        .filter((l) => !this.isCategoryExcluded(l.url))
         .filter((l) => l.priceCents >= env.MIN_LISTING_PRICE_EUR * 100);
     } catch (error) {
       console.error('Scraping error:', error)
       throw error
     }
+  }
+
+  private async isCategoryExcluded(url: string): Promise<boolean> {
+    const parts = url.split('/').filter(Boolean)
+    const categorySlug = parts.length >= 2 ? parts[parts.length - 2]?.split('.')[0] || '' : ''
+    console.log(`Category slug: ${categorySlug}`)
+    console.log(`Is excluded: ${CATEGORIES_SLUG_TO_EXCLUDE_FROM_LBC.includes(categorySlug)}`)
+    return CATEGORIES_SLUG_TO_EXCLUDE_FROM_LBC.includes(categorySlug)
   }
 
   private async randomDelay(min: number, max: number): Promise<void> {
@@ -198,6 +208,15 @@ export class LeBonCoinListingScraper implements IListingSource {
           el.textContent?.trim()
         )
         .catch(() => undefined)
+
+      // const category = await page.$eval('[data-spark-component="breadcrumb-link"]', (el) =>
+      //   el.textContent?.trim()
+      // )
+      // .catch(() => undefined)
+
+      // if (category && CATEGORIES_TO_EXCLUDE_FROM_LBC.includes(category)) {
+      //   return { imageUrls: [] }
+      // }
 
       const imageUrls = await page
         .$$eval('img[data-qa-id="slideshow_image"]', (imgs) =>
