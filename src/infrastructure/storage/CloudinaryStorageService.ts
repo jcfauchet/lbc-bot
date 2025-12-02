@@ -18,13 +18,21 @@ export class CloudinaryStorageService implements IStorageService {
     })
   }
 
+  private sanitizePublicId(id: string): string {
+    return id
+      .replace(/[^a-zA-Z0-9_\-/]/g, '_')
+      .replace(/_{2,}/g, '_')
+      .replace(/^_+|_+$/g, '')
+  }
+
   async saveImage(
     url: string,
     listingId: string,
     index: number
   ): Promise<string> {
     try {
-      const publicId = `listings/${listingId}/${listingId}_${index}`
+      const sanitizedListingId = this.sanitizePublicId(listingId)
+      const publicId = `listings/${sanitizedListingId}/${sanitizedListingId}_${index}`
       
       const existing = await cloudinary.api.resource(publicId).catch(() => null)
       if (existing) {
@@ -32,8 +40,8 @@ export class CloudinaryStorageService implements IStorageService {
       }
 
       const result = await cloudinary.uploader.upload(url, {
-        folder: `listings/${listingId}`,
-        public_id: `${listingId}_${index}`,
+        folder: `listings/${sanitizedListingId}`,
+        public_id: `${sanitizedListingId}_${index}`,
         overwrite: false,
         resource_type: 'image',
       })
