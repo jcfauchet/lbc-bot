@@ -79,6 +79,15 @@ export class LeBonCoinListingScraper implements IListingSource {
           console.error('Listings container not found with either selector');
           console.error(`Page URL: ${page.url()}`);
           console.error(`Page title: ${await page.title().catch(() => 'unknown')}`);
+
+          // Upload page screenshot to Cloudinary
+          const screenshot = await page.screenshot()
+          const screenshotBase64 = screenshot.toString('base64')
+          const screenshotDataUri = `data:image/png;base64,${screenshotBase64}`
+          const screenshotUrl = await cloudinary.uploader.upload(screenshotDataUri, {
+            folder: 'lbc-bot/screenshots',
+          })
+          console.log(`Screenshot uploaded to: ${screenshotUrl.secure_url}`);
           
           throw new Error('Could not find listings container');
         }
