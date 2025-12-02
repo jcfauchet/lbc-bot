@@ -135,8 +135,10 @@ export class GoogleImageScraper implements IReferenceScraper {
             try {
                 const text = link.innerText;
                 const priceMatch = text.match(/[\d\s.,]+€/);
+
+                const isLeboncoin = text.includes('Leboncoin');
                 
-                if (!priceMatch) return null;
+                if (!priceMatch || isLeboncoin) return null;
                 
                 const priceText = priceMatch[0];
                 const cleanPrice = parseFloat(priceText.replace(/[^0-9,.]/g, '').replace(',', '.'));

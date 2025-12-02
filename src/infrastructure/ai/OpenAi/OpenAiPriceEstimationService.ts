@@ -28,11 +28,11 @@ export class OpenAiPriceEstimationService extends BasePriceEstimationService {
     categories?: string[]
   ): Promise<PreEstimationResult> {
     try {
-      const imageContents = await this.prepareImages(images)
+      const imageContents = await this.prepareImagesForPreEstimate(images)
       const prompt = this.buildPreEstimationPrompt(title, description, categories)
 
       const response = await this.client.chat.completions.create({
-        model: 'gpt-4o',
+        model: 'gpt-4o-mini',
         response_format: { type: 'json_object' },
         messages: [
           {
@@ -50,7 +50,7 @@ export class OpenAiPriceEstimationService extends BasePriceEstimationService {
             ],
           },
         ],
-        max_tokens: 2000,
+        max_tokens: 1000,
         temperature: 0.2,
       })
 
@@ -188,6 +188,23 @@ export class OpenAiPriceEstimationService extends BasePriceEstimationService {
     const preparedImages: string[] = []
 
     for (const image of images.slice(0, 3)) {
+      if (image.startsWith('http')) {
+        preparedImages.push(image)
+      } else {
+        const fileData = await this.readImageFile(image)
+        if (fileData) {
+          preparedImages.push(`data:${fileData.mimeType};base64,${fileData.base64}`)
+        }
+      }
+    }
+
+    return preparedImages
+  }
+
+  private async prepareImagesForPreEstimate(images: string[]): Promise<string[]> {
+    const preparedImages: string[] = []
+
+    for (const image of images.slice(0, 2)) {
       if (image.startsWith('http')) {
         preparedImages.push(image)
       } else {
