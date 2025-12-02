@@ -1,7 +1,7 @@
+import { CATEGORIES_TO_EXCLUDE_FROM_LBC } from '../config/constants'
 import { env } from '../config/env'
 import { ScrapedListing } from '../scraping/types'
 import { IListingSource } from '@/domain/services/IListingSource'
-import { CATEGORIES_TO_EXCLUDE_FROM_LBC } from '../config/constants'
 
 interface LeBonCoinApiResponse {
   ads: Array<{
@@ -157,7 +157,7 @@ export class LeBonCoinApiClient implements IListingSource {
 
           console.log(`Ad ${ad.list_id} in category ${ad.category_name}`)
 
-          if (CATEGORIES_TO_EXCLUDE.includes(ad.category_name)) {
+          if (CATEGORIES_TO_EXCLUDE_FROM_LBC.includes(ad.category_name)) {
             console.log(`Excluding ad ${ad.list_id} in category ${ad.category_name}`)
 
             return false
