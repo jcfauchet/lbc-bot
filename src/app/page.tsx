@@ -1,112 +1,11 @@
-import { prisma } from "@/infrastructure/prisma/client";
-import { ListingStatus } from "@/domain/value-objects/ListingStatus";
-import { subDays, format } from "date-fns";
-import { fr } from "date-fns/locale";
+import { container } from "@/infrastructure/di/container";
+import { format } from "date-fns";
+import Link from "next/link";
 
-// Simple color palette for searches
-const COLORS = [
-  "bg-blue-500", "bg-green-500", "bg-yellow-500", "bg-red-500", 
-  "bg-purple-500", "bg-pink-500", "bg-indigo-500", "bg-teal-500",
-  "bg-orange-500", "bg-cyan-500"
-];
-
-async function getStats() {
-  const now = new Date();
-  const sevenDaysAgo = subDays(now, 7);
-
-  // Get listings for the last 7 days with search info
-  const listings = await prisma.lbcProductListing.findMany({
-    where: {
-      createdAt: {
-        gte: sevenDaysAgo,
-      },
-    },
-    select: {
-      createdAt: true,
-      status: true,
-      search: {
-        select: {
-          name: true
-        }
-      }
-    },
-  });
-
-  // Get unique search names for legend
-  const searchNames = Array.from(new Set(listings.map(l => l.search.name))).sort();
-  const searchColors = searchNames.reduce((acc, name, index) => {
-    acc[name] = COLORS[index % COLORS.length];
-    return acc;
-  }, {} as Record<string, string>);
-
-  // Group by day and search
-  const listingsByDayAndSearch = listings.reduce((acc, listing) => {
-    const day = format(listing.createdAt, "yyyy-MM-dd");
-    if (!acc[day]) {
-      acc[day] = { total: 0, bySearch: {} };
-    }
-    const searchName = listing.search.name;
-    acc[day].bySearch[searchName] = (acc[day].bySearch[searchName] || 0) + 1;
-    acc[day].total += 1;
-    return acc;
-  }, {} as Record<string, { total: number, bySearch: Record<string, number> }>);
-
-  // Fill in missing days
-  const dailyStats = [];
-  for (let i = 6; i >= 0; i--) {
-    const date = subDays(now, i);
-    const dateKey = format(date, "yyyy-MM-dd");
-    const dayData = listingsByDayAndSearch[dateKey] || { total: 0, bySearch: {} };
-    
-    dailyStats.push({
-      date: date,
-      label: format(date, "EEE d", { locale: fr }),
-      total: dayData.total,
-      bySearch: dayData.bySearch
-    });
-  }
-
-  // Calculate Ignored vs Analyzed %
-  const total = listings.length;
-  const ignoredCount = listings.filter(l => l.status === ListingStatus.IGNORED).length;
-  const analyzedCount = listings.filter(l => 
-    [ListingStatus.ANALYZED, ListingStatus.NOTIFIED, ListingStatus.ARCHIVED].includes(l.status as ListingStatus)
-  ).length;
-  
-  const processedTotal = ignoredCount + analyzedCount;
-  const ignoredPercentage = processedTotal > 0 ? Math.round((ignoredCount / processedTotal) * 100) : 0;
-  const analyzedPercentage = processedTotal > 0 ? Math.round((analyzedCount / processedTotal) * 100) : 0;
-
-  // Get latest alerts
-  const latestAlerts = await prisma.notification.findMany({
-    take: 10,
-    orderBy: {
-      createdAt: 'desc'
-    },
-    include: {
-      listing: {
-        include: {
-          images: {
-            take: 1
-          }
-        }
-      }
-    }
-  });
-
-  return {
-    dailyStats,
-    ignoredPercentage,
-    analyzedPercentage,
-    totalProcessed: processedTotal,
-    searchColors,
-    searchNames,
-    latestAlerts
-  };
-}
+export const revalidate = 3600;
 
 export default async function Home() {
-  const stats = await getStats();
+  const stats = await container.getDashboardStatsUseCase.execute();
   const maxDailyCount = Math.max(...stats.dailyStats.map(d => d.total), 1);
 
   return (
@@ -115,9 +14,12 @@ export default async function Home() {
         <h1 className="text-4xl mb-4">
           🤖 LBC Bot
         </h1>
-        <p className="text-xl text-gray-600">
+        <p className="text-xl text-gray-600 mb-4">
           Bot de sourcing Le Bon Coin avec IA
         </p>
+        <Link href="/listings" className="text-blue-600 hover:text-blue-800 text-sm underline">
+          Voir tous les produits non notifiés →
+        </Link>
       </div>
 
       <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-12">
@@ -144,7 +46,7 @@ export default async function Home() {
                             <span className="font-bold">{count}</span> {searchName}
                           </div>
                           {/* Arrow */}
-                          <div className="w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[4px] border-t-gray-900 absolute left-1/2 transform -translate-x-1/2 top-full"></div>
+                          <div className="w-0 h-0 border-l-4 border-l-transparent border-r-4 border-r-transparent border-t-4 border-t-gray-900 absolute left-1/2 transform -translate-x-1/2 top-full"></div>
                         </div>
                       </div>
                     ))}
@@ -293,7 +195,7 @@ export default async function Home() {
               ))}
               {stats.latestAlerts.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500">
+                  <td colSpan={6} className="px-6 py-4 text-center text-sm text-gray-500">
                     Aucune alerte récente
                   </td>
                 </tr>

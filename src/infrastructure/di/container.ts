@@ -33,6 +33,8 @@ import { RunListingScrapingUseCase } from '@/application/use-cases/RunListingScr
 import { RunAiAnalysisUseCase } from '@/application/use-cases/RunAiAnalysisUseCase'
 import { RunNotificationUseCase } from '@/application/use-cases/RunNotificationUseCase'
 import { RunCleanupUseCase } from '@/application/use-cases/RunCleanupUseCase'
+import { GetDashboardStatsUseCase } from '@/application/use-cases/GetDashboardStatsUseCase'
+import { GetNonNotifiedListingsUseCase } from '@/application/use-cases/GetNonNotifiedListingsUseCase'
 import { GeminiPriceEstimationService } from '@/infrastructure/ai/Gemini/GeminiPriceEstimationService'
 
 export class Container {
@@ -61,6 +63,8 @@ export class Container {
   public readonly runAiAnalysisUseCase: RunAiAnalysisUseCase
   public readonly runNotificationUseCase: RunNotificationUseCase
   public readonly runCleanupUseCase: RunCleanupUseCase
+  public readonly getDashboardStatsUseCase: GetDashboardStatsUseCase
+  public readonly getNonNotifiedListingsUseCase: GetNonNotifiedListingsUseCase
 
   private constructor() {
     this.prisma = prisma
@@ -138,6 +142,15 @@ export class Container {
     this.runCleanupUseCase = new RunCleanupUseCase(
       this.listingRepository,
       14
+    )
+
+    this.getDashboardStatsUseCase = new GetDashboardStatsUseCase(
+      this.prisma
+    )
+
+    this.getNonNotifiedListingsUseCase = new GetNonNotifiedListingsUseCase(
+      this.prisma,
+      env.MIN_MARGIN_IN_EUR
     )
   }
 
