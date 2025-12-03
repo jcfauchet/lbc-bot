@@ -1,7 +1,11 @@
 import { v2 as cloudinary } from 'cloudinary'
 import { IStorageService } from './IStorageService'
+import crypto from 'crypto'
 
 export class CloudinaryStorageService implements IStorageService {
+  private readonly MAX_PUBLIC_ID_LENGTH = 255
+  private readonly MAX_LISTING_ID_LENGTH = 100
+
   constructor() {
     const cloudName = process.env.CLOUDINARY_CLOUD_NAME
     const apiKey = process.env.CLOUDINARY_API_KEY
@@ -19,10 +23,18 @@ export class CloudinaryStorageService implements IStorageService {
   }
 
   private sanitizePublicId(id: string): string {
-    return id
+    let sanitized = id
       .replace(/[^a-zA-Z0-9_\-/]/g, '_')
       .replace(/_{2,}/g, '_')
       .replace(/^_+|_+$/g, '')
+
+    if (sanitized.length > this.MAX_LISTING_ID_LENGTH) {
+      const hash = crypto.createHash('sha256').update(id).digest('hex').substring(0, 32)
+      const prefix = sanitized.substring(0, this.MAX_LISTING_ID_LENGTH - 33)
+      sanitized = `${prefix}_${hash}`
+    }
+
+    return sanitized
   }
 
   async saveImage(
@@ -31,17 +43,28 @@ export class CloudinaryStorageService implements IStorageService {
     index: number
   ): Promise<string> {
     try {
-      const sanitizedListingId = this.sanitizePublicId(listingId)
-      const publicId = `listings/${sanitizedListingId}/${sanitizedListingId}_${index}`
+      let sanitizedListingId = this.sanitizePublicId(listingId)
+      let publicIdSuffix = `${sanitizedListingId}_${index}`
+      let fullPublicId = `listings/${sanitizedListingId}/${publicIdSuffix}`
       
-      const existing = await cloudinary.api.resource(publicId).catch(() => null)
+      if (fullPublicId.length > this.MAX_PUBLIC_ID_LENGTH) {
+        const hash = crypto.createHash('sha256').update(listingId).digest('hex').substring(0, 32)
+        const indexStr = String(index)
+        const maxIdLength = this.MAX_PUBLIC_ID_LENGTH - `listings//_${indexStr}`.length - hash.length - 1
+        const truncatedId = sanitizedListingId.substring(0, Math.max(0, maxIdLength))
+        sanitizedListingId = `${truncatedId}_${hash}`
+        publicIdSuffix = `${sanitizedListingId}_${index}`
+        fullPublicId = `listings/${sanitizedListingId}/${publicIdSuffix}`
+      }
+      
+      const existing = await cloudinary.api.resource(fullPublicId).catch(() => null)
       if (existing) {
         return existing.secure_url
       }
 
       const result = await cloudinary.uploader.upload(url, {
         folder: `listings/${sanitizedListingId}`,
-        public_id: `${sanitizedListingId}_${index}`,
+        public_id: publicIdSuffix,
         overwrite: false,
         resource_type: 'image',
       })
