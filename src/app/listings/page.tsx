@@ -70,6 +70,9 @@ export default async function ListingsPage() {
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Date
                 </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Action
+                </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -167,6 +170,19 @@ export default async function ListingsPage() {
                     <span className="text-xs text-gray-400">
                       {format(listing.createdAt, 'HH:mm')}
                     </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {listing.images[0] && (
+                        <a 
+                          href={`https://lens.google.com/upload?url=${encodeURIComponent(listing.images[0].urlRemote)}`}
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:text-blue-800"
+                          title="Recherche Google Lens"
+                        >
+                          🔍
+                        </a>
+                      )}
                   </td>
                 </tr>
               ))}
