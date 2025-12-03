@@ -19,7 +19,11 @@ export const CATEGORIES_TO_EXCLUDE_FROM_LBC = [
   'Consoles',
   'Montres & Bijoux',
   'Mobilier enfant',
-  'Colocations'
+  'Colocations',
+  'Instruments de musique',
+  'Tracteurs',
+  'Animaux',
+  'CD - Musique'
 ]
 
 // Example: 'Motos' -> 'motos'
@@ -36,7 +40,7 @@ export const CATEGORIES_SLUG_TO_EXCLUDE_FROM_LBC = CATEGORIES_TO_EXCLUDE_FROM_LB
     category
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[&,\-]/g, '')
       .replace(/\s+/g, '_')
-      .replace(/&/g, '')
       .toLowerCase()
 )
