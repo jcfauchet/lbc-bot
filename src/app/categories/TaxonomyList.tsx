@@ -33,7 +33,7 @@ export function TaxonomyList({ items, onEdit }: CategoryListProps) {
   return (
     <div className="mb-8">
       <h3 className="text-xl font-semibold mb-4">Categories</h3>
-      <div className="grid gap-3">
+      <div className="grid gap-3 max-w-full overflow-x-auto">
         {items.map((item) => (
           <div
             key={item.id}

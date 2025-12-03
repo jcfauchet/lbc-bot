@@ -12,7 +12,7 @@ type Search = {
 
 export function SearchList({ searches }: { searches: Search[] }) {
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-4 max-w-full overflow-x-auto">
       {searches.map((search) => (
         <div
           key={search.id}
