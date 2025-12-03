@@ -41,7 +41,7 @@ export default async function Home() {
                         style={{ height: `${(count / maxDailyCount) * 100}%` }}
                       >
                         {/* Custom Tooltip */}
-                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1 hidden group-hover/segment:block z-30 pointer-events-none">
+                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1 hidden group-hover/segment:block group-active/segment:block z-30 pointer-events-none">
                           <div className="bg-gray-900 text-white text-xs rounded py-1 px-2 whitespace-nowrap shadow-lg">
                             <span className="font-bold">{count}</span> {searchName}
                           </div>
