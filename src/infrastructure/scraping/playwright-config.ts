@@ -40,12 +40,15 @@ export async function createBrowser(): Promise<Browser> {
   })
 }
 
-export async function createBrowserContext(browser: Browser): Promise<BrowserContext> {
+export async function createBrowserContext(
+  browser: Browser,
+  proxyConfig?: { server: string; username?: string; password?: string }
+): Promise<BrowserContext> {
   const bypass = new DataDomeBypass()
   const userAgent = bypass.getRandomBrowserUserAgent()
   const browserHeaders = bypass.generateBrowserHeaders(userAgent)
 
-  const context = await browser.newContext({
+  const contextOptions: any = {
     userAgent,
     viewport: { width: 1920, height: 1080 },
     locale: 'fr-FR',
@@ -56,7 +59,13 @@ export async function createBrowserContext(browser: Browser): Promise<BrowserCon
       ...browserHeaders,
       'Accept-Encoding': 'gzip, deflate, br, zstd',
     },
-  });
+  }
+
+  if (proxyConfig) {
+    contextOptions.proxy = proxyConfig
+  }
+
+  const context = await browser.newContext(contextOptions)
 
   await context.addInitScript(() => {
     // Remove webdriver flag completely

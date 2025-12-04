@@ -83,11 +83,15 @@ export class DataDomeBypass {
   }
 
   getRetryDelay(attempt: number): number {
-    const baseDelay = 2000
-    const maxDelay = 30000
+    const baseDelay = 5000
+    const maxDelay = 60000
     const exponentialDelay = baseDelay * Math.pow(2, attempt)
-    const jitter = Math.random() * 1000
+    const jitter = Math.random() * 2000
     return Math.min(exponentialDelay + jitter, maxDelay)
+  }
+
+  getRandomDelayBeforeRequest(): number {
+    return Math.floor(Math.random() * 5000) + 3000
   }
 
   async delay(ms: number): Promise<void> {

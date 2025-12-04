@@ -5,10 +5,22 @@ import { env } from '../../config/env'
 import { createBrowser, createBrowserContext } from '../playwright-config'
 import { v2 as cloudinary } from 'cloudinary'
 import { CATEGORIES_SLUG_TO_EXCLUDE_FROM_LBC, CATEGORIES_TO_EXCLUDE_FROM_LBC } from '@/infrastructure/config/constants'
+import { ProxyManager } from '../../proxy/ProxyManager'
 
 export class LeBonCoinListingScraper implements IListingSource {
   private browser: Browser | null = null
   private context: BrowserContext | null = null
+  private readonly proxyManager: ProxyManager | null
+
+  constructor() {
+    this.proxyManager = env.PROXY_ENABLED && env.PROXY_LIST && env.PROXY_LIST.length > 0
+      ? new ProxyManager(env.PROXY_LIST)
+      : null
+    
+    if (this.proxyManager) {
+      console.log(`🌐 [LeBonCoin Scraper] Proxy rotation enabled with ${this.proxyManager.getProxyCount()} proxies`)
+    }
+  }
 
   async search(searchUrl: string, searchName?: string): Promise<ScrapedListing[]> {
     let page: Page | null = null
@@ -26,19 +38,21 @@ export class LeBonCoinListingScraper implements IListingSource {
         throw gotoError
       }
 
-      // Wait longer to simulate human behavior
-      await this.randomDelay(3000, 6000)
+      await this.randomDelay(5000, 10000)
       
-      // Simulate mouse movement
       await page.mouse.move(Math.random() * 500, Math.random() * 500)
-      await this.randomDelay(500, 1500)
+      await this.randomDelay(1000, 2000)
+      
+      await page.evaluate(() => {
+        window.scrollBy(0, Math.random() * 200 + 100)
+      })
+      await this.randomDelay(1000, 2000)
       
 
       try {
-        const cookieButton = await page.waitForSelector('#didomi-notice-agree-button, #didomi-notice-learn-more-button', { timeout: 5000 })
+        const cookieButton = await page.waitForSelector('#didomi-notice-agree-button, #didomi-notice-learn-more-button', { timeout: 10000 })
         if (cookieButton) {
-            // Simulate human-like delay before clicking
-            await this.randomDelay(1000, 2500)
+            await this.randomDelay(2000, 4000)
             
             const refuseButton = await page.$('button:has-text("Refuser"), button:has-text("Continuer sans accepter")')
             if (refuseButton) {
@@ -63,14 +77,18 @@ export class LeBonCoinListingScraper implements IListingSource {
                    await refuseAll.click({ delay: Math.random() * 100 + 50 })
                  }
             }
-            // Wait after cookie interaction
-            await this.randomDelay(1000, 2000)
+            await this.randomDelay(2000, 4000)
         }
       } catch (e: any) {
         if (e?.name !== 'TimeoutError') {
           console.log('Cookie banner error:', e)
         }
+        await this.randomDelay(1000, 2000)
       }
+      
+      await this.checkForBotDetection(page)
+      
+      await this.randomDelay(2000, 4000)
 
       let listingsSelector = '';
       try {
@@ -100,9 +118,11 @@ export class LeBonCoinListingScraper implements IListingSource {
         }
       }
 
-      console.log(`Using selector: ${listingsSelector}`);
+      console.log(`Using selector: ${listingsSelector}`)
 
+      await this.randomDelay(2000, 4000)
       await this.autoScroll(page)
+      await this.randomDelay(2000, 4000)
 
       const listings = await page.$$eval(
         listingsSelector,
@@ -190,6 +210,33 @@ export class LeBonCoinListingScraper implements IListingSource {
     await new Promise(resolve => setTimeout(resolve, delay))
   }
 
+  private async checkForBotDetection(page: Page): Promise<void> {
+    try {
+      const datadomeChallenge = await page.$('[id*="datadome"], [class*="datadome"], [id*="challenge"], [class*="challenge"]')
+      if (datadomeChallenge) {
+        console.log('⚠️ DataDome challenge detected, waiting longer...')
+        await this.randomDelay(5000, 10000)
+        
+        const screenshotUrl = await this.takeScreenshot(page, 'datadome-challenge-detected', {
+          url: page.url(),
+          detected: 'DataDome challenge element found',
+        })
+        
+        if (screenshotUrl) {
+          console.log(`📸 DataDome challenge screenshot: ${screenshotUrl}`)
+        }
+      }
+      
+      const pageContent = await page.content()
+      if (pageContent.includes('datadome') || pageContent.includes('challenge') || pageContent.includes('blocked')) {
+        console.log('⚠️ Possible DataDome blocking detected in page content')
+        await this.randomDelay(3000, 6000)
+      }
+    } catch (e) {
+      console.log('Error checking for bot detection:', e)
+    }
+  }
+
   private async autoScroll(page: Page) {
     await page.evaluate(async () => {
       await new Promise<void>((resolve) => {
@@ -272,7 +319,16 @@ export class LeBonCoinListingScraper implements IListingSource {
   private async initBrowser(): Promise<void> {
     if (!this.browser) {
       this.browser = await createBrowser()
-      this.context = await createBrowserContext(this.browser)
+      
+      const proxyConfig = this.proxyManager && this.proxyManager.hasProxies()
+        ? this.proxyManager.getProxyForPlaywright(this.proxyManager.getNextProxy()!)
+        : undefined
+      
+      if (proxyConfig) {
+        console.log(`🔄 [LeBonCoin Scraper] Using proxy: ${proxyConfig.server}`)
+      }
+      
+      this.context = await createBrowserContext(this.browser, proxyConfig)
     }
   }
 

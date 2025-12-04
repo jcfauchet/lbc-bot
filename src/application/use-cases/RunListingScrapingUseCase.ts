@@ -82,12 +82,13 @@ export class RunListingScrapingUseCase {
           console.log(`New listing saved: ${savedListing.title}`)
         }
 
-        const randomDelay = Math.floor(Math.random() * 3000) + 2000
+        const randomDelay = Math.floor(Math.random() * 8000) + 5000
         console.log(`Waiting ${randomDelay}ms before next search to avoid DataDome blocking...`)
         await this.delay(randomDelay)
       } catch (error) {
         console.error(`Error scraping ${search.name}:`, error)
-        const randomDelay = Math.floor(Math.random() * 3000) + 2000
+        const randomDelay = Math.floor(Math.random() * 10000) + 8000
+        console.log(`⚠️ Error occurred, waiting ${randomDelay}ms before next search...`)
         await this.delay(randomDelay)
       }
     }

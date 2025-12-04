@@ -22,6 +22,11 @@ const envSchema = z.object({
   MIN_LISTING_PRICE_EUR: z.coerce.number().min(0).default(50),
   AI_PROVIDER: z.enum(['openai', 'gemini']).default('openai'),
   SEARCH_TERM_MIN_CONFIDENCE: z.coerce.number().min(0).max(1).default(0.8),
+  PROXY_ENABLED: z.coerce.boolean().default(false),
+  PROXY_LIST: z
+    .string()
+    .optional()
+    .transform((v) => v ? v.split(',').map((s) => s.trim()).filter(Boolean) : []),
 })
 
 export type Env = z.infer<typeof envSchema>

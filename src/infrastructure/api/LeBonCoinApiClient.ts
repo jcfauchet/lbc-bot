@@ -3,6 +3,9 @@ import { env } from '../config/env'
 import { ScrapedListing } from '../scraping/types'
 import { IListingSource } from '@/domain/services/IListingSource'
 import { DataDomeBypass } from './DataDomeBypass'
+import { ProxyManager } from '../proxy/ProxyManager'
+import { HttpsProxyAgent } from 'https-proxy-agent'
+import { HttpProxyAgent } from 'http-proxy-agent'
 
 interface LeBonCoinApiResponse {
   ads: Array<{
@@ -93,20 +96,34 @@ export class LeBonCoinApiClient implements IListingSource {
   private readonly SEARCH_ENDPOINT = `${this.API_BASE_URL}/finder/search`
   private cookies: string = ''
   private readonly bypass: DataDomeBypass
+  private readonly proxyManager: ProxyManager | null
 
   constructor() {
     this.bypass = new DataDomeBypass()
+    this.proxyManager = env.PROXY_ENABLED && env.PROXY_LIST && env.PROXY_LIST.length > 0
+      ? new ProxyManager(env.PROXY_LIST)
+      : null
+    
+    if (this.proxyManager) {
+      console.log(`🌐 [LeBonCoin API] Proxy rotation enabled with ${this.proxyManager.getProxyCount()} proxies`)
+    }
   }
 
   async search(searchUrl: string, searchName?: string): Promise<ScrapedListing[]> {
-    const randomDelay = Math.floor(Math.random() * 2000) + 1000
+    const randomDelay = this.bypass.getRandomDelayBeforeRequest()
     console.log(`⏳ Waiting ${randomDelay}ms before API request to avoid DataDome blocking...`)
     await this.bypass.delay(randomDelay)
 
     return this.bypass.retryWithBackoff(
       async () => {
+        const sessionDelay = Math.floor(Math.random() * 2000) + 1000
+        await this.bypass.delay(sessionDelay)
+        
         this.cookies = ''
         await this.initSession()
+        
+        const requestDelay = Math.floor(Math.random() * 2000) + 1000
+        await this.bypass.delay(requestDelay)
 
         const url = new URL(searchUrl)
         const payload = this.buildPayloadFromUrl(url, searchName)
@@ -120,16 +137,46 @@ export class LeBonCoinApiClient implements IListingSource {
           deviceId: userAgentConfig.deviceId,
         })
 
-        const response = await fetch(this.SEARCH_ENDPOINT, {
+        const fetchOptions: RequestInit = {
           method: 'POST',
           headers: {
             ...apiHeaders,
             'Cookie': this.cookies,
           },
           body: JSON.stringify(payload),
-        })
+        }
+
+        if (this.proxyManager && this.proxyManager.hasProxies()) {
+          const proxy = this.proxyManager.getNextProxy()
+          if (proxy) {
+            const proxyUrl = this.proxyManager.getProxyUrl(proxy)
+            const proxyIndex = (this.proxyManager as any).proxies.indexOf(proxy)
+            
+            console.log(`🔄 [LeBonCoin API] Using proxy ${proxyIndex + 1}/${this.proxyManager.getProxyCount()}: ${proxy.host}:${proxy.port}`)
+            
+            if (this.SEARCH_ENDPOINT.startsWith('https://')) {
+              fetchOptions.agent = new HttpsProxyAgent(proxyUrl) as any
+            } else {
+              fetchOptions.agent = new HttpProxyAgent(proxyUrl) as any
+            }
+          }
+        }
+
+        const response = await fetch(this.SEARCH_ENDPOINT, fetchOptions)
 
         if (!response.ok) {
+          if (this.proxyManager && this.proxyManager.hasProxies() && fetchOptions.agent) {
+            const currentProxy = (this.proxyManager as any).proxies.find((p: any) => {
+              const proxyUrl = this.proxyManager!.getProxyUrl(p)
+              return (fetchOptions.agent as any)?.proxy?.href?.includes(p.host) || 
+                     (fetchOptions.agent as any)?.proxy?.hostname === p.host
+            })
+            if (currentProxy) {
+              const proxyIndex = (this.proxyManager as any).proxies.indexOf(currentProxy)
+              this.proxyManager.recordProxyFailure(proxyIndex)
+            }
+          }
+          
           if (response.status === 403 || response.status === 429) {
             const errorText = await response.text().catch(() => '')
             if (errorText.includes('datadome') || errorText.includes('DataDome') || response.status === 403) {
@@ -137,6 +184,18 @@ export class LeBonCoinApiClient implements IListingSource {
             }
           }
           throw new Error(`API request failed with status ${response.status}`)
+        }
+
+        if (this.proxyManager && this.proxyManager.hasProxies() && fetchOptions.agent) {
+          const currentProxy = (this.proxyManager as any).proxies.find((p: any) => {
+            const proxyUrl = this.proxyManager!.getProxyUrl(p)
+            return (fetchOptions.agent as any)?.proxy?.href?.includes(p.host) || 
+                   (fetchOptions.agent as any)?.proxy?.hostname === p.host
+          })
+          if (currentProxy) {
+            const proxyIndex = (this.proxyManager as any).proxies.indexOf(currentProxy)
+            this.proxyManager.recordProxySuccess(proxyIndex)
+          }
         }
 
         const data: LeBonCoinApiResponse = await response.json()
@@ -179,9 +238,14 @@ export class LeBonCoinApiClient implements IListingSource {
           .filter((l) => l.lbcId && l.title)
           .filter((l) => l.priceCents >= env.MIN_LISTING_PRICE_EUR * 100)
       },
-      3,
+      5,
       (attempt, error) => {
         console.log(`⚠️ DataDome bypass attempt ${attempt}: ${error.message}`)
+        if (attempt >= 3) {
+          const extraDelay = Math.floor(Math.random() * 10000) + 5000
+          console.log(`🛑 Multiple failures detected, waiting ${extraDelay}ms before next attempt...`)
+          return this.bypass.delay(extraDelay)
+        }
       }
     )
   }
@@ -190,9 +254,19 @@ export class LeBonCoinApiClient implements IListingSource {
     const browserUserAgent = this.bypass.getRandomBrowserUserAgent()
     const browserHeaders = this.bypass.generateBrowserHeaders(browserUserAgent)
 
-    const response = await fetch('https://www.leboncoin.fr/', {
+    const fetchOptions: RequestInit = {
       headers: browserHeaders,
-    })
+    }
+
+    if (this.proxyManager && this.proxyManager.hasProxies()) {
+      const proxy = this.proxyManager.getNextProxy()
+      if (proxy) {
+        const proxyUrl = this.proxyManager.getProxyUrl(proxy)
+        fetchOptions.agent = new HttpsProxyAgent(proxyUrl) as any
+      }
+    }
+
+    const response = await fetch('https://www.leboncoin.fr/', fetchOptions)
 
     const setCookieHeader = response.headers.get('set-cookie')
     if (setCookieHeader) {
