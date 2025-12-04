@@ -9,6 +9,7 @@ import { AiAnalysis } from '@/domain/entities/AiAnalysis'
 import { IReferenceScraper } from '@/infrastructure/scraping/reference/IReferenceScraper'
 import { GoogleImageScraper } from '@/infrastructure/scraping/reference/Google/GoogleImageScraper'
 import { ListingStatus } from '@/domain/value-objects/ListingStatus'
+import { env } from '@/infrastructure/config/env'
 
 export class RunAiAnalysisUseCase {
   constructor(
@@ -75,22 +76,29 @@ export class RunAiAnalysisUseCase {
         console.log(`  → isPromising: ${preEstimation.isPromising}, hasDesigner: ${preEstimation.hasDesigner}, shouldProceed: ${preEstimation.shouldProceed}`)
         console.log(`  → Confidence: ${((preEstimation.confidence || 0) * 100).toFixed(1)}%`)
 
-        if (!preEstimation.shouldProceed) {
-          console.log(`  ❌ Skipping listing ${listing.title} - shouldProceed: false (isPromising: ${preEstimation.isPromising}, hasDesigner: ${preEstimation.hasDesigner})`)
+        // Vérifier si le prix estimé minimum est intéressant (au moins MIN_MARGIN_IN_EUR)
+        const estimatedMinPriceEuros = preEstimation.estimatedMinPrice.getEuros()
+        // Seuil réduit pour être plus permissif (50% de MIN_MARGIN_IN_EUR au lieu de 100%)
+        const isPriceInteresting = estimatedMinPriceEuros >= (env.MIN_MARGIN_IN_EUR * 0.5)
+        
+        if (!preEstimation.shouldProceed && !isPriceInteresting) {
+          console.log(`  ❌ Skipping listing ${listing.title} - shouldProceed: false and price not interesting (${estimatedMinPriceEuros}€)`)
           listing.markAsIgnored()
           await this.listingRepository.update(listing)
           continue
         }
 
-        if (!preEstimation.isPromising) {
-          console.log(`Skipping listing ${listing.title} - Pre-estimation not promising (${preEstimation.estimatedMinPrice.getEuros()}€ - ${preEstimation.estimatedMaxPrice.getEuros()}€)`)
+        // Continuer même si isPromising est false si le prix estimé est intéressant
+        if (!preEstimation.isPromising && !isPriceInteresting) {
+          console.log(`Skipping listing ${listing.title} - Pre-estimation not promising and price not interesting (${estimatedMinPriceEuros}€ - ${preEstimation.estimatedMaxPrice.getEuros()}€)`)
           listing.markAsIgnored()
           await this.listingRepository.update(listing)
           continue
         }
 
-        if (!preEstimation.hasDesigner || preEstimation.searchTerms.length === 0) {
-          console.log(`Skipping listing ${listing.title} - No designer identified or no search terms generated`)
+        // Continuer même sans designer si le prix est intéressant ou si on a des search terms
+        if (!preEstimation.hasDesigner && preEstimation.searchTerms.length === 0 && !isPriceInteresting) {
+          console.log(`Skipping listing ${listing.title} - No designer, no search terms, and price not interesting (${estimatedMinPriceEuros}€)`)
           listing.markAsIgnored()
           await this.listingRepository.update(listing)
           continue
@@ -138,7 +146,8 @@ export class RunAiAnalysisUseCase {
           allScrapedReferences
         )
 
-        if (!estimation.confidence || estimation.confidence < 0.8) {
+        // Réduire le seuil de confiance de 0.8 à 0.6 pour être plus permissif
+        if (!estimation.confidence || estimation.confidence < 0.6) {
           console.log(`Estimation confidence too low (${estimation.confidence}), skipping ${listing.title}`)
           listing.markAsIgnored()
           await this.listingRepository.update(listing)

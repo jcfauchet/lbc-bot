@@ -153,15 +153,16 @@ Titre: ${title}
 ${description ? `Description: ${description}` : ''}${categoriesSection}
 
 Mission:
-1. FILTRAGE: "daube" ou hors catégories → shouldProceed: false
-2. PRÉ-ESTIMATION: fourchette prix marché secondaire
-3. DESIGNER: identifier designer connu (certitude ${Math.round(env.SEARCH_TERM_MIN_CONFIDENCE * 100)}%+). Baser sur photo/connaissances pas sur titre/description vendeur.
-4. TERMES RECHERCHE: si designer identifié (certitude ${Math.round(env.SEARCH_TERM_MIN_CONFIDENCE * 100)}%+) ET prometteur, générer max 4 termes pour sites spécialisés (AuctionFR, Pamono, 1stdibs, Selency). Format: "designer + caractéristiques" (ex: "table basse verre rectangulaire maison jansen")
+1. FILTRAGE: "daube" évidente ou hors catégories → shouldProceed: false (être permissif, en cas de doute continuer)
+2. PRÉ-ESTIMATION: fourchette prix marché secondaire (être optimiste, ne pas sous-estimer)
+3. DESIGNER: identifier designer/fabricant connu si possible (même avec incertitude). Baser sur photo/connaissances pas sur titre/description vendeur. Si pas de designer identifié mais objet de qualité, continuer quand même.
+4. TERMES RECHERCHE: générer max 4 termes pour sites spécialisés (AuctionFR, Pamono, 1stdibs, Selency) même sans designer certain. Format: "designer + caractéristiques" ou "caractéristiques + style" (ex: "table basse verre rectangulaire maison jansen" ou "table basse verre rectangulaire vintage")
 
-Règles:
-- Prix < ${env.MIN_MARGIN_IN_EUR}€ → isPromising: false
-- Designer incertain (certitude < ${Math.round(env.SEARCH_TERM_MIN_CONFIDENCE * 100)}%) →, shouldProceed: false
-- searchTerms uniquement si isPromising: true
+Règles (être PERMISSIF pour ne pas manquer de bonnes affaires):
+- isPromising: true si prix estimé > ${env.MIN_MARGIN_IN_EUR}€ OU si objet de qualité/style intéressant même sans designer certain
+- shouldProceed: true sauf si "daube" évidente ou hors catégories. En cas de doute, continuer.
+- hasDesigner: true si designer identifié (même avec incertitude modérée), false sinon (mais continuer quand même si objet intéressant)
+- searchTerms: générer même sans designer certain, utiliser caractéristiques/style/matériaux
 
 JSON uniquement:
 {
@@ -170,7 +171,7 @@ JSON uniquement:
   "isPromising": <boolean>,
   "hasDesigner": <boolean>,
   "shouldProceed": <boolean>,
-  "searchTerms": [{"query": "...", "confidence": ${env.SEARCH_TERM_MIN_CONFIDENCE}-1.0}],
+  "searchTerms": [{"query": "...", "confidence": 0.5-1.0}],
   "description": "<analyse>",
   "confidence": 0.1-1.0
 }
@@ -263,11 +264,14 @@ JSON uniquement:
       throw new Error(`Invalid response format: price values must be numbers. Got min: ${estimatedMinPrice}, max: ${estimatedMaxPrice}`)
     }
 
+    // Par défaut, être permissif pour ne pas manquer de bonnes affaires
     const isPromising = parsed.isPromising ?? true
     const hasDesigner = parsed.hasDesigner ?? false
-    const shouldProceed = parsed.shouldProceed ?? isPromising
+    // shouldProceed par défaut à true si isPromising, sinon on vérifie quand même si le prix estimé est intéressant
+    const shouldProceed = parsed.shouldProceed ?? (isPromising || (estimatedMinPrice >= env.MIN_MARGIN_IN_EUR))
     
-    const minConfidence = env.SEARCH_TERM_MIN_CONFIDENCE
+    // Réduire le seuil minimum de confiance pour les search terms (être plus permissif)
+    const minConfidence = Math.min(env.SEARCH_TERM_MIN_CONFIDENCE, 0.5) // Au moins 0.5 au lieu de 0.8
     const searchTerms: SearchTerm[] = (parsed.searchTerms || []).slice(0, 4).map((term: any) => ({
       query: term.query || '',
       designer: term.designer,
