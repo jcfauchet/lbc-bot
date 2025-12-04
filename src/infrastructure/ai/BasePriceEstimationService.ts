@@ -160,8 +160,8 @@ Mission:
 
 Règles:
 - Prix < ${env.MIN_MARGIN_IN_EUR}€ → isPromising: false
-- Designer incertain (certitude < ${Math.round(env.SEARCH_TERM_MIN_CONFIDENCE * 100)}%) → hasDesigner: false, shouldProceed: false
-- searchTerms uniquement si hasDesigner: true ET isPromising: true
+- Designer incertain (certitude < ${Math.round(env.SEARCH_TERM_MIN_CONFIDENCE * 100)}%) →, shouldProceed: false
+- searchTerms uniquement si isPromising: true
 
 JSON uniquement:
 {
@@ -265,7 +265,7 @@ JSON uniquement:
 
     const isPromising = parsed.isPromising ?? true
     const hasDesigner = parsed.hasDesigner ?? false
-    const shouldProceed = parsed.shouldProceed ?? (isPromising && hasDesigner)
+    const shouldProceed = parsed.shouldProceed ?? isPromising
     
     const minConfidence = env.SEARCH_TERM_MIN_CONFIDENCE
     const searchTerms: SearchTerm[] = (parsed.searchTerms || []).slice(0, 4).map((term: any) => ({
