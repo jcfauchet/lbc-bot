@@ -16,7 +16,7 @@ export abstract class BasePriceEstimationService
 {
   abstract readonly providerName: string
 
-  protected readonly systemInstruction = `Expert en Arts Décoratifs et Design (XXe-XXIe). Spécialité: signatures, matériaux nobles, designers iconiques (Jansen, Baguès, Charles, Finn Juhl, Wegner, etc.), détection de copies.
+  protected readonly systemInstruction = `Expert en Arts Décoratifs et Design. Spécialité: signatures, matériaux nobles, designers iconiques (Jansen, Baguès, Charles, Finn Juhl, Wegner, etc.), détection de copies.
 
 Analyse basée sur: photos fournies, connaissances (styles, périodes, designers, prix marché secondaire).
 
@@ -155,7 +155,7 @@ ${description ? `Description: ${description}` : ''}${categoriesSection}
 Mission:
 1. FILTRAGE: "daube" ou hors catégories → shouldProceed: false
 2. PRÉ-ESTIMATION: fourchette prix marché secondaire
-3. DESIGNER: identifier designer connu (certitude ${Math.round(env.SEARCH_TERM_MIN_CONFIDENCE * 100)}%+). Baser sur photo/connaissances, pas sur titre/description vendeur.
+3. DESIGNER: identifier designer connu (certitude ${Math.round(env.SEARCH_TERM_MIN_CONFIDENCE * 100)}%+). Baser sur photo/connaissances plus que sur titre/description vendeur.
 4. TERMES RECHERCHE: si designer identifié (certitude ${Math.round(env.SEARCH_TERM_MIN_CONFIDENCE * 100)}%+) ET prometteur, générer max 4 termes pour sites spécialisés (AuctionFR, Pamono, 1stdibs, Selency). Format: "designer + caractéristiques" (ex: "table basse verre rectangulaire maison jansen")
 
 Règles:
