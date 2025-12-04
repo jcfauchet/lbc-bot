@@ -3,12 +3,36 @@ import { Page } from 'playwright-core';
 import { IReferenceScraper } from '../IReferenceScraper';
 import { createStealthBrowser, createStealthBrowserContext } from '../../playwright-config';
 import { sleep } from 'openai/core.mjs';
+import { DataDomeBypass } from '@/infrastructure/api/DataDomeBypass';
 
 export class GoogleImageScraper implements IReferenceScraper {
   private readonly baseUrl = 'https://lens.google.com';
+  private readonly bypass = new DataDomeBypass();
 
   async scrape(imageUrl: string): Promise<ReferenceProduct[]> {
     console.log(`Starting Google Image scrape for image: "${imageUrl}"...`);
+    
+    // Utiliser retryWithBackoff pour gérer les blocages
+    return await this.bypass.retryWithBackoff(
+      async () => {
+        return await this.performScrape(imageUrl);
+      },
+      3,
+      (attempt, error) => {
+        console.log(`🔄 Retry attempt ${attempt} for Google Lens scrape (error: ${error.message})`);
+        if (this.bypass.shouldRotateUserAgent()) {
+          console.log('🔄 Rotating user agent for Google Lens...');
+        }
+      }
+    );
+  }
+
+  private async performScrape(imageUrl: string): Promise<ReferenceProduct[]> {
+    // Ajouter un délai aléatoire avant la requête
+    const delay = this.bypass.getRandomDelayBeforeRequest();
+    console.log(`⏳ Waiting ${Math.round(delay)}ms before starting scrape...`);
+    await this.bypass.delay(delay);
+
     // Use stealth browser to avoid detection
     const browser = await createStealthBrowser();
     const context = await createStealthBrowserContext(browser);
@@ -18,7 +42,22 @@ export class GoogleImageScraper implements IReferenceScraper {
     try {
       // Navigate to Google Images
       console.log('Navigating to Google Images...');
-      await page.goto('https://images.google.com/', { waitUntil: 'domcontentloaded', timeout: 60000 });
+      
+      // Ajouter des headers supplémentaires pour éviter la détection
+      await page.setExtraHTTPHeaders({
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Referer': 'https://www.google.com/',
+        'Origin': 'https://www.google.com',
+      });
+      
+      await page.goto('https://images.google.com/', { 
+        waitUntil: 'domcontentloaded', 
+        timeout: 60000 
+      });
+      
+      // Attendre un peu pour que la page se charge complètement
+      await this.bypass.delay(2000);
 
       // Handle Cookie Consent
       try {
@@ -46,21 +85,41 @@ export class GoogleImageScraper implements IReferenceScraper {
         console.log('Consent handling error (might be already accepted):', e);
       }
 
-      // Check for CAPTCHA
-      const captchaText = await page.getByText(/Nos systèmes ont détecté un trafic exceptionnel|Our systems have detected unusual traffic/i).first();
-      if (await captchaText.isVisible()) {
-          console.log('🔴 CAPTCHA DETECTED! Please solve it manually in the browser window.');
-          console.log('Waiting for CAPTCHA to be solved (checking every 2 seconds)...');
-          
-          // Wait until the CAPTCHA text is no longer visible, with a long timeout
-          await page.waitForFunction(() => {
-              const text = document.body.innerText;
-              return !text.includes('Nos systèmes ont détecté un trafic exceptionnel') && 
-                     !text.includes('Our systems have detected unusual traffic');
-          }, null, { timeout: 300000 }); // 5 minutes timeout
-          
-          console.log('✅ CAPTCHA solved! Resuming scrape...');
-          await page.waitForTimeout(2000);
+      // Check for CAPTCHA or blocking
+      const pageContent = await page.content();
+      const hasCaptcha = pageContent.includes('Nos systèmes ont détecté un trafic exceptionnel') || 
+                        pageContent.includes('Our systems have detected unusual traffic') ||
+                        pageContent.includes('captcha') ||
+                        pageContent.includes('CAPTCHA');
+      
+      if (hasCaptcha) {
+        try {
+          const captchaText = await page.getByText(/Nos systèmes ont détecté un trafic exceptionnel|Our systems have detected unusual traffic|captcha|CAPTCHA/i).first();
+          if (await captchaText.isVisible()) {
+            console.log('🔴 CAPTCHA/BLOCKING DETECTED! Throwing error to trigger retry with new user agent...');
+            throw new Error('Google Lens blocking detected - CAPTCHA or unusual traffic');
+          }
+        } catch (e) {
+          // Si l'élément n'existe pas, vérifier quand même le contenu
+          if (hasCaptcha) {
+            console.log('🔴 CAPTCHA/BLOCKING DETECTED in page content! Throwing error to trigger retry...');
+            throw new Error('Google Lens blocking detected - CAPTCHA or unusual traffic');
+          }
+        }
+      }
+      
+      // Vérifier si on est bloqué par d'autres moyens
+      const isBlocked = await page.evaluate(() => {
+        const bodyText = document.body.innerText.toLowerCase();
+        return bodyText.includes('unusual traffic') || 
+               bodyText.includes('trafic exceptionnel') ||
+               bodyText.includes('verify you') ||
+               bodyText.includes('vérifiez que vous');
+      });
+      
+      if (isBlocked) {
+        console.log('🔴 Blocking detected! Throwing error to trigger retry...');
+        throw new Error('Google Lens blocking detected');
       }
 
       // Click "Search by image" (Camera icon)
@@ -179,6 +238,15 @@ export class GoogleImageScraper implements IReferenceScraper {
 
     } catch (error) {
       console.error('Error during Google Image scrape:', error);
+      // Si c'est une erreur de blocage, la propager pour déclencher le retry
+      if (error instanceof Error && (
+        error.message.includes('blocking') || 
+        error.message.includes('CAPTCHA') ||
+        error.message.includes('unusual traffic') ||
+        error.message.includes('Datadome')
+      )) {
+        throw error; // Propager pour que retryWithBackoff puisse gérer
+      }
       return [];
     } finally {
       await browser.close();
