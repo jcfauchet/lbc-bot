@@ -7,6 +7,10 @@ import { ProxyManager } from '../proxy/ProxyManager'
 import { HttpsProxyAgent } from 'https-proxy-agent'
 import { HttpProxyAgent } from 'http-proxy-agent'
 
+interface RequestInitWithAgent extends RequestInit {
+  agent?: any
+}
+
 interface LeBonCoinApiResponse {
   ads: Array<{
     list_id: number
@@ -97,6 +101,9 @@ export class LeBonCoinApiClient implements IListingSource {
   private cookies: string = ''
   private readonly bypass: DataDomeBypass
   private readonly proxyManager: ProxyManager | null
+  
+  private readonly HARDCODED_COOKIE = 'didomi_token=eyJ2ZW5kb3JzIjp7ImRpc2FibGVkIjpbImM6YWRqdXN0Z21iLXBjY05kSkJRIiwiYzpicmFuY2gtVjJkRUJSeEoiLCJjOmNhYmxhdG9saS1uUm1WYXdwMiIsImM6Zm9ydHZpc2lvbi1pZTZiWFR3OSIsImM6aW5mZWN0aW91cy1tZWRpYSIsImM6aGFzb2ZmZXItOFl5TVR0WGkiLCJjOnNhbm9tYSIsImM6cHVib2NlYW4tYjZCSk10c2UiLCJjOmFiLXRhc3R5IiwiYzpyZWFsemVpdGctYjZLQ2t4eVYiLCJjOmludG93b3dpbi1xYXp0NXRHaSIsImM6cHVycG9zZWxhLTN3NFpmS0tEIiwiYzptb2JpZnkiLCJjOnRpa3Rvay1LWkFVUUxaOSIsImM6aWxsdW1hdGVjLUNodEVCNGVrIiwiYzp3aGVuZXZlcm0tOFZZaHdiMlAiLCJjOnJldGFyZ2V0ZXItYmVhY29uIiwiYzpqcXVlcnkiLCJjOnJ0YXJnZXQtR2VmTVZ5aUMiLCJjOnlvcm1lZGlhcy1xbkJXaFF5UyIsImM6YWRsaWdodG5pLXRXWkdyZWhUIiwiYzppbnRpbWF0ZS1tZXJnZXIiLCJjOnNuYXBpbmMteWhZbkpaZlQiLCJjOmRpZG9taSIsImM6cXdlcnRpemUtemRuZ0UyaHgiLCJjOnJldmxpZnRlci1jUnBNbnA1eCIsImM6c2NoaWJzdGVkLU1RUFhhcXloIiwiYzpjbG91ZGZsYXJlIiwiYzp2aWFudC00N3gyWWhmNyIsImM6cm9ja2VyYm94LWZUTThFSjlQIiwiYzphZG1vdGlvbiIsImM6bWF4Y2RuLWlVTXROcWNMIiwiYzphZHZhbnNlLUg2cWJheG5RIiwiYzpsa3FkLWNVOVFtQjZXIiwiYzphcHBzZmx5ZXItWXJQZEdGNjMiLCJjOnZ1YmxlLWNNQ0pWeDRlIiwiYzpzd2F2ZW4tTFlCcmltQVoiLCJjOnNmci1NZHBpN2tmTiIsImM6b3NjYXJvY29tLUZSY2hOZG5IIiwiYzp0aGlyZHByZXNlLVNzS3dtSFZLIiwiYzphZGltby1QaFVWbTZGRSIsImM6cmV0ZW5jeS1DTGVyWmlHTCIsImM6Y3JlYXRlanMiLCJjOmdyZWVuaG91c2UtUUtiR0JrczQiLCJjOmxlbW9tZWRpYS16YllocDJRYyIsImM6emFub3giLCJjOmxiY2ZyYW5jZSIsImM6cmVzZWFyY2gtbm93IiwiYzptYXl0cmljc2ctQVMzNVlhbTkiLCJjOmFmZmlsaW5ldCIsImM6cm9ja3lvdSIsImM6cmFkdmVydGlzLVNKcGEyNUg4IiwiYzpha2FtYWkiLCJjOnR1cmJvIiwiYzphdC1pbnRlcm5ldCJdLCJlbmFibGVkIjpbXX0sInB1cnBvc2VzIjp7ImRpc2FibGVkIjpbIm1lYXN1cmVfYWRfcGVyZm9ybWFuY2UiLCJzZWxlY3RfcGVyc29uYWxpemVkX2FkcyIsImNvb2tpZXMiLCJtYXJrZXRfcmVzZWFyY2giLCJnZW9sb2NhdGlvbl9kYXRhIiwiZGV2aWNlX2NoYXJhY3RlcmlzdGljcyIsImltcHJvdmVfcHJvZHVjdHMiLCJwZXJzb25uYWxpc2F0aW9ubWFya2V0aW5nIiwiY3JlYXRlX2Fkc19wcm9maWxlIiwicHJpeCIsImV4cGVyaWVuY2V1dGlsYXRldXIiLCJ1c2VfbGltaXRlZF9kYXRhX3RvX2NvbnRlbnQiLCJtZXN1cmVhdWRpZW5jZSIsInNlbGVjdF9iYXNpY19hZHMiXSwiZW5hYmxlZCI6WyJuZWNlc3NhaXJlcyJdfSwidXNlcl9pZCI6IjdDQTRBQ0NBLUU1ODgtNDA1NS05MkFBLUJCNzFFRDA2QjRCQiJ9; datadome=fY_S~5q2DUa_EgbQ_geUQr9aRO~TjqElbKqJcUrq~Mjfc~sp2nY9pX9Qw2GrGu6wDynd6oLCou~bUL69LG6DkOtDUaJB6Gfr_sqQZsN4pt0tG8NPuy_25tkGSn6z_s_M'
+  private useHardcodedCookie: boolean = false
 
   constructor() {
     this.bypass = new DataDomeBypass()
@@ -137,11 +144,15 @@ export class LeBonCoinApiClient implements IListingSource {
           deviceId: userAgentConfig.deviceId,
         })
 
-        const fetchOptions: RequestInit = {
+        const cookieHeader = this.useHardcodedCookie 
+          ? this.HARDCODED_COOKIE 
+          : this.cookies || this.HARDCODED_COOKIE
+
+        const fetchOptions: RequestInitWithAgent = {
           method: 'POST',
           headers: {
             ...apiHeaders,
-            'Cookie': this.cookies,
+            'Cookie': cookieHeader,
           },
           body: JSON.stringify(payload),
         }
@@ -167,9 +178,9 @@ export class LeBonCoinApiClient implements IListingSource {
         if (!response.ok) {
           if (this.proxyManager && this.proxyManager.hasProxies() && fetchOptions.agent) {
             const currentProxy = (this.proxyManager as any).proxies.find((p: any) => {
-              const proxyUrl = this.proxyManager!.getProxyUrl(p)
-              return (fetchOptions.agent as any)?.proxy?.href?.includes(p.host) || 
-                     (fetchOptions.agent as any)?.proxy?.hostname === p.host
+              const agent = fetchOptions.agent as any
+              return agent?.proxy?.href?.includes(p.host) || 
+                     agent?.proxy?.hostname === p.host
             })
             if (currentProxy) {
               const proxyIndex = (this.proxyManager as any).proxies.indexOf(currentProxy)
@@ -180,6 +191,10 @@ export class LeBonCoinApiClient implements IListingSource {
           if (response.status === 403 || response.status === 429) {
             const errorText = await response.text().catch(() => '')
             if (errorText.includes('datadome') || errorText.includes('DataDome') || response.status === 403) {
+              if (!this.useHardcodedCookie) {
+                console.log('🔄 Switching to hardcoded cookie fallback...')
+                this.useHardcodedCookie = true
+              }
               throw new Error('Access blocked by Datadome. The API request was rejected.')
             }
           }
@@ -188,14 +203,19 @@ export class LeBonCoinApiClient implements IListingSource {
 
         if (this.proxyManager && this.proxyManager.hasProxies() && fetchOptions.agent) {
           const currentProxy = (this.proxyManager as any).proxies.find((p: any) => {
-            const proxyUrl = this.proxyManager!.getProxyUrl(p)
-            return (fetchOptions.agent as any)?.proxy?.href?.includes(p.host) || 
-                   (fetchOptions.agent as any)?.proxy?.hostname === p.host
+            const agent = fetchOptions.agent as any
+            return agent?.proxy?.href?.includes(p.host) || 
+                   agent?.proxy?.hostname === p.host
           })
           if (currentProxy) {
             const proxyIndex = (this.proxyManager as any).proxies.indexOf(currentProxy)
             this.proxyManager.recordProxySuccess(proxyIndex)
           }
+        }
+        
+        if (this.useHardcodedCookie) {
+          this.useHardcodedCookie = false
+          console.log('✅ Hardcoded cookie worked, switching back to dynamic cookies')
         }
 
         const data: LeBonCoinApiResponse = await response.json()
@@ -251,10 +271,16 @@ export class LeBonCoinApiClient implements IListingSource {
   }
 
   private async initSession(): Promise<void> {
+    if (this.useHardcodedCookie) {
+      this.cookies = this.HARDCODED_COOKIE
+      console.log('🍪 Using hardcoded cookie for session')
+      return
+    }
+
     const browserUserAgent = this.bypass.getRandomBrowserUserAgent()
     const browserHeaders = this.bypass.generateBrowserHeaders(browserUserAgent)
 
-    const fetchOptions: RequestInit = {
+    const fetchOptions: RequestInitWithAgent = {
       headers: browserHeaders,
     }
 
@@ -275,7 +301,13 @@ export class LeBonCoinApiClient implements IListingSource {
       
       if (this.cookies) {
         console.log(`🍪 Session initialized with cookies (${this.cookies.split(';').length} cookies)`)
+      } else {
+        console.log('⚠️ No cookies received, falling back to hardcoded cookie')
+        this.cookies = this.HARDCODED_COOKIE
       }
+    } else {
+      console.log('⚠️ No set-cookie header, using hardcoded cookie')
+      this.cookies = this.HARDCODED_COOKIE
     }
   }
 
