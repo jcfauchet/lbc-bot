@@ -135,16 +135,25 @@ async function main() {
     'chaise',
     'fauteuil',
     'canapé',
+    'table',
     'enfilade',
     'commode',
     'bibliothèque',
+    'buffet',
     'bureau',
     'lampe_de_table',
+    'lampe',
     'lampadaire',
     'suspension',
     'applique',
     'miroir',
     'objet_déco',
+    'plateau',
+    'étagère',
+    'guéridon',
+    'pouf',
+    'étagère',
+    'table de chevet'
   ]
 
   for (let i = 0; i < CATEGORIES.length; i++) {
