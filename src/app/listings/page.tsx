@@ -3,7 +3,7 @@ import { format } from "date-fns";
 import { ListingStatus } from "@/domain/value-objects/ListingStatus";
 import Link from "next/link";
 
-export const revalidate = 100;
+export const dynamic = 'force-dynamic';
 
 function getStatusBadgeClass(status: string): string {
   switch (status) {

@@ -2,7 +2,7 @@ import { container } from "@/infrastructure/di/container";
 import { format } from "date-fns";
 import Link from "next/link";
 
-export const revalidate = 100;
+export const dynamic = 'force-dynamic';
 
 export default async function Home() {
   const stats = await container.getDashboardStatsUseCase.execute();
