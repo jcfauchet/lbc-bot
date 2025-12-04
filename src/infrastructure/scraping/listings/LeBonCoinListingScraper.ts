@@ -11,11 +11,20 @@ export class LeBonCoinListingScraper implements IListingSource {
   private context: BrowserContext | null = null
 
   async search(searchUrl: string, searchName?: string): Promise<ScrapedListing[]> {
+    let page: Page | null = null
     try {
       await this.initBrowser()
-      const page = await this.context!.newPage()
+      page = await this.context!.newPage()
 
-      await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 60000 })
+      try {
+        await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 60000 })
+      } catch (gotoError: any) {
+        await this.takeScreenshot(page, `goto-error-${searchName || 'unknown'}`, {
+          url: searchUrl,
+          error: gotoError.message,
+        })
+        throw gotoError
+      }
 
       // Wait longer to simulate human behavior
       await this.randomDelay(3000, 6000)
@@ -24,7 +33,6 @@ export class LeBonCoinListingScraper implements IListingSource {
       await page.mouse.move(Math.random() * 500, Math.random() * 500)
       await this.randomDelay(500, 1500)
       
-      await this.checkForBotDetection(page)
 
       try {
         const cookieButton = await page.waitForSelector('#didomi-notice-agree-button, #didomi-notice-learn-more-button', { timeout: 5000 })
@@ -81,14 +89,12 @@ export class LeBonCoinListingScraper implements IListingSource {
           console.error(`Page URL: ${page.url()}`);
           console.error(`Page title: ${await page.title().catch(() => 'unknown')}`);
 
-          // Upload page screenshot to Cloudinary
-          const screenshot = await page.screenshot()
-          const screenshotBase64 = screenshot.toString('base64')
-          const screenshotDataUri = `data:image/png;base64,${screenshotBase64}`
-          const screenshotUrl = await cloudinary.uploader.upload(screenshotDataUri, {
-            folder: 'lbc-bot/screenshots',
+          await this.takeScreenshot(page, `listings-not-found-${searchName || 'unknown'}`, {
+            url: searchUrl,
+            pageUrl: page.url(),
+            pageTitle: await page.title().catch(() => 'unknown'),
+            error: 'Could not find listings container',
           })
-          console.log(`Screenshot uploaded to: ${screenshotUrl.secure_url}`);
           
           throw new Error('Could not find listings container');
         }
@@ -96,7 +102,7 @@ export class LeBonCoinListingScraper implements IListingSource {
 
       console.log(`Using selector: ${listingsSelector}`);
 
-      await this.autoScroll(page);
+      await this.autoScroll(page)
 
       const listings = await page.$$eval(
         listingsSelector,
@@ -145,14 +151,28 @@ export class LeBonCoinListingScraper implements IListingSource {
         }
       );
 
-      await page.close();
+      await page.close()
+      page = null
 
       return listings
         .filter((l) => l.lbcId && l.title)
         .filter((l) => !this.isCategoryExcluded(l.url))
-        .filter((l) => l.priceCents >= env.MIN_LISTING_PRICE_EUR * 100);
-    } catch (error) {
+        .filter((l) => l.priceCents >= env.MIN_LISTING_PRICE_EUR * 100)
+    } catch (error: any) {
       console.error('Scraping error:', error)
+      
+      if (page && !page.isClosed()) {
+        await this.takeScreenshot(page, `scraping-error-${searchName || 'unknown'}`, {
+          url: searchUrl,
+          error: error.message,
+          stack: error.stack,
+        })
+      } else if (this.context && !this.context.browser()?.isConnected()) {
+        console.error('Browser/Context closed, cannot take screenshot')
+      } else {
+        console.error('Page is closed, cannot take screenshot')
+      }
+      
       throw error
     }
   }
@@ -168,10 +188,6 @@ export class LeBonCoinListingScraper implements IListingSource {
   private async randomDelay(min: number, max: number): Promise<void> {
     const delay = Math.floor(Math.random() * (max - min + 1)) + min
     await new Promise(resolve => setTimeout(resolve, delay))
-  }
-
-  private async checkForBotDetection(page: Page): Promise<void> {
-    // Removed - we want to try to pass through, not detect and fail
   }
 
   private async autoScroll(page: Page) {
@@ -197,26 +213,26 @@ export class LeBonCoinListingScraper implements IListingSource {
     description?: string
     imageUrls: string[]
   }> {
+    let page: Page | null = null
     try {
       await this.initBrowser()
-      const page = await this.context!.newPage()
+      page = await this.context!.newPage()
 
-      await page.goto(listingUrl, { waitUntil: 'domcontentloaded' })
+      try {
+        await page.goto(listingUrl, { waitUntil: 'domcontentloaded' })
+      } catch (gotoError: any) {
+        await this.takeScreenshot(page, `details-goto-error`, {
+          url: listingUrl,
+          error: gotoError.message,
+        })
+        throw gotoError
+      }
 
       const description = await page
         .$eval('[data-qa-id="adview_description_container"]', (el) =>
           el.textContent?.trim()
         )
         .catch(() => undefined)
-
-      // const category = await page.$eval('[data-spark-component="breadcrumb-link"]', (el) =>
-      //   el.textContent?.trim()
-      // )
-      // .catch(() => undefined)
-
-      // if (category && CATEGORIES_TO_EXCLUDE_FROM_LBC.includes(category)) {
-      //   return { imageUrls: [] }
-      // }
 
       const imageUrls = await page
         .$$eval('img[data-qa-id="slideshow_image"]', (imgs) =>
@@ -233,13 +249,22 @@ export class LeBonCoinListingScraper implements IListingSource {
         .catch(() => [])
 
       await page.close()
+      page = null
 
       return {
         description,
         imageUrls: imageUrls as string[],
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Detail scraping error:', error)
+      
+      if (page && !page.isClosed()) {
+        await this.takeScreenshot(page, `details-scraping-error`, {
+          url: listingUrl,
+          error: error.message,
+        })
+      }
+      
       return { imageUrls: [] }
     }
   }
@@ -259,6 +284,62 @@ export class LeBonCoinListingScraper implements IListingSource {
     if (this.browser) {
       await this.browser.close()
       this.browser = null
+    }
+  }
+
+  private async takeScreenshot(
+    page: Page | null,
+    label: string,
+    metadata?: Record<string, any>
+  ): Promise<string | null> {
+    if (!page || page.isClosed()) {
+      console.log(`⚠️ Cannot take screenshot for ${label}: page is closed`)
+      return null
+    }
+
+    try {
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+      const sanitizedLabel = label.replace(/[^a-zA-Z0-9_-]/g, '_')
+      const filename = `${sanitizedLabel}-${timestamp}`
+      
+      console.log(`📸 Taking screenshot for ${label}...`)
+      const screenshot = await page.screenshot({ fullPage: true, type: 'png' })
+      
+      const screenshotBase64 = screenshot.toString('base64')
+      const screenshotDataUri = `data:image/png;base64,${screenshotBase64}`
+      
+      const uploadOptions: any = {
+        folder: 'lbc-bot/screenshots',
+        public_id: filename,
+        overwrite: true,
+        resource_type: 'image',
+      }
+
+      if (metadata) {
+        uploadOptions.context = {
+          metadata: JSON.stringify(metadata),
+        }
+      }
+
+      console.log(`☁️ Uploading screenshot to Cloudinary...`)
+      const uploadResult = await cloudinary.uploader.upload(screenshotDataUri, uploadOptions)
+      const screenshotUrl = uploadResult.secure_url
+      
+      console.log(`✅ Screenshot uploaded successfully!`)
+      console.log(`   📸 URL: ${screenshotUrl}`)
+      console.log(`   📁 Folder: lbc-bot/screenshots`)
+      console.log(`   🏷️  Label: ${label}`)
+      if (metadata) {
+        console.log(`   📋 Metadata:`, JSON.stringify(metadata, null, 2))
+      }
+      
+      return screenshotUrl
+    } catch (screenshotError: any) {
+      console.error(`❌ Failed to take/upload screenshot for ${label}:`, screenshotError.message)
+      if (screenshotError.stack) {
+        console.error(`   Stack:`, screenshotError.stack)
+      }
+      return null
     }
   }
 }

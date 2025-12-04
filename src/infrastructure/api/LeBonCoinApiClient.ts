@@ -2,6 +2,7 @@ import { CATEGORIES_TO_EXCLUDE_FROM_LBC } from '../config/constants'
 import { env } from '../config/env'
 import { ScrapedListing } from '../scraping/types'
 import { IListingSource } from '@/domain/services/IListingSource'
+import { DataDomeBypass } from './DataDomeBypass'
 
 interface LeBonCoinApiResponse {
   ads: Array<{
@@ -55,15 +56,6 @@ interface LeBonCoinApiResponse {
   total_pages: number
 }
 
-const API_HEADERS = {
-  'Host': 'api.leboncoin.fr',
-  'Connection': 'keep-alive',
-  'Accept': 'application/json',
-  'User-Agent': 'LBC;iOS;16.4.1;iPhone;phone;AFACB532-200B-476A-98B3-B2346A97EA54;wifi;6.102.0;24.32.1930',
-  'api_key': 'ba0c2dad52b3ec',
-  'Accept-Language': 'fr-FR,fr;q=0.9',
-  'Content-Type': 'application/json',
-}
 
 
 interface SearchPayload {
@@ -100,105 +92,116 @@ export class LeBonCoinApiClient implements IListingSource {
   private readonly API_BASE_URL = 'https://api.leboncoin.fr'
   private readonly SEARCH_ENDPOINT = `${this.API_BASE_URL}/finder/search`
   private cookies: string = ''
+  private readonly bypass: DataDomeBypass
+
+  constructor() {
+    this.bypass = new DataDomeBypass()
+  }
 
   async search(searchUrl: string, searchName?: string): Promise<ScrapedListing[]> {
-    try {
-      // Initialize session by visiting the main page to get cookies
-      if (!this.cookies) {
+    const randomDelay = Math.floor(Math.random() * 2000) + 1000
+    console.log(`⏳ Waiting ${randomDelay}ms before API request to avoid DataDome blocking...`)
+    await this.bypass.delay(randomDelay)
+
+    return this.bypass.retryWithBackoff(
+      async () => {
+        this.cookies = ''
         await this.initSession()
-      }
 
-      // Parse the search URL to extract parameters
-      const url = new URL(searchUrl)
-      const payload = this.buildPayloadFromUrl(url, searchName)
+        const url = new URL(searchUrl)
+        const payload = this.buildPayloadFromUrl(url, searchName)
 
-      console.log('🔍 API Request:', {
-        url: searchUrl,
-        payload: JSON.stringify(payload, null, 2),
-      })
+        const userAgentConfig = this.bypass.getRandomUserAgentConfig()
+        const apiHeaders = this.bypass.generateApiHeaders(userAgentConfig)
 
-      const response = await fetch(this.SEARCH_ENDPOINT, {
-        method: 'POST',
-        headers: {
-          ...API_HEADERS,
-          'Cookie': this.cookies,
-        },
-        body: JSON.stringify(payload),
-      })
+        console.log('🔍 API Request:', {
+          url: searchUrl,
+          userAgent: userAgentConfig.userAgent.substring(0, 50) + '...',
+          deviceId: userAgentConfig.deviceId,
+        })
 
-      if (!response.ok) {
-        if (response.status === 403) {
-          throw new Error('Access blocked by Datadome. The API request was rejected.')
-        }
-        throw new Error(`API request failed with status ${response.status}`)
-      }
+        const response = await fetch(this.SEARCH_ENDPOINT, {
+          method: 'POST',
+          headers: {
+            ...apiHeaders,
+            'Cookie': this.cookies,
+          },
+          body: JSON.stringify(payload),
+        })
 
-      const data: LeBonCoinApiResponse = await response.json()
-
-      console.log(`📊 API Response: ${data.ads?.length || 0} ads found`)
-
-      // Filter ads published in the last 24 hours
-      const now = new Date()
-      const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000)
-
-      // Transform API response to ScrapedListing format
-      return data.ads
-        .filter((ad) => {
-          // Filter by price
-          if (!ad.price || ad.price.length === 0) return false
-          
-          // Filter by publication date (last 24 hours)
-          if (ad.first_publication_date) {
-            const publicationDate = new Date(ad.first_publication_date)
-            if (publicationDate < twentyFourHoursAgo) {
-              return false
+        if (!response.ok) {
+          if (response.status === 403 || response.status === 429) {
+            const errorText = await response.text().catch(() => '')
+            if (errorText.includes('datadome') || errorText.includes('DataDome') || response.status === 403) {
+              throw new Error('Access blocked by Datadome. The API request was rejected.')
             }
           }
+          throw new Error(`API request failed with status ${response.status}`)
+        }
 
-          console.log(`Ad ${ad.list_id} in category ${ad.category_name}`)
+        const data: LeBonCoinApiResponse = await response.json()
 
-          if (CATEGORIES_TO_EXCLUDE_FROM_LBC.includes(ad.category_name)) {
-            console.log(`Excluding ad ${ad.list_id} in category ${ad.category_name}`)
+        console.log(`📊 API Response: ${data.ads?.length || 0} ads found`)
 
-            return false
-          }
-          
-          return true
-        })
-        .map((ad) => ({
-          lbcId: ad.list_id.toString(),
-          url: ad.url.startsWith('http') ? ad.url : `https://www.leboncoin.fr${ad.url}`,
-          title: ad.subject,
-          priceCents: ad.price[0] * 100, // Convert euros to cents
-          city: ad.location?.city || '',
-          region: ad.location?.region_name || '',
-          publishedAt: ad.first_publication_date ? new Date(ad.first_publication_date) : undefined,
-          imageUrls: ad.images?.urls || ad.images?.small_url ? [ad.images.small_url] : [],
-        }))
-        .filter((l) => l.lbcId && l.title)
-        .filter((l) => l.priceCents >= env.MIN_LISTING_PRICE_EUR * 100)
-    } catch (error) {
-      console.error('API scraping error:', error)
-      throw error
-    }
+        const now = new Date()
+        const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+
+        return data.ads
+          .filter((ad) => {
+            if (!ad.price || ad.price.length === 0) return false
+            
+            if (ad.first_publication_date) {
+              const publicationDate = new Date(ad.first_publication_date)
+              if (publicationDate < twentyFourHoursAgo) {
+                return false
+              }
+            }
+
+            console.log(`Ad ${ad.list_id} in category ${ad.category_name}`)
+
+            if (CATEGORIES_TO_EXCLUDE_FROM_LBC.includes(ad.category_name)) {
+              console.log(`Excluding ad ${ad.list_id} in category ${ad.category_name}`)
+              return false
+            }
+            
+            return true
+          })
+          .map((ad) => ({
+            lbcId: ad.list_id.toString(),
+            url: ad.url.startsWith('http') ? ad.url : `https://www.leboncoin.fr${ad.url}`,
+            title: ad.subject,
+            priceCents: ad.price[0] * 100,
+            city: ad.location?.city || '',
+            region: ad.location?.region_name || '',
+            publishedAt: ad.first_publication_date ? new Date(ad.first_publication_date) : undefined,
+            imageUrls: ad.images?.urls || ad.images?.small_url ? [ad.images.small_url] : [],
+          }))
+          .filter((l) => l.lbcId && l.title)
+          .filter((l) => l.priceCents >= env.MIN_LISTING_PRICE_EUR * 100)
+      },
+      3,
+      (attempt, error) => {
+        console.log(`⚠️ DataDome bypass attempt ${attempt}: ${error.message}`)
+      }
+    )
   }
 
   private async initSession(): Promise<void> {
-    // Visit the main page to initialize cookies (like the Python lib does)
+    const browserUserAgent = this.bypass.getRandomBrowserUserAgent()
+    const browserHeaders = this.bypass.generateBrowserHeaders(browserUserAgent)
+
     const response = await fetch('https://www.leboncoin.fr/', {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-        'Accept-Language': 'fr-FR,fr;q=0.9',
-      },
+      headers: browserHeaders,
     })
 
-    // Extract cookies from response headers
     const setCookieHeader = response.headers.get('set-cookie')
     if (setCookieHeader) {
-      // Parse multiple cookies if present
       const cookies = setCookieHeader.split(',').map((cookie) => cookie.split(';')[0].trim())
       this.cookies = cookies.join('; ')
+      
+      if (this.cookies) {
+        console.log(`🍪 Session initialized with cookies (${this.cookies.split(';').length} cookies)`)
+      }
     }
   }
 
@@ -327,6 +330,7 @@ export class LeBonCoinApiClient implements IListingSource {
 
     return enums
   }
+
 }
 
 

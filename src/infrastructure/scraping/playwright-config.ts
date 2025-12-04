@@ -1,5 +1,6 @@
 import chromium from '@sparticuz/chromium'
 import playwright, { chromium as chromiumOrigin, Browser, BrowserContext } from 'playwright-core'
+import { DataDomeBypass } from '../api/DataDomeBypass'
 
 export const defaultTimeout = 120_000
 
@@ -40,22 +41,9 @@ export async function createBrowser(): Promise<Browser> {
 }
 
 export async function createBrowserContext(browser: Browser): Promise<BrowserContext> {
-  // Use a more recent Chrome user agent
-  const headersList = [
-    {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-      'Accept-Language': 'en-US,en;q=0.9',
-      'Accept-Encoding': 'gzip, deflate, br',
-    },
-    {
-      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
-      'Accept-Language': 'en-GB,en;q=0.8',
-      'Accept-Encoding': 'gzip, deflate',
-    }
-  ];
-
-  // const userAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
-  const userAgent = headersList[Math.floor(Math.random() * headersList.length)]['User-Agent'];
+  const bypass = new DataDomeBypass()
+  const userAgent = bypass.getRandomBrowserUserAgent()
+  const browserHeaders = bypass.generateBrowserHeaders(userAgent)
 
   const context = await browser.newContext({
     userAgent,
@@ -65,18 +53,8 @@ export async function createBrowserContext(browser: Browser): Promise<BrowserCon
     permissions: [],
     colorScheme: 'light',
     extraHTTPHeaders: {
-      'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+      ...browserHeaders,
       'Accept-Encoding': 'gzip, deflate, br, zstd',
-      'Connection': 'keep-alive',
-      'Upgrade-Insecure-Requests': '1',
-      'Sec-Fetch-Dest': 'document',
-      'Sec-Fetch-Mode': 'navigate',
-      'Sec-Fetch-Site': 'none',
-      'Sec-Fetch-User': '?1',
-      'sec-ch-ua': '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
-      'sec-ch-ua-mobile': '?0',
-      'sec-ch-ua-platform': '"macOS"',
     },
   });
 
@@ -210,8 +188,14 @@ export function randomDelay(min = 1000, max = 3000): number {
   return Math.floor(Math.random() * (max - min)) + min;
 }
 
+export async function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function createStealthBrowserContext(browser: Browser): Promise<BrowserContext> {
-  const userAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+  const bypass = new DataDomeBypass()
+  const userAgent = bypass.getRandomBrowserUserAgent()
+  const browserHeaders = bypass.generateBrowserHeaders(userAgent)
   
   const context = await browser.newContext({
     userAgent,
@@ -221,18 +205,8 @@ export async function createStealthBrowserContext(browser: Browser): Promise<Bro
     permissions: [],
     colorScheme: 'light',
     extraHTTPHeaders: {
-      'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+      ...browserHeaders,
       'Accept-Encoding': 'gzip, deflate, br, zstd',
-      'Connection': 'keep-alive',
-      'Upgrade-Insecure-Requests': '1',
-      'Sec-Fetch-Dest': 'document',
-      'Sec-Fetch-Mode': 'navigate',
-      'Sec-Fetch-Site': 'none',
-      'Sec-Fetch-User': '?1',
-      'sec-ch-ua': '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
-      'sec-ch-ua-mobile': '?0',
-      'sec-ch-ua-platform': '"macOS"',
     },
   });
 
