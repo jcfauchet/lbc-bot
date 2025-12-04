@@ -110,10 +110,6 @@ export class LeBonCoinApiClient implements IListingSource {
     this.proxyManager = env.PROXY_ENABLED && env.PROXY_LIST && env.PROXY_LIST.length > 0
       ? new ProxyManager(env.PROXY_LIST)
       : null
-    
-    if (this.proxyManager) {
-      console.log(`🌐 [LeBonCoin API] Proxy rotation enabled with ${this.proxyManager.getProxyCount()} proxies`)
-    }
   }
 
   async search(searchUrl: string, searchName?: string): Promise<ScrapedListing[]> {
