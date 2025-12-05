@@ -19,6 +19,10 @@ export class GoogleCustomSearchScraper {
   async scrape(imageUrl: string): Promise<ReferenceProduct[]> {
     console.log(`Starting Google Image scrape for image: "${imageUrl}"...`);
     
+    const delay = this.bypass.getRandomDelayBeforeRequest();
+    console.log(`⏳ Waiting ${Math.round(delay)}ms before starting scrape...`);
+    await this.bypass.delay(delay);
+    
     return await this.bypass.retryWithBackoff(
       async () => {
         return await this.performScrape(imageUrl);
@@ -29,27 +33,37 @@ export class GoogleCustomSearchScraper {
         if (this.bypass.shouldRotateUserAgent()) {
           console.log('🔄 Rotating user agent for Google Lens...');
         }
+        if (attempt >= 3) {
+          const extraDelay = Math.floor(Math.random() * 10000) + 5000;
+          console.log(`🛑 Multiple failures detected, waiting ${extraDelay}ms before next attempt...`);
+          return this.bypass.delay(extraDelay);
+        }
       }
     );
   }
 
   private async performScrape(imageUrl: string): Promise<ReferenceProduct[]> {
-    const delay = this.bypass.getRandomDelayBeforeRequest();
-    console.log(`⏳ Waiting ${Math.round(delay)}ms before starting scrape...`);
-    await this.bypass.delay(delay);
-
     const browser = await createStealthBrowser();
     
     let proxyConfig = undefined;
+    let proxyIndex = -1;
+    let currentProxy = null;
+    
     if (this.proxyManager && this.proxyManager.hasProxies()) {
-      const proxy = this.proxyManager.getNextProxy();
-      if (proxy) {
-        proxyConfig = this.proxyManager.getProxyForPlaywright(proxy);
-        console.log(`🔄 Using proxy: ${proxy.host}:${proxy.port}`);
+      currentProxy = this.proxyManager.getNextProxy();
+      if (currentProxy) {
+        proxyConfig = this.proxyManager.getProxyForPlaywright(currentProxy);
+        proxyIndex = (this.proxyManager as any).proxies.indexOf(currentProxy);
+        console.log(`🔄 [Google Images] Using proxy ${proxyIndex + 1}/${this.proxyManager.getProxyCount()}: ${currentProxy.host}:${currentProxy.port}`);
       }
     }
     
-    const context = await createStealthBrowserContext(browser, proxyConfig);
+    const userAgent = this.bypass.getRandomBrowserUserAgent();
+    const browserHeaders = this.bypass.generateBrowserHeaders(userAgent);
+    
+    console.log(`🔍 [Google Images] Using User-Agent: ${userAgent.substring(0, 50)}...`);
+    
+    const context = await this.createBrowserContextWithHeaders(browser, userAgent, browserHeaders, proxyConfig);
     const page = await context.newPage();
     const results: ReferenceProduct[] = [];
 
@@ -57,15 +71,14 @@ export class GoogleCustomSearchScraper {
       console.log('Navigating to Google Images...');
       
       await page.setExtraHTTPHeaders({
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-        'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
+        ...browserHeaders,
         'Referer': 'https://www.google.com/',
         'Origin': 'https://www.google.com',
       });
       
       await page.goto('https://images.google.com/', { 
         waitUntil: 'domcontentloaded', 
-        timeout: 60000 
+        timeout: 90000 
       });
       
       await this.simulateHumanBehavior(page);
@@ -170,7 +183,11 @@ export class GoogleCustomSearchScraper {
       }
 
       console.log('Waiting for results...');
-      await page.waitForLoadState('networkidle');
+      try {
+        await page.waitForLoadState('networkidle', { timeout: 30000 });
+      } catch (e) {
+        console.log('⚠️ networkidle timeout, continuing anyway...');
+      }
       await this.simulateHumanBehavior(page);
       await this.bypass.delay(3000 + Math.random() * 2000);
 
@@ -181,10 +198,18 @@ export class GoogleCustomSearchScraper {
         
         if (await shoppingTab.isVisible()) {
             await shoppingTab.click();
-            await page.waitForLoadState('networkidle');
+            try {
+              await page.waitForLoadState('networkidle', { timeout: 15000 });
+            } catch (e) {
+              console.log('⚠️ networkidle timeout after shopping tab click, continuing...');
+            }
         } else if (await shoppingLink.isVisible()) {
             await shoppingLink.click();
-            await page.waitForLoadState('networkidle');
+            try {
+              await page.waitForLoadState('networkidle', { timeout: 15000 });
+            } catch (e) {
+              console.log('⚠️ networkidle timeout after shopping link click, continuing...');
+            }
         } else {
             console.log('Shopping tab not found, checking if we are already on it or if results are mixed.');
         }
@@ -238,21 +263,42 @@ export class GoogleCustomSearchScraper {
       }
 
       console.log(`Found ${uniqueResults.length} products on Google Lens.`);
+      
+      if (proxyIndex >= 0 && this.proxyManager && currentProxy) {
+        this.proxyManager.recordProxySuccess(proxyIndex);
+      }
+      
       return uniqueResults.slice(0, 10);
 
     } catch (error) {
       console.error('Error during Google Image scrape:', error);
+      
+      if (proxyIndex >= 0 && this.proxyManager && currentProxy) {
+        this.proxyManager.recordProxyFailure(proxyIndex);
+      }
+      
       if (error instanceof Error && (
         error.message.includes('blocking') || 
         error.message.includes('CAPTCHA') ||
         error.message.includes('unusual traffic') ||
-        error.message.includes('Datadome')
+        error.message.includes('Datadome') ||
+        error.message.includes('ERR_TIMED_OUT') ||
+        error.message.includes('timeout')
       )) {
         throw error;
       }
-      return [];
+      
+      throw error;
     } finally {
-      await browser.close();
+      try {
+        await page.close();
+      } catch (e) {}
+      try {
+        await context.close();
+      } catch (e) {}
+      try {
+        await browser.close();
+      } catch (e) {}
     }
   }
 
@@ -332,5 +378,147 @@ export class GoogleCustomSearchScraper {
         await element.fill(text);
       }
     }
+  }
+
+  private async createBrowserContextWithHeaders(
+    browser: any,
+    userAgent: string,
+    browserHeaders: Record<string, string>,
+    proxyConfig?: { server: string; username?: string; password?: string }
+  ): Promise<any> {
+    const contextOptions: any = {
+      userAgent,
+      viewport: { width: 1920, height: 1080 },
+      locale: 'fr-FR',
+      timezoneId: 'Europe/Paris',
+      permissions: [],
+      colorScheme: 'light',
+      extraHTTPHeaders: {
+        ...browserHeaders,
+        'Accept-Encoding': 'gzip, deflate, br, zstd',
+      },
+    };
+
+    if (proxyConfig) {
+      contextOptions.proxy = proxyConfig;
+    }
+    
+    const context = await browser.newContext(contextOptions);
+
+    await context.addInitScript(() => {
+      const plugins: any[] = [];
+      for (let i = 0; i < 5; i++) {
+        plugins.push({
+          name: `Plugin ${i}`,
+          description: `Plugin ${i} Description`,
+          filename: `plugin${i}.dll`,
+          length: 1,
+        });
+      }
+      const languages = ['fr-FR', 'fr', 'en-US', 'en'];
+
+      Object.defineProperty(navigator, 'webdriver', {
+        get: () => false,
+        configurable: true,
+      });
+      
+      delete (navigator as any).__proto__.webdriver;
+      
+      Object.defineProperty(window, 'navigator', {
+        value: navigator,
+        writable: false,
+        configurable: false,
+      });
+      
+      if ((window as any).__playwright) delete (window as any).__playwright;
+      if ((window as any).__pw) delete (window as any).__pw;
+      if ((document as any).$cdc) delete (document as any).$cdc;
+      if ((document as any).__$webdriver) delete (document as any).__$webdriver;
+      
+      Object.defineProperty(navigator, 'plugins', {
+        get: () => plugins,
+      });
+      
+      Object.defineProperty(navigator, 'languages', {
+        get: () => languages,
+      });
+      
+      (window as any).chrome = {
+        runtime: {},
+        loadTimes: function() {},
+        csi: function() {},
+        app: {},
+      };
+      
+      Object.defineProperty(navigator, 'permissions', {
+        get: () => ({
+          query: (permissionDesc: PermissionDescriptor) => Promise.resolve({ state: 'granted' } as PermissionStatus),
+        }),
+      });
+      
+      Object.defineProperty(navigator, 'platform', {
+        get: () => 'MacIntel',
+      });
+      
+      Object.defineProperty(navigator, 'hardwareConcurrency', {
+        get: () => 8,
+      });
+      
+      Object.defineProperty(navigator, 'deviceMemory', {
+        get: () => 8,
+      });
+      
+      if ((navigator as any).getBattery) {
+        (navigator as any).getBattery = () => Promise.resolve({
+          charging: true,
+          chargingTime: 0,
+          dischargingTime: Infinity,
+          level: 1,
+        });
+      }
+      
+      Object.defineProperty(navigator, 'toString', {
+        value: () => '[object Navigator]',
+      });
+      
+      Object.defineProperty(navigator, 'connection', {
+        get: () => ({
+          effectiveType: '4g',
+          rtt: 50,
+          downlink: 10,
+          saveData: false,
+        }),
+      });
+      
+      Object.defineProperty(Notification, 'permission', {
+        get: () => 'default',
+      });
+      
+      try {
+          delete (window as any).navigator.__proto__.webdriver;
+      } catch (e) {}
+      
+      const originalQuery = window.document.querySelector;
+      window.document.querySelector = function(selector: string) {
+        if (selector === 'head > script[src*="selenium"]') {
+          return null;
+        }
+        return originalQuery.call(document, selector);
+      };
+      
+      Object.defineProperty(navigator, 'maxTouchPoints', {
+        get: () => 0,
+      });
+      
+      Object.defineProperty(navigator, 'vendor', {
+        get: () => 'Google Inc.',
+      });
+      
+      Object.defineProperty(navigator, 'vendorSub', {
+        get: () => '',
+      });
+    });
+
+    return context;
   }
 }
