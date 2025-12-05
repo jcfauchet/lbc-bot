@@ -16,7 +16,7 @@ import { IStorageService } from '@/infrastructure/storage/IStorageService'
 export class GeminiPriceEstimationService extends BasePriceEstimationService {
   public readonly providerName = 'gemini'
   private ai: GoogleGenAI
-  private readonly MODEL_NAME = 'gemini-2.5-pro'
+  private readonly MODEL_NAME = 'gemini-3-pro-preview'
   private storageService?: IStorageService
   private uploadedReferenceImageUrls: string[] = []
 
@@ -116,33 +116,13 @@ export class GeminiPriceEstimationService extends BasePriceEstimationService {
   ): Promise<FinalEstimationResult> {
     try {
       const imageParts = await this.prepareImages(images)
-      const referenceImagesMap = await this.prepareReferenceImages(referenceProducts)
 
       const userParts: Part[] = [
         { text: this.getSystemInstruction() },
         { text: this.buildUserContext(title, description) },
         ...imageParts,
+        { text: this.getAnalysisInstructions() },
       ]
-
-      if (referenceProducts.length > 0) {
-        userParts.push({
-          text: '\n\nPRODUITS DE RÉFÉRENCE SIMILAIRES :\nVoici des produits similaires trouvés sur des sites spécialisés. Je vais te présenter chaque produit avec ses détails et son image correspondante (si disponible).',
-        })
-
-        for (let i = 0; i < Math.min(referenceProducts.length, 5); i++) {
-          const ref = referenceProducts[i]
-          userParts.push({
-            text: this.formatReferenceProduct(ref, i),
-          })
-
-          const refImagePart = referenceImagesMap.get(i)
-          if (refImagePart) {
-            userParts.push(refImagePart)
-          }
-        }
-      }
-
-      userParts.push({ text: this.getAnalysisInstructions() })
 
       const generationConfig: GenerateContentParameters['config'] = {
         temperature: 0.2,
@@ -169,7 +149,7 @@ export class GeminiPriceEstimationService extends BasePriceEstimationService {
         console.error('Gemini returned empty content')
         throw new Error('Gemini returned empty response')
       }
-      return this.parseFinalEstimationResponse(content, referenceProducts)
+      return this.parseFinalEstimationResponse(content, [])
     } catch (error) {
       if (error instanceof Error && error.message.includes('Invalid response format')) {
         console.error('Gemini estimation error - parsing failed:', error.message)

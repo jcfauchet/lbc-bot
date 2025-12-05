@@ -21,8 +21,8 @@ export abstract class BasePriceEstimationService
 Analyse basée sur: photos fournies, connaissances (styles, périodes, designers, prix marché secondaire).
 
 Mission:
-1. Identifier objet, style, période, matériaux
-2. Estimer prix marché seconde main (Selency, 1stdibs, Pamono, ventes aux enchères)
+1. Décrire le produit: identifier objet, style, période, matériaux, designer si identifiable
+2. Estimer prix marché seconde main basé sur tes connaissances du marché
 3. Fourchette large mais plausible
 4. Confiance selon clarté photos et certitude
 
@@ -122,18 +122,16 @@ Critique sur titre/description (peuvent être inexactes). Designer: baser sur co
 
   protected getAnalysisInstructions(): string {
     return `
-Méthodologie:
-1. Visuel: style, matériaux, qualité, signatures
-2. Identification: designer connu? attribution? générique?
-3. Benchmark: prix marché actuel (particuliers/plateformes spécialisées)
+Analyse le produit et fournis:
+1. Une description détaillée du produit (style, matériaux, qualité, signatures, designer si identifiable)
+2. Une estimation de prix marché seconde main basée sur tes connaissances
 
 JSON uniquement:
 {
   "estimatedMinPrice": <euros>,
   "estimatedMaxPrice": <euros>,
-  "description": "<analyse>",
-  "confidence": 0.1-1.0,
-  "bestMatchSource": "<source>" (optionnel)
+  "description": "<description détaillée du produit>",
+  "confidence": 0.1-1.0
 }
     `.trim()
   }

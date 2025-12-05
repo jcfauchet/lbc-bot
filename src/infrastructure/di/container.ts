@@ -11,13 +11,6 @@ import { PrismaLbcProductListingLabelRepository } from '@/infrastructure/prisma/
 import { PrismaTaxonomyRepository } from '@/infrastructure/prisma/repositories/PrismaTaxonomyRepository'
 
 import { LeBonCoinListingScraper } from '@/infrastructure/scraping/listings/LeBonCoinListingScraper'
-// import { AuctionFrScraper } from '@/infrastructure/scraping/reference/AuctionFr/AuctionFrScraper' // Disabled: Cloudflare challenge too difficult to bypass
-// import { PamonoScraper } from '@/infrastructure/scraping/reference/Pamono/PamonoScraper'
-// import { SelencyScraper } from '@/infrastructure/scraping/reference/Selency/SelencyScraper'
-// import { FirstDibsScraper } from '@/infrastructure/scraping/reference/FirstDibsScraper/FirstDibsScraper'
-// import { GoogleImageScraper } from '@/infrastructure/scraping/reference/Google/GoogleImageScraper'
-import { GoogleCustomSearchScraper } from '@/infrastructure/scraping/reference/Google/GoogleCustomSearchScraper'
-import { IReferenceScraper } from '@/infrastructure/scraping/reference/IReferenceScraper'
 import { LeBonCoinApiClient } from '@/infrastructure/api/LeBonCoinApiClient'
 import { IListingSource } from '@/domain/services/IListingSource'
 import { LocalStorageService } from '@/infrastructure/storage/LocalStorageService'
@@ -110,24 +103,13 @@ export class Container {
       this.listingSourceScraper
     )
 
-    const referenceScrapers: Map<string, IReferenceScraper> = new Map()
-    // referenceScrapers.set('AuctionFR', new AuctionFrScraper()) // Disabled: Cloudflare challenge too difficult to bypass automatically
-    // referenceScrapers.set('Pamono', new PamonoScraper())
-    // referenceScrapers.set('1stdibs', new FirstDibsScraper())
-    // referenceScrapers.set('Selency', new SelencyScraper())
-
-    const googleImageScraper = new GoogleCustomSearchScraper()
-
     this.runAiAnalysisUseCase = new RunAiAnalysisUseCase(
       this.listingRepository,
       this.aiAnalysisRepository,
       this.listingImageRepository,
       this.priceEstimationService,
       this.imageDownloadService,
-      this.storageService,
-      referenceScrapers,
-      this.taxonomyRepository,
-      googleImageScraper
+      this.storageService
     )
 
     this.runNotificationUseCase = new RunNotificationUseCase(
