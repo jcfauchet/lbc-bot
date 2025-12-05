@@ -23,6 +23,7 @@
     "test:ui": "vitest --ui"
   },
   "dependencies": {
+    "@google-cloud/vision": "^5.3.4",
     "@google/genai": "^1.30.0",
     "@prisma/adapter-pg": "7.0.1",
     "@prisma/client": "7.0.1",
@@ -30,6 +31,7 @@
     "cloudinary": "^2.8.0",
     "date-fns": "^4.1.0",
     "dotenv": "^17.2.3",
+    "googleapis": "^167.0.0",
     "http-proxy-agent": "^7.0.2",
     "https-proxy-agent": "^7.0.6",
     "next": "^16.0.7",

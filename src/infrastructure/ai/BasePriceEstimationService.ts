@@ -16,7 +16,7 @@ export abstract class BasePriceEstimationService
 {
   abstract readonly providerName: string
 
-  protected readonly systemInstruction = `Expert en Arts Décoratifs et Design. Spécialité: signatures, matériaux nobles, designers iconiques (Jansen, Baguès, Charles, Finn Juhl, Wegner, etc.), détection de copies.
+  protected readonly systemInstruction = `Expert en Arts Décoratifs et Design. Spécialité: signatures, matériaux nobles, designers iconiques (Jansen, Baguès, Willy, Rizzo, Charles, Finn Juhl, Wegner, etc.), détection de copies.
 
 Analyse basée sur: photos fournies, connaissances (styles, périodes, designers, prix marché secondaire).
 
@@ -155,8 +155,7 @@ ${description ? `Description: ${description}` : ''}${categoriesSection}
 Mission:
 1. FILTRAGE: "daube" évidente ou hors catégories → shouldProceed: false (être permissif, en cas de doute continuer)
 2. PRÉ-ESTIMATION: fourchette prix marché secondaire (être optimiste, ne pas sous-estimer)
-3. DESIGNER: identifier designer/fabricant connu si possible (même avec incertitude). Baser sur photo/connaissances pas sur titre/description vendeur. Si pas de designer identifié mais objet de qualité, continuer quand même.
-4. TERMES RECHERCHE: générer max 4 termes pour sites spécialisés (AuctionFR, Pamono, 1stdibs, Selency) même sans designer certain. Format: "designer + caractéristiques" ou "caractéristiques + style" (ex: "table basse verre rectangulaire maison jansen" ou "table basse verre rectangulaire vintage")
+3. TERMES RECHERCHE: générer max 10 termes pour sites spécialisés (AuctionFR, Pamono, 1stdibs, Selency) permettant de trouver des produits similaires, si le produit ressemble à un produit d'un designer connu, ou s'il semble être inspiré d'un designer connu, mais qu'aucune signature n'est visible, formaliser des termes de recherche avec le designer de l'objet afin de faire une comparaison visuelle (ex: "table basse verre rectangulaire maison jansen").
 
 Règles (être PERMISSIF pour ne pas manquer de bonnes affaires):
 - isPromising: true si prix estimé > ${env.MIN_MARGIN_IN_EUR}€ OU si objet de qualité/style intéressant même sans designer certain
@@ -169,7 +168,6 @@ JSON uniquement:
   "estimatedMinPrice": <euros>,
   "estimatedMaxPrice": <euros>,
   "isPromising": <boolean>,
-  "hasDesigner": <boolean>,
   "shouldProceed": <boolean>,
   "searchTerms": [{"query": "...", "confidence": 0.5-1.0}],
   "description": "<analyse>",
@@ -272,7 +270,7 @@ JSON uniquement:
     
     // Réduire le seuil minimum de confiance pour les search terms (être plus permissif)
     const minConfidence = Math.min(env.SEARCH_TERM_MIN_CONFIDENCE, 0.5) // Au moins 0.5 au lieu de 0.8
-    const searchTerms: SearchTerm[] = (parsed.searchTerms || []).slice(0, 4).map((term: any) => ({
+    const searchTerms: SearchTerm[] = (parsed.searchTerms || []).map((term: any) => ({
       query: term.query || '',
       designer: term.designer,
       confidence: Math.min(Math.max(term.confidence || minConfidence, minConfidence), 1.0)

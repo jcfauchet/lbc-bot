@@ -7,7 +7,7 @@ import { ImageDownloadService } from '@/infrastructure/storage/ImageDownloadServ
 import { IStorageService } from '@/infrastructure/storage/IStorageService'
 import { AiAnalysis } from '@/domain/entities/AiAnalysis'
 import { IReferenceScraper } from '@/infrastructure/scraping/reference/IReferenceScraper'
-import { GoogleImageScraper } from '@/infrastructure/scraping/reference/Google/GoogleImageScraper'
+import { GoogleCustomSearchScraper } from '@/infrastructure/scraping/reference/Google/GoogleCustomSearchScraper'
 import { ListingStatus } from '@/domain/value-objects/ListingStatus'
 import { env } from '@/infrastructure/config/env'
 
@@ -21,7 +21,7 @@ export class RunAiAnalysisUseCase {
     private storageService: IStorageService,
     private referenceScrapers: Map<string, IReferenceScraper>,
     private taxonomyRepository: ITaxonomyRepository,
-    private googleImageScraper?: GoogleImageScraper
+    private googleImageScraper?: GoogleCustomSearchScraper
   ) {}
 
   async execute(

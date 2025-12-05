@@ -201,12 +201,15 @@ export async function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export async function createStealthBrowserContext(browser: Browser): Promise<BrowserContext> {
+export async function createStealthBrowserContext(
+  browser: Browser,
+  proxyConfig?: { server: string; username?: string; password?: string }
+): Promise<BrowserContext> {
   const bypass = new DataDomeBypass()
   const userAgent = bypass.getRandomBrowserUserAgent()
   const browserHeaders = bypass.generateBrowserHeaders(userAgent)
   
-  const context = await browser.newContext({
+  const contextOptions: any = {
     userAgent,
     viewport: { width: 1920, height: 1080 },
     locale: 'fr-FR',
@@ -217,7 +220,13 @@ export async function createStealthBrowserContext(browser: Browser): Promise<Bro
       ...browserHeaders,
       'Accept-Encoding': 'gzip, deflate, br, zstd',
     },
-  });
+  };
+
+  if (proxyConfig) {
+    contextOptions.proxy = proxyConfig;
+  }
+  
+  const context = await browser.newContext(contextOptions);
 
   await context.addInitScript(() => {
     // Cache objects to avoid recreating them on every access

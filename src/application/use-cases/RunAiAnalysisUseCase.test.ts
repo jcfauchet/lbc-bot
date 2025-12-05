@@ -40,9 +40,9 @@ describe('RunAiAnalysisUseCase', () => {
     expect(result).toBeDefined()
   })
 
-  it('should estimate price from image URL, title and description', async () => {
-    // Modifier ces valeurs pour tester avec vos propres données
-    const imageUrl = 'https://img.leboncoin.fr/api/v1/lbcpb1/images/9b/aa/fb/9baafbd6db6dd1518fc72731d44967a84699bfb7.jpg?rule=ad-large'
+  it.only('should estimate price from image URL, title and description', async () => {
+    // const imageUrl = 'https://img.leboncoin.fr/api/v1/lbcpb1/images/9b/aa/fb/9baafbd6db6dd1518fc72731d44967a84699bfb7.jpg?rule=ad-large'
+    const imageUrl = 'https://images.selency.com/843c7e45-98d2-4fbd-82e2-d98a622992dc?bg_colour=f5f5f5&width=1762&height=1144&func=bound'
     const title = 'Table basse vintage'
     const description = 'Table bass 1970 vintage'
 
@@ -53,7 +53,6 @@ describe('RunAiAnalysisUseCase', () => {
     console.log(`Description: ${description}`)
     console.log(`Provider AI: ${container.priceEstimationService.providerName}`)
 
-    // Récupérer les catégories
     const categories = await container.taxonomyRepository.getCategories()
     console.log(`\n📋 Catégories disponibles: ${categories.length}`)
     if (categories.length > 0) {
