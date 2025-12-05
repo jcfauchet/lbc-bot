@@ -42,20 +42,22 @@ export class GoogleCustomSearchScraper {
     );
   }
 
-  private async performScrape(imageUrl: string): Promise<ReferenceProduct[]> {
+  private async performScrape(imageUrl: string, attemptWithoutProxy: boolean = false): Promise<ReferenceProduct[]> {
     const browser = await createStealthBrowser();
     
     let proxyConfig = undefined;
     let proxyIndex = -1;
     let currentProxy = null;
     
-    if (this.proxyManager && this.proxyManager.hasProxies()) {
+    if (!attemptWithoutProxy && this.proxyManager && this.proxyManager.hasProxies()) {
       currentProxy = this.proxyManager.getNextProxy();
       if (currentProxy) {
         proxyConfig = this.proxyManager.getProxyForPlaywright(currentProxy);
         proxyIndex = (this.proxyManager as any).proxies.indexOf(currentProxy);
         console.log(`🔄 [Google Images] Using proxy ${proxyIndex + 1}/${this.proxyManager.getProxyCount()}: ${currentProxy.host}:${currentProxy.port}`);
       }
+    } else if (attemptWithoutProxy) {
+      console.log(`⚠️ [Google Images] Retrying without proxy after proxy failures...`);
     }
     
     const userAgent = this.bypass.getRandomBrowserUserAgent();
@@ -76,10 +78,33 @@ export class GoogleCustomSearchScraper {
         'Origin': 'https://www.google.com',
       });
       
-      await page.goto('https://images.google.com/', { 
-        waitUntil: 'domcontentloaded', 
-        timeout: 90000 
-      });
+      try {
+        await page.goto('https://images.google.com/', { 
+          waitUntil: 'domcontentloaded', 
+          timeout: 90000 
+        });
+      } catch (gotoError: any) {
+        const errorMessage = gotoError?.message || '';
+        const isProxyError = errorMessage.includes('ERR_TUNNEL_CONNECTION_FAILED') || 
+                            errorMessage.includes('ERR_TIMED_OUT') ||
+                            errorMessage.includes('ERR_PROXY_CONNECTION_FAILED');
+        
+        if (isProxyError && currentProxy && !attemptWithoutProxy) {
+          console.log(`⚠️ Proxy error detected, trying without proxy...`);
+          
+          if (proxyIndex >= 0 && this.proxyManager) {
+            this.proxyManager.recordProxyFailure(proxyIndex);
+          }
+          
+          await page.close();
+          await context.close();
+          await browser.close();
+          
+          return await this.performScrape(imageUrl, true);
+        }
+        
+        throw gotoError;
+      }
       
       await this.simulateHumanBehavior(page);
       await this.bypass.delay(2000 + Math.random() * 2000);
@@ -273,7 +298,31 @@ export class GoogleCustomSearchScraper {
     } catch (error) {
       console.error('Error during Google Image scrape:', error);
       
-      if (proxyIndex >= 0 && this.proxyManager && currentProxy) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const isProxyError = errorMessage.includes('ERR_TUNNEL_CONNECTION_FAILED') || 
+                          errorMessage.includes('ERR_TIMED_OUT') ||
+                          errorMessage.includes('ERR_PROXY_CONNECTION_FAILED');
+      
+      if (isProxyError && currentProxy && !attemptWithoutProxy) {
+        if (proxyIndex >= 0 && this.proxyManager) {
+          this.proxyManager.recordProxyFailure(proxyIndex);
+        }
+        
+        try {
+          await page.close();
+        } catch (e) {}
+        try {
+          await context.close();
+        } catch (e) {}
+        try {
+          await browser.close();
+        } catch (e) {}
+        
+        console.log(`⚠️ Proxy failed, retrying without proxy...`);
+        return await this.performScrape(imageUrl, true);
+      }
+      
+      if (proxyIndex >= 0 && this.proxyManager && currentProxy && !isProxyError) {
         this.proxyManager.recordProxyFailure(proxyIndex);
       }
       
@@ -281,11 +330,13 @@ export class GoogleCustomSearchScraper {
         error.message.includes('blocking') || 
         error.message.includes('CAPTCHA') ||
         error.message.includes('unusual traffic') ||
-        error.message.includes('Datadome') ||
-        error.message.includes('ERR_TIMED_OUT') ||
-        error.message.includes('timeout')
+        error.message.includes('Datadome')
       )) {
         throw error;
+      }
+      
+      if (isProxyError && attemptWithoutProxy) {
+        throw new Error('All proxies failed and direct connection also failed');
       }
       
       throw error;
