@@ -27,8 +27,6 @@ const envSchema = z.object({
     .string()
     .optional()
     .transform((v) => v ? v.split(',').map((s) => s.trim()).filter(Boolean) : []),
-  GOOGLE_SEARCH_API_KEY: z.string().min(1),
-  GOOGLE_SEARCH_ENGINE_ID: z.string().min(1),
 })
 
 export type Env = z.infer<typeof envSchema>
