@@ -106,6 +106,12 @@ export class GoogleCustomSearchScraper {
         throw gotoError;
       }
       
+      const currentUrl = page.url();
+      if (currentUrl.includes('/sorry/') || currentUrl.includes('sorry/index')) {
+        console.log('🔴 Google CAPTCHA/sorry page detected! URL:', currentUrl);
+        throw new Error('Google Lens blocking detected - CAPTCHA/sorry page');
+      }
+      
       await this.simulateHumanBehavior(page);
       await this.bypass.delay(2000 + Math.random() * 2000);
 
@@ -134,15 +140,23 @@ export class GoogleCustomSearchScraper {
         console.log('Consent handling error (might be already accepted):', e);
       }
 
+      const currentUrlAfterLoad = page.url();
+      if (currentUrlAfterLoad.includes('/sorry/') || currentUrlAfterLoad.includes('sorry/index')) {
+        console.log('🔴 Google CAPTCHA/sorry page detected after page load! URL:', currentUrlAfterLoad);
+        throw new Error('Google Lens blocking detected - CAPTCHA/sorry page');
+      }
+      
       const pageContent = await page.content();
       const hasCaptcha = pageContent.includes('Nos systèmes ont détecté un trafic exceptionnel') || 
                         pageContent.includes('Our systems have detected unusual traffic') ||
                         pageContent.includes('captcha') ||
-                        pageContent.includes('CAPTCHA');
+                        pageContent.includes('CAPTCHA') ||
+                        pageContent.includes('/sorry/') ||
+                        currentUrlAfterLoad.includes('/sorry/');
       
       if (hasCaptcha) {
         try {
-          const captchaText = await page.getByText(/Nos systèmes ont détecté un trafic exceptionnel|Our systems have detected unusual traffic|captcha|CAPTCHA/i).first();
+          const captchaText = await page.getByText(/Nos systèmes ont détecté un trafic exceptionnel|Our systems have detected unusual traffic|captcha|CAPTCHA|sorry/i).first();
           if (await captchaText.isVisible()) {
             console.log('🔴 CAPTCHA/BLOCKING DETECTED! Throwing error to trigger retry with new user agent...');
             throw new Error('Google Lens blocking detected - CAPTCHA or unusual traffic');
@@ -157,10 +171,12 @@ export class GoogleCustomSearchScraper {
       
       const isBlocked = await page.evaluate(() => {
         const bodyText = document.body.innerText.toLowerCase();
+        const currentUrl = window.location.href.toLowerCase();
         return bodyText.includes('unusual traffic') || 
                bodyText.includes('trafic exceptionnel') ||
                bodyText.includes('verify you') ||
-               bodyText.includes('vérifiez que vous');
+               bodyText.includes('vérifiez que vous') ||
+               currentUrl.includes('/sorry/');
       });
       
       if (isBlocked) {
@@ -213,6 +229,13 @@ export class GoogleCustomSearchScraper {
       } catch (e) {
         console.log('⚠️ networkidle timeout, continuing anyway...');
       }
+      
+      const resultsUrl = page.url();
+      if (resultsUrl.includes('/sorry/') || resultsUrl.includes('sorry/index')) {
+        console.log('🔴 Google CAPTCHA/sorry page detected after search! URL:', resultsUrl);
+        throw new Error('Google Lens blocking detected - CAPTCHA/sorry page after search');
+      }
+      
       await this.simulateHumanBehavior(page);
       await this.bypass.delay(3000 + Math.random() * 2000);
 
@@ -282,7 +305,14 @@ export class GoogleCustomSearchScraper {
 
       const uniqueResults = results.filter((v, i, a) => a.findIndex(t => t.url === v.url) === i);
       
-      console.log(`Current URL: ${page.url()}`);
+      const finalUrl = page.url();
+      console.log(`Current URL: ${finalUrl}`);
+      
+      if (finalUrl.includes('/sorry/') || finalUrl.includes('sorry/index')) {
+        console.log('🔴 Google CAPTCHA/sorry page detected in final URL!');
+        throw new Error('Google Lens blocking detected - CAPTCHA/sorry page');
+      }
+      
       if (uniqueResults.length === 0) {
         console.log('No results found.');
       }
