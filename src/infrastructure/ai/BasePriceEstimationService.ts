@@ -14,6 +14,7 @@ import path from 'path'
 export abstract class BasePriceEstimationService
   implements IPriceEstimationService
 {
+
   abstract readonly providerName: string
 
   protected readonly systemInstruction = `Expert en Arts Décoratifs et Design. Spécialité: signatures, matériaux nobles, designers iconiques (Jansen, Baguès, Willy, Rizzo, Charles, Finn Juhl, Wegner, etc.), détection de copies.
@@ -28,25 +29,12 @@ Mission:
 
 Répondre UNIQUEMENT en JSON selon le schéma fourni.`
 
-  abstract preEstimate(
-    images: string[],
-    title: string,
-    description?: string,
-    categories?: string[]
-  ): Promise<PreEstimationResult>
-
   abstract estimatePrice(
     images: string[],
     title: string,
     description?: string,
     referenceProducts?: any[]
   ): Promise<FinalEstimationResult>
-
-  abstract analyzeForSearch(
-    images: string[],
-    title: string,
-    description?: string
-  ): Promise<SearchAnalysisResult>
 
   protected buildPrompt(
     title: string, 
@@ -108,18 +96,6 @@ Critique sur titre/description (peuvent être inexactes). Designer: baser sur co
     `.trim()
   }
 
-  protected formatReferenceProduct(ref: any, index: number): string {
-    const details = [];
-    if (ref.designer) details.push(`Designer: ${ref.designer}`);
-    if (ref.period) details.push(`Période: ${ref.period}`);
-    if (ref.material) details.push(`Matériau: ${ref.material}`);
-    if (ref.style) details.push(`Style: ${ref.style}`);
-    
-    const detailsStr = details.length > 0 ? ` (${details.join(', ')})` : '';
-    
-    return `PRODUIT DE RÉFÉRENCE #${index + 1} :\n${ref.title}${detailsStr} - ${ref.price} ${ref.currency} [${ref.source}]`;
-  }
-
   protected getAnalysisInstructions(): string {
     return `
 Analyse le produit et fournis:
@@ -131,44 +107,6 @@ JSON uniquement:
   "estimatedMinPrice": <euros>,
   "estimatedMaxPrice": <euros>,
   "description": "<description détaillée du produit>",
-  "confidence": 0.1-1.0
-}
-    `.trim()
-  }
-
-  protected buildPreEstimationPrompt(title: string, description?: string, categories?: string[]): string {
-    let categoriesSection = ''
-    if (categories && categories.length > 0) {
-      const categoriesList = categories.map(c => `- ${c.replace(/_/g, ' ')}`).join('\n')
-      categoriesSection = `\nCATÉGORIES QUE NOUS GÉRONS (ces catégories incluent leurs variantes : table d'appoint = table basse, desserte = table basse, console = bibliothèque/enfilade, etc.) :\n${categoriesList}\n`
-    }
-    
-    return `
-Pré-estimation rapide pour déterminer si analyse approfondie nécessaire.
-
-Info vendeur:
-Titre: ${title}
-${description ? `Description: ${description}` : ''}${categoriesSection}
-
-Mission:
-1. FILTRAGE: "daube" évidente ou hors catégories → shouldProceed: false (être permissif, en cas de doute continuer)
-2. PRÉ-ESTIMATION: fourchette prix marché secondaire (être optimiste, ne pas sous-estimer)
-3. TERMES RECHERCHE: générer max 10 termes pour sites spécialisés (AuctionFR, Pamono, 1stdibs, Selency) permettant de trouver des produits similaires, si le produit ressemble à un produit d'un designer connu, ou s'il semble être inspiré d'un designer connu, mais qu'aucune signature n'est visible, formaliser des termes de recherche avec le designer de l'objet afin de faire une comparaison visuelle (ex: "table basse verre rectangulaire maison jansen").
-
-Règles (être PERMISSIF pour ne pas manquer de bonnes affaires):
-- isPromising: true si prix estimé > ${env.MIN_MARGIN_IN_EUR}€ OU si objet de qualité/style intéressant même sans designer certain
-- shouldProceed: true sauf si "daube" évidente ou hors catégories. En cas de doute, continuer.
-- hasDesigner: true si designer identifié (même avec incertitude modérée), false sinon (mais continuer quand même si objet intéressant)
-- searchTerms: générer même sans designer certain, utiliser caractéristiques/style/matériaux
-
-JSON uniquement:
-{
-  "estimatedMinPrice": <euros>,
-  "estimatedMaxPrice": <euros>,
-  "isPromising": <boolean>,
-  "shouldProceed": <boolean>,
-  "searchTerms": [{"query": "...", "confidence": 0.5-1.0}],
-  "description": "<analyse>",
   "confidence": 0.1-1.0
 }
     `.trim()
@@ -194,96 +132,6 @@ JSON uniquement:
   "designer": "<Designer>" ou null
 }
     `.trim()
-  }
-
-  protected parsePreEstimationResponse(content: string): PreEstimationResult {
-    if (!content || content.trim().length === 0) {
-      console.error('Empty response content')
-      throw new Error('Invalid response format: empty content')
-    }
-
-    let jsonString: string | null = null
-    let parsed: any = null
-
-    const extractionStrategies = [
-      () => {
-        const markdownJsonMatch = content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/)
-        return markdownJsonMatch ? markdownJsonMatch[1] : null
-      },
-      () => {
-        const jsonMatch = content.match(/\{[\s\S]*\}/)
-        return jsonMatch ? jsonMatch[0] : null
-      },
-      () => {
-        const trimmed = content.trim()
-        return trimmed.startsWith('{') && trimmed.endsWith('}') ? trimmed : null
-      },
-    ]
-
-    for (const strategy of extractionStrategies) {
-      try {
-        jsonString = strategy()
-        if (jsonString) {
-          parsed = JSON.parse(jsonString)
-          if (parsed && typeof parsed === 'object') {
-            break
-          }
-        }
-      } catch (e) {
-        continue
-      }
-    }
-
-    if (!parsed || typeof parsed !== 'object') {
-      console.error('Failed to extract valid JSON from response')
-      console.error('Response content (first 500 chars):', content.substring(0, 500))
-      throw new Error(`Invalid response format: could not parse JSON. Content preview: ${content.substring(0, 200)}`)
-    }
-
-    let confidence = 0.5
-    if (typeof parsed.confidence === 'number') {
-      confidence = parsed.confidence
-    } else if (typeof parsed.confidence === 'string') {
-      const match = parsed.confidence.match(/(\d+(?:\.\d+)?)/)
-      if (match) {
-        confidence = parseFloat(match[1])
-        if (confidence > 1) confidence = confidence / 100
-      }
-    }
-
-    const estimatedMinPrice = parsed.estimatedMinPrice ?? parsed.minPrice ?? parsed.estimated_min_price ?? 0
-    const estimatedMaxPrice = parsed.estimatedMaxPrice ?? parsed.maxPrice ?? parsed.estimated_max_price ?? 0
-
-    if (typeof estimatedMinPrice !== 'number' || typeof estimatedMaxPrice !== 'number') {
-      console.error('Invalid price values in response:', { estimatedMinPrice, estimatedMaxPrice })
-      console.error('Full parsed response:', parsed)
-      throw new Error(`Invalid response format: price values must be numbers. Got min: ${estimatedMinPrice}, max: ${estimatedMaxPrice}`)
-    }
-
-    // Par défaut, être permissif pour ne pas manquer de bonnes affaires
-    const isPromising = parsed.isPromising ?? true
-    const hasDesigner = parsed.hasDesigner ?? false
-    // shouldProceed par défaut à true si isPromising, sinon on vérifie quand même si le prix estimé est intéressant
-    const shouldProceed = parsed.shouldProceed ?? (isPromising || (estimatedMinPrice >= env.MIN_MARGIN_IN_EUR))
-    
-    // Réduire le seuil minimum de confiance pour les search terms (être plus permissif)
-    const minConfidence = Math.min(env.SEARCH_TERM_MIN_CONFIDENCE, 0.5) // Au moins 0.5 au lieu de 0.8
-    const searchTerms: SearchTerm[] = (parsed.searchTerms || []).map((term: any) => ({
-      query: term.query || '',
-      designer: term.designer,
-      confidence: Math.min(Math.max(term.confidence || minConfidence, minConfidence), 1.0)
-    })).filter((term: SearchTerm) => term.query && term.confidence >= minConfidence)
-
-    return {
-      estimatedMinPrice: Money.fromEuros(estimatedMinPrice),
-      estimatedMaxPrice: Money.fromEuros(estimatedMaxPrice),
-      isPromising,
-      hasDesigner,
-      shouldProceed,
-      searchTerms,
-      description: parsed.description || parsed.analysis || "Analyse de l'objet non disponible.",
-      confidence: Math.min(Math.max(confidence, 0.1), 1.0),
-    }
   }
 
   protected parseResponse(content: string): PriceEstimationResult {
@@ -360,22 +208,11 @@ JSON uniquement:
     return result
   }
 
-  protected parseFinalEstimationResponse(content: string, referenceProducts?: any[]): FinalEstimationResult {
+  protected parseFinalEstimationResponse(content: string): FinalEstimationResult {
     const baseResult = this.parseResponse(content)
     
     let bestMatchSource: string | undefined
     let bestMatchUrl: string | undefined
-    
-    if (referenceProducts && referenceProducts.length > 0) {
-      const parsed = this.extractJson(content)
-      if (parsed && parsed.bestMatchSource) {
-        bestMatchSource = parsed.bestMatchSource
-        const bestMatch = referenceProducts.find(p => p.source === bestMatchSource)
-        if (bestMatch) {
-          bestMatchUrl = bestMatch.url
-        }
-      }
-    }
     
     return {
       ...baseResult,

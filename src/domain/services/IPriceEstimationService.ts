@@ -22,12 +22,6 @@ export interface ReferenceProduct {
 
 export interface IPriceEstimationService {
   readonly providerName: string
-  preEstimate(
-    images: string[],
-    title: string,
-    description?: string,
-    categories?: string[]
-  ): Promise<PreEstimationResult>
   
   estimatePrice(
     images: string[],
@@ -35,12 +29,6 @@ export interface IPriceEstimationService {
     description?: string,
     referenceProducts?: ReferenceProduct[]
   ): Promise<FinalEstimationResult>
-
-  analyzeForSearch(
-    images: string[],
-    title: string,
-    description?: string
-  ): Promise<SearchAnalysisResult>
 }
 
 export interface SearchAnalysisResult {

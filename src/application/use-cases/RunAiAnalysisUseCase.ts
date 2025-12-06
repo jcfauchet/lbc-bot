@@ -50,7 +50,6 @@ export class RunAiAnalysisUseCase {
           continue
         }
 
-        console.log(`Running Gemini analysis for: ${listing.title}`)
         const estimation = await this.priceEstimationService.estimatePrice(
           imageUrls,
           listing.title,

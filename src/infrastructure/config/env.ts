@@ -13,8 +13,6 @@ const envSchema = z.object({
     .pipe(z.array(z.string().email())),
   CRON_SECRET: z.string().min(1).optional(),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-  STORAGE_TYPE: z.enum(['local', 'cloudinary']).default('local'),
-  STORAGE_LOCAL_PATH: z.string().default('./public/images/listings'),
   CLOUDINARY_CLOUD_NAME: z.string().optional(),
   CLOUDINARY_API_KEY: z.string().optional(),
   CLOUDINARY_API_SECRET: z.string().optional(),

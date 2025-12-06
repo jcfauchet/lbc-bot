@@ -13,7 +13,6 @@ import { PrismaTaxonomyRepository } from '@/infrastructure/prisma/repositories/P
 import { LeBonCoinListingScraper } from '@/infrastructure/scraping/listings/LeBonCoinListingScraper'
 import { LeBonCoinApiClient } from '@/infrastructure/api/LeBonCoinApiClient'
 import { IListingSource } from '@/domain/services/IListingSource'
-import { LocalStorageService } from '@/infrastructure/storage/LocalStorageService'
 import { CloudinaryStorageService } from '@/infrastructure/storage/CloudinaryStorageService'
 import { IStorageService } from '@/infrastructure/storage/IStorageService'
 import { ImageDownloadService } from '@/infrastructure/storage/ImageDownloadService'
@@ -78,9 +77,7 @@ export class Container {
     this.listingSourceApi = new LeBonCoinApiClient()
     this.listingSourceScraper = new LeBonCoinListingScraper()
     
-    this.storageService = env.STORAGE_TYPE === 'cloudinary'
-      ? new CloudinaryStorageService()
-      : new LocalStorageService(env.STORAGE_LOCAL_PATH)
+    this.storageService = new CloudinaryStorageService()
     this.imageDownloadService = new ImageDownloadService(
       this.storageService,
       this.listingImageRepository
