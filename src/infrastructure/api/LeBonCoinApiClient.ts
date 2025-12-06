@@ -221,9 +221,12 @@ export class LeBonCoinApiClient implements IListingSource {
         const now = new Date()
         const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000)
 
+
         return data.ads
           .filter((ad) => {
             if (!ad.price || ad.price.length === 0) return false
+
+            if (ad.professional_ad || ad.owner.type === 'pro') return false
             
             if (ad.first_publication_date) {
               const publicationDate = new Date(ad.first_publication_date)
