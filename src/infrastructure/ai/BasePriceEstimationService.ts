@@ -87,8 +87,8 @@ Critique sur titre/description (peuvent être inexactes). Designer: baser sur co
   protected getAnalysisInstructions(): string {
     return `
 Analyse le produit et fournis:
-1. Une description détaillée du produit (style, matériaux, qualité, signatures, designer si identifiable)
-2. Une estimation de prix marché seconde main basée sur tes connaissances
+1. Une description détaillée du produit (style, matériaux, qualité, signatures, designer possible)
+2. Une estimation de prix marché seconde main basée sur tes connaissances, en cas de doute, vérifier le prix de vente sur les sites spécialisés
 
 JSON uniquement:
 {
