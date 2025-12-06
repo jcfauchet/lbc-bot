@@ -17,18 +17,6 @@ export abstract class BasePriceEstimationService
 
   abstract readonly providerName: string
 
-  protected readonly systemInstruction = `Expert en Arts Décoratifs et Design. Spécialité: signatures, matériaux nobles, designers iconiques (Jansen, Baguès, Willy, Rizzo, Charles, Finn Juhl, Wegner, etc.), détection de copies.
-
-Analyse basée sur: photos fournies, connaissances (styles, périodes, designers, prix marché secondaire).
-
-Mission:
-1. Décrire le produit: identifier objet, style, période, matériaux, designer si identifiable
-2. Estimer prix marché seconde main basé sur tes connaissances du marché
-3. Fourchette large mais plausible
-4. Confiance selon clarté photos et certitude
-
-Répondre UNIQUEMENT en JSON selon le schéma fourni.`
-
   abstract estimatePrice(
     images: string[],
     title: string,
@@ -286,6 +274,16 @@ JSON uniquement:
   }
   
   protected getSystemInstruction(): string {
-      return this.systemInstruction;
+      return `Expert en Arts Décoratifs et Design. Spécialité: signatures, matériaux nobles, designers iconiques (Jansen, Baguès, Willy Rizzo, Charles, Finn Juhl, Wegner, etc.), détection de copies.
+
+Analyse basée sur: photos fournies, connaissances (styles, périodes, designers, prix marché secondaire).
+
+Mission:
+1. Décrire le produit: identifier objet, style, période, matériaux, designer si identifiable
+2. Estimer prix marché seconde main basé sur tes connaissances du marché
+3. Fourchette large mais plausible
+4. Confiance selon clarté photos et certitude
+
+Répondre UNIQUEMENT en JSON selon le schéma fourni.`
   }
 }
