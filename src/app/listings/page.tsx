@@ -25,7 +25,7 @@ function getStatusBadgeClass(status: string): string {
 }
 
 export default async function ListingsPage() {
-  const listings = await container.getNonNotifiedListingsUseCase.execute(100);
+  const listings = await container.getNonNotifiedListingsUseCase.execute(150);
 
   return (
     <main className="p-8 max-w-7xl mx-auto">
@@ -37,7 +37,7 @@ export default async function ListingsPage() {
           📋 Produits non notifiés
         </h1>
         <p className="text-gray-600">
-          {listings.length} produit{listings.length > 1 ? 's' : ''} trouvé{listings.length > 1 ? 's' : ''}
+          Nos {listings.length} derniers produits
         </p>
       </div>
 
