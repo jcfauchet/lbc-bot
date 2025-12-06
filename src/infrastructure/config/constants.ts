@@ -25,7 +25,8 @@ export const CATEGORIES_TO_EXCLUDE_FROM_LBC = [
   'Animaux',
   'CD - Musique',
   'Caravaning',
-  'Équipements pour restaurants & hôtels'
+  'Équipements pour restaurants & hôtels',
+  'Poids lourds'
 ]
 
 // Example: 'Motos' -> 'motos'
