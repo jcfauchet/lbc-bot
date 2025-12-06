@@ -35,6 +35,11 @@ export interface DashboardStats {
       images: Array<{
         urlRemote: string
       }>
+      aiAnalysis: {
+        estMinCents: number
+        estMaxCents: number
+        marginCents: number
+      } | null
     }
   }>
 }
@@ -114,7 +119,8 @@ export class GetDashboardStatsUseCase {
           include: {
             images: {
               take: 1
-            }
+            },
+            aiAnalysis: true
           }
         }
       }
@@ -138,7 +144,12 @@ export class GetDashboardStatsUseCase {
           priceCents: alert.listing.priceCents,
           images: alert.listing.images.map(img => ({
             urlRemote: img.urlRemote
-          }))
+          })),
+          aiAnalysis: alert.listing.aiAnalysis ? {
+            estMinCents: alert.listing.aiAnalysis.estMinCents,
+            estMaxCents: alert.listing.aiAnalysis.estMaxCents,
+            marginCents: alert.listing.aiAnalysis.marginCents
+          } : null
         }
       }))
     }
