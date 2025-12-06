@@ -61,7 +61,9 @@ export class GeminiPriceEstimationService extends BasePriceEstimationService {
         },
       })
 
-      console.log(response.text)
+      console.log('response.text', response.text)
+
+      console.log('usageMetadata', response.usageMetadata)
 
       const content = response.text || ''
       if (!content) {
