@@ -281,7 +281,7 @@ Analyse basée sur: photos fournies, connaissances (styles, périodes, designers
 Mission:
 1. Décrire le produit: identifier objet, style, période, matériaux, designer si identifiable
 2. Estimer prix marché seconde main basé sur tes connaissances du marché
-3. Fourchette large mais plausible
+3. Fourchette plausible et réaliste
 4. Confiance selon clarté photos et certitude
 
 Répondre UNIQUEMENT en JSON selon le schéma fourni.`
