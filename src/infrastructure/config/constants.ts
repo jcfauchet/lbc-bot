@@ -27,7 +27,9 @@ export const CATEGORIES_TO_EXCLUDE_FROM_LBC = [
   'Caravaning',
   'Équipements pour restaurants & hôtels',
   'Poids lourds',
-  'Modélisme'
+  'Modélisme',
+  'Équipement nautisme',
+  'Utilitaires'
 ]
 
 // Example: 'Motos' -> 'motos'
