@@ -39,7 +39,7 @@ export class RunAiAnalysisUseCase {
         if (filterResult.exclude) {
           console.log(`  → Exclu par filtre textuel: ${filterResult.reason}`)
           listing.markAsIgnored()
-          listing.setIgnoreReason(filterResult.reason)
+          listing.setIgnoreReason(filterResult.reason || 'Filtre textuel')
           await this.listingRepository.update(listing)
           continue
         }
