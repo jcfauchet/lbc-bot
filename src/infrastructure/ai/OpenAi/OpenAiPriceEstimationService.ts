@@ -29,7 +29,7 @@ export class OpenAiPriceEstimationService extends BasePriceEstimationService {
         this.getSystemInstruction(),
         this.buildUserContext(title, description),
         this.getAnalysisInstructions(),
-        'Use the web_search only if needed.'
+        'Use the web_search only if you are not sure about the price of the item.'
       ].join('\n\n')
 
       const inputContent = [
