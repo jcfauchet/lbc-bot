@@ -1,7 +1,5 @@
 import OpenAI from 'openai'
 import {
-  ReferenceProduct,
-  SearchAnalysisResult,
   FinalEstimationResult,
 } from '@/domain/services/IPriceEstimationService'
 import { BasePriceEstimationService } from '../BasePriceEstimationService'
@@ -27,38 +25,52 @@ export class OpenAiPriceEstimationService extends BasePriceEstimationService {
     try {
       const imageContents = await this.prepareImages(images)
 
-      const userContent: any[] = [
-        { type: 'text', text: this.buildUserContext(title, description) },
-        ...imageContents.map((url) => ({
-          type: 'image_url' as const,
-          image_url: { url },
-        })),
+      const fullPrompt = [
+        this.getSystemInstruction(),
+        this.buildUserContext(title, description),
+        this.getAnalysisInstructions(),
+        'Use the web_search only if needed.'
+      ].join('\n\n')
+
+      const inputContent = [
+        {
+          type: 'message',
+          role: 'user',
+          content: [
+            { type: 'input_text', text: fullPrompt },
+            ...imageContents.map((url) => ({
+              type: 'input_image',
+              image_url: url,
+            })),
+          ],
+        },
       ]
 
-      userContent.push({ type: 'text', text: this.getAnalysisInstructions() })
-
-      const response = await this.client.chat.completions.create({
-        model: 'gpt-5.1',
-        response_format: { type: 'json_object' },
-        messages: [
-          {
-            role: 'system',
-            content: this.getSystemInstruction(),
-          },
-          {
-            role: 'user',
-            content: userContent,
-          },
-        ],
-        // max_tokens: 1000,
-        temperature: 0.2,
+      const response = await (this.client as any).responses.create({
+        model: 'gpt-5',
+        tools: [{ type: 'web_search' }],
+        input: inputContent,
       })
 
-      const content = response.choices[0]?.message?.content || ''
-      if (!content) {
-        console.error('OpenAI returned empty content')
-        throw new Error('OpenAI returned empty response')
+      let content = ''
+      
+      if (response.output_text && typeof response.output_text === 'string') {
+        content = response.output_text
+      } else if (response.output && Array.isArray(response.output)) {
+        const messageItem = response.output.find((item: any) => item.type === 'message' && item.content)
+        if (messageItem && Array.isArray(messageItem.content)) {
+          const textItem = messageItem.content.find((item: any) => item.type === 'output_text' && item.text)
+          if (textItem && textItem.text) {
+            content = textItem.text
+          }
+        }
       }
+
+      if (!content || typeof content !== 'string') {
+        console.error('OpenAI returned invalid content structure:', JSON.stringify(response, null, 2))
+        throw new Error('OpenAI returned empty or invalid response')
+      }
+
       return this.parseFinalEstimationResponse(content)
     } catch (error) {
       if (error instanceof Error && error.message.includes('Invalid response format')) {
