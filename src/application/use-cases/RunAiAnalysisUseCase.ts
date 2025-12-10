@@ -2,6 +2,7 @@ import { IListingRepository } from '@/domain/repositories/IListingRepository'
 import { IAiAnalysisRepository } from '@/domain/repositories/IAiAnalysisRepository'
 import { IListingImageRepository } from '@/domain/repositories/IListingImageRepository'
 import { IPriceEstimationService } from '@/domain/services/IPriceEstimationService'
+import { ITextFilterService } from '@/domain/services/ITextFilterService'
 import { ImageDownloadService } from '@/infrastructure/storage/ImageDownloadService'
 import { IStorageService } from '@/infrastructure/storage/IStorageService'
 import { AiAnalysis } from '@/domain/entities/AiAnalysis'
@@ -15,7 +16,8 @@ export class RunAiAnalysisUseCase {
     private imageRepository: IListingImageRepository,
     private priceEstimationService: IPriceEstimationService,
     private imageDownloadService: ImageDownloadService,
-    private storageService: IStorageService
+    private storageService: IStorageService,
+    private textFilterService: ITextFilterService
   ) {}
 
   async execute(
@@ -32,6 +34,15 @@ export class RunAiAnalysisUseCase {
     for (const listing of batch) {
       try {
         console.log(`Analyzing listing: ${listing.title}`)
+        
+        const filterResult = this.textFilterService.shouldExclude(listing.title)
+        if (filterResult.exclude) {
+          console.log(`  → Exclu par filtre textuel: ${filterResult.reason}`)
+          listing.markAsIgnored()
+          listing.setIgnoreReason(filterResult.reason)
+          await this.listingRepository.update(listing)
+          continue
+        }
         
         listing.markAsAnalyzing()
         await this.listingRepository.update(listing)

@@ -75,6 +75,7 @@ export class PrismaLbcProductListingRepository implements IListingRepository {
       where: { id: listing.id },
       data: {
         status: listing.status,
+        ignoreReason: listing.ignoreReason,
         updatedAt: new Date(),
       },
     })
@@ -115,6 +116,7 @@ export class PrismaLbcProductListingRepository implements IListingRepository {
       region: raw.region,
       publishedAt: raw.publishedAt,
       status: raw.status as ListingStatus,
+      ignoreReason: raw.ignoreReason,
       createdAt: raw.createdAt,
       updatedAt: raw.updatedAt,
     })

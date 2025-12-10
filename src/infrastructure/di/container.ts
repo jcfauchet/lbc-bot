@@ -21,6 +21,8 @@ import { ResendMailer } from '@/infrastructure/mail/ResendMailer'
 
 
 import { IPriceEstimationService } from '@/domain/services/IPriceEstimationService'
+import { ITextFilterService } from '@/domain/services/ITextFilterService'
+import { TextFilterService } from '@/infrastructure/filtering/TextFilterService'
 
 import { RunListingScrapingUseCase } from '@/application/use-cases/RunListingScrapingUseCase'
 import { RunAiAnalysisUseCase } from '@/application/use-cases/RunAiAnalysisUseCase'
@@ -49,6 +51,7 @@ export class Container {
   public readonly storageService: IStorageService
   public readonly imageDownloadService: ImageDownloadService
   public readonly priceEstimationService: IPriceEstimationService
+  public readonly textFilterService: ITextFilterService
   public readonly mailer: ResendMailer
 
 
@@ -90,6 +93,7 @@ export class Container {
       this.storageService
     )
     
+    this.textFilterService = new TextFilterService()
     this.mailer = new ResendMailer(env.RESEND_API_KEY)
 
     this.runListingScrapingUseCase = new RunListingScrapingUseCase(
@@ -106,7 +110,8 @@ export class Container {
       this.listingImageRepository,
       this.priceEstimationService,
       this.imageDownloadService,
-      this.storageService
+      this.storageService,
+      this.textFilterService
     )
 
     this.runNotificationUseCase = new RunNotificationUseCase(

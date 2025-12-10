@@ -29,7 +29,25 @@ export const CATEGORIES_TO_EXCLUDE_FROM_LBC = [
   'Poids lourds',
   'Modélisme',
   'Équipement nautisme',
-  'Utilitaires'
+  'Utilitaires',
+  'Accessoires téléphone & Objets connectés'
+]
+
+export const EXCLUDED_KEYWORDS = [
+  'pour pièces',
+  'pour pieces',
+  'pièces détachées',
+  'pieces detachees',
+  'vendu pour pièces',
+  'vendu pour pieces',
+  'vendu comme pièces',
+  'vendu comme pieces',
+  'Maisons du Monde',
+  'Ikea',
+  'Sklum',
+  'Fly',
+  'Militaire',
+  'contemporain'
 ]
 
 // Example: 'Motos' -> 'motos'

@@ -12,6 +12,7 @@ export interface ListingProps {
   region?: string
   publishedAt?: Date
   status: ListingStatus
+  ignoreReason?: string
   createdAt: Date
   updatedAt: Date
 }
@@ -78,6 +79,15 @@ export class Listing {
 
   get updatedAt(): Date {
     return this.props.updatedAt
+  }
+
+  get ignoreReason(): string | undefined {
+    return this.props.ignoreReason
+  }
+
+  setIgnoreReason(reason: string): void {
+    this.props.ignoreReason = reason
+    this.props.updatedAt = new Date()
   }
 
   markAsAnalyzed(): void {
