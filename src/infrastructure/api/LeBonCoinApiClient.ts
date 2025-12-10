@@ -256,6 +256,7 @@ export class LeBonCoinApiClient implements IListingSource {
           }))
           .filter((l) => l.lbcId && l.title)
           .filter((l) => l.priceCents >= env.MIN_LISTING_PRICE_EUR * 100)
+          .filter((l) => l.priceCents <= env.MAX_LISTING_PRICE_EUR * 100)
       },
       5,
       (attempt, error) => {

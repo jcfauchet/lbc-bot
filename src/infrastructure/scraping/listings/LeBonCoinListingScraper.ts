@@ -174,6 +174,7 @@ export class LeBonCoinListingScraper implements IListingSource {
         .filter((l) => l.lbcId && l.title)
         .filter((l) => !this.isCategoryExcluded(l.url))
         .filter((l) => l.priceCents >= env.MIN_LISTING_PRICE_EUR * 100)
+        .filter((l) => l.priceCents <= env.MAX_LISTING_PRICE_EUR * 100)
     } catch (error: any) {
       console.error('Scraping error:', error)
       
