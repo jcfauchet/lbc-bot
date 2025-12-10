@@ -85,13 +85,23 @@ export class Container {
       this.storageService,
       this.listingImageRepository
     )
-    this.priceEstimationService = env.AI_PROVIDER === 'openai' ? new OpenAiPriceEstimationService(
-      env.OPENAI_API_KEY,
-      this.storageService
-    ) : new GeminiPriceEstimationService(
-      env.GOOGLE_GEMINI_API_KEY,
-      this.storageService
-    )
+    const getRandomProvider = (): 'openai' | 'gemini' => {
+      return Math.random() < 0.5 ? 'openai' : 'gemini'
+    }
+
+    const selectedProvider: 'openai' | 'gemini' = env.AI_PROVIDER === 'random' 
+      ? getRandomProvider() 
+      : (env.AI_PROVIDER as 'openai' | 'gemini')
+
+    this.priceEstimationService = selectedProvider === 'openai' 
+      ? new OpenAiPriceEstimationService(
+          env.OPENAI_API_KEY,
+          this.storageService
+        )
+      : new GeminiPriceEstimationService(
+          env.GOOGLE_GEMINI_API_KEY,
+          this.storageService
+        )
     
     this.textFilterService = new TextFilterService()
     this.mailer = new ResendMailer(env.RESEND_API_KEY)

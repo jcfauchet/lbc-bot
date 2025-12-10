@@ -19,7 +19,7 @@ const envSchema = z.object({
   MIN_MARGIN_IN_EUR: z.coerce.number().min(50).default(100),
   MIN_LISTING_PRICE_EUR: z.coerce.number().min(0).default(50),
   MAX_LISTING_PRICE_EUR: z.coerce.number().min(0).default(700),
-  AI_PROVIDER: z.enum(['openai', 'gemini']).default('openai'),
+  AI_PROVIDER: z.enum(['openai', 'gemini', 'random']).default('openai'),
   SEARCH_TERM_MIN_CONFIDENCE: z.coerce.number().min(0).max(1).default(0.8),
   PROXY_ENABLED: z.coerce.boolean().default(false),
   PROXY_LIST: z
