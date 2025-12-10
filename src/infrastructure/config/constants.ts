@@ -30,7 +30,8 @@ export const CATEGORIES_TO_EXCLUDE_FROM_LBC = [
   'Modélisme',
   'Équipement nautisme',
   'Utilitaires',
-  'Accessoires téléphone & Objets connectés'
+  'Accessoires téléphone & Objets connectés',
+  'Bureaux & Commerces'
 ]
 
 export const EXCLUDED_KEYWORDS = [
