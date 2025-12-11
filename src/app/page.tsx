@@ -7,6 +7,7 @@ export const dynamic = 'force-dynamic';
 export default async function Home() {
   const stats = await container.getDashboardStatsUseCase.execute();
   const maxDailyCount = Math.max(...stats.dailyStats.map(d => d.total), 1);
+  const providerTotal = stats.aiProviderStats.reduce((sum, p) => sum + p.count, 0);
 
   return (
     <main className="p-8 max-w-6xl mx-auto">
@@ -113,6 +114,33 @@ export default async function Home() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* AI Provider distribution */}
+        <div className="mt-10">
+          <h3 className="text-lg font-medium mb-4 text-gray-700">Répartition des IA utilisées</h3>
+          <div className="bg-gray-50 border border-gray-100 rounded-lg p-4 space-y-3">
+            <div className="text-sm text-gray-600 mb-2">
+              {providerTotal} analyses IA
+            </div>
+            {stats.aiProviderStats.map((p) => (
+              <div key={p.provider} className="flex items-center gap-3">
+                <div className="w-24 text-sm font-medium text-gray-700 capitalize">{p.provider}</div>
+                <div className="flex-1 h-3 bg-gray-200 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-blue-500"
+                    style={{ width: `${Math.max(p.percentage, 2)}%` }}
+                  />
+                </div>
+                <div className="w-28 text-right text-sm text-gray-600">
+                  {p.count} ({p.percentage}%)
+                </div>
+              </div>
+            ))}
+            {stats.aiProviderStats.length === 0 && (
+              <div className="text-sm text-gray-500">Aucune analyse IA pour le moment.</div>
+            )}
           </div>
         </div>
       </div>

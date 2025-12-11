@@ -23,6 +23,11 @@ export interface DashboardStats {
   totalProcessed: number
   searchColors: Record<string, string>
   searchNames: string[]
+  aiProviderStats: Array<{
+    provider: string
+    count: number
+    percentage: number
+  }>
   latestAlerts: Array<{
     id: string
     createdAt: Date
@@ -109,6 +114,18 @@ export class GetDashboardStatsUseCase {
     const ignoredPercentage = processedTotal > 0 ? Math.round((ignoredCount / processedTotal) * 100) : 0
     const analyzedPercentage = processedTotal > 0 ? Math.round((analyzedCount / processedTotal) * 100) : 0
 
+    const providerGroups = await this.prisma.aiAnalysis.groupBy({
+      by: ['provider'],
+      _count: true,
+    })
+
+    const providerTotal = providerGroups.reduce((sum, p) => sum + p._count, 0)
+    const aiProviderStats = providerGroups.map((p) => ({
+      provider: p.provider,
+      count: p._count,
+      percentage: providerTotal > 0 ? Math.round((p._count / providerTotal) * 100) : 0,
+    })).sort((a, b) => b.count - a.count)
+
     const latestAlerts = await this.prisma.notification.findMany({
       take: 10,
       orderBy: {
@@ -133,6 +150,7 @@ export class GetDashboardStatsUseCase {
       totalProcessed: processedTotal,
       searchColors,
       searchNames,
+      aiProviderStats,
       latestAlerts: latestAlerts.map(alert => ({
         id: alert.id,
         createdAt: alert.createdAt,

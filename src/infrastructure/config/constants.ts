@@ -31,7 +31,9 @@ export const CATEGORIES_TO_EXCLUDE_FROM_LBC = [
   'Équipement nautisme',
   'Utilitaires',
   'Accessoires téléphone & Objets connectés',
-  'Bureaux & Commerces'
+  'Bureaux & Commerces',
+  'Équipements vélos',
+  'Équipements bébé',
 ]
 
 export const EXCLUDED_KEYWORDS = [
@@ -48,7 +50,16 @@ export const EXCLUDED_KEYWORDS = [
   'Sklum',
   'Fly',
   'Militaire',
-  'contemporain'
+  'contemporain',
+  'rachete',
+  'rachète',
+  'Redoute',
+  'Conforama',
+  'But',
+  'Leroy Merlin',
+  'Castorama',
+  'Brico Dépôt',
+  'Brico Dépôt',
 ]
 
 // Example: 'Motos' -> 'motos'
