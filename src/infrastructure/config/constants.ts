@@ -34,6 +34,7 @@ export const CATEGORIES_TO_EXCLUDE_FROM_LBC = [
   'Bureaux & Commerces',
   'Équipements vélos',
   'Équipements bébé',
+  'Équipement bébé',
 ]
 
 export const EXCLUDED_KEYWORDS = [
