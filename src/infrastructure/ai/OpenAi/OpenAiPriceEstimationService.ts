@@ -47,7 +47,7 @@ export class OpenAiPriceEstimationService extends BasePriceEstimationService {
       ]
 
       const response = await (this.client as any).responses.create({
-        model: 'gpt-4o-mini',
+        model: 'gpt-5.4-mini',
         tools: [{ type: 'web_search' }],
         input: inputContent,
       })
