@@ -70,6 +70,7 @@ export class RunAiAnalysisUseCase {
 
         console.log(`  → Estimated price: ${estimation.estimatedMinPrice.getEuros()}€ - ${estimation.estimatedMaxPrice.getEuros()}€`)
         console.log(`  → Confidence: ${((estimation.confidence || 0) * 100).toFixed(1)}%`)
+        console.log(`  → Flip score: ${estimation.flipScore ?? 'n/a'}/10`)
 
         const estimatedMinPriceEuros = estimation.estimatedMinPrice.getEuros()
         const isPriceInteresting = estimatedMinPriceEuros >= (env.MIN_MARGIN_IN_EUR * 0.5)
@@ -77,6 +78,15 @@ export class RunAiAnalysisUseCase {
         if (!estimation.confidence || estimation.confidence < 0.6) {
           console.log(`Estimation confidence too low (${estimation.confidence}), skipping ${listing.title}`)
           listing.markAsIgnored()
+          listing.setIgnoreReason(`Confiance IA trop faible: ${estimation.confidence}`)
+          await this.listingRepository.update(listing)
+          continue
+        }
+
+        if (estimation.flipScore !== undefined && estimation.flipScore < 4) {
+          console.log(`Flip score too low (${estimation.flipScore}/10), skipping ${listing.title}`)
+          listing.markAsIgnored()
+          listing.setIgnoreReason(`Potentiel de flip insuffisant: ${estimation.flipScore}/10`)
           await this.listingRepository.update(listing)
           continue
         }
@@ -90,15 +100,19 @@ export class RunAiAnalysisUseCase {
 
         const margin = estimation.estimatedMinPrice.minus(listing.price)
 
+        const flipPrefix = estimation.flipScore !== undefined
+          ? `🔥 Score flip: ${estimation.flipScore}/10${estimation.bestResalePlatform ? ` | Revente: ${estimation.bestResalePlatform}` : ''}\n\n`
+          : ''
+
         const analysis = AiAnalysis.create({
           listingId: listing.id,
           estimatedMinPrice: estimation.estimatedMinPrice,
           estimatedMaxPrice: estimation.estimatedMaxPrice,
           margin: margin,
-          description: estimation.description,
+          description: `${flipPrefix}${estimation.description}`,
           confidence: estimation.confidence,
           provider: this.priceEstimationService.providerName,
-          bestMatchSource: estimation.bestMatchSource,
+          bestMatchSource: estimation.bestResalePlatform || estimation.bestMatchSource,
           searchTerms: [],
         })
 

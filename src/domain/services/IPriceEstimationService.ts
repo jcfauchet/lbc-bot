@@ -56,5 +56,7 @@ export interface SearchTerm {
 export interface FinalEstimationResult extends PriceEstimationResult {
   bestMatchSource?: string
   bestMatchUrl?: string
+  flipScore?: number
+  bestResalePlatform?: string
 }
 

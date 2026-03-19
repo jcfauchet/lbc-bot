@@ -38,6 +38,7 @@ export const CATEGORIES_TO_EXCLUDE_FROM_LBC = [
 ]
 
 export const EXCLUDED_KEYWORDS = [
+  // Vendu pour pièces
   'pour pièces',
   'pour pieces',
   'pièces détachées',
@@ -46,21 +47,44 @@ export const EXCLUDED_KEYWORDS = [
   'vendu pour pieces',
   'vendu comme pièces',
   'vendu comme pieces',
+  // Grandes enseignes / marques de masse
   'Maisons du Monde',
   'Ikea',
   'Sklum',
   'Fly',
-  'Militaire',
-  'contemporain',
-  'rachete',
-  'rachète',
   'Redoute',
   'Conforama',
-  'But',
   'Leroy Merlin',
   'Castorama',
   'Brico Dépôt',
-  'Brico Dépôt',
+  'Alinéa',
+  'Alinea',
+  'Habitat',
+  'Zara Home',
+  'H&M Home',
+  'Westwing',
+  'Made.com',
+  'Maison du Monde',
+  // Copies / reproductions
+  'copie',
+  'réplique',
+  'replique',
+  'reproduction',
+  'imitation',
+  'inspiré de',
+  'inspire de',
+  'style scandinave',
+  'style industriel',
+  'style vintage',
+  'style bohème',
+  // Militaire / non-design
+  'Militaire',
+  'militaria',
+  // Divers non pertinents
+  'contemporain',
+  'rachete',
+  'rachète',
+  'But ',
 ]
 
 // Example: 'Motos' -> 'motos'

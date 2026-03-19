@@ -16,7 +16,7 @@ import { IStorageService } from '@/infrastructure/storage/IStorageService'
 export class GeminiPriceEstimationService extends BasePriceEstimationService {
   public readonly providerName = 'gemini'
   private ai: GoogleGenAI
-  private readonly MODEL_NAME = 'gemini-3-pro-preview'
+  private readonly MODEL_NAME = 'gemini-2.5-flash-preview-04-17'
   private storageService?: IStorageService
   private uploadedReferenceImageUrls: string[] = []
 

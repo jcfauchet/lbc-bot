@@ -88,14 +88,20 @@ Critique sur titre/description (peuvent être inexactes). Designer: baser sur co
     return `
 Analyse le produit et fournis:
 1. Une description détaillée du produit (style, matériaux, qualité, signatures, designer possible)
-2. Une estimation de prix marché seconde main basée sur tes connaissances, en cas de doute, vérifier le prix de vente sur les sites spécialisés
+2. Une estimation de prix marché seconde main basée sur tes connaissances
+3. Un score de potentiel de flip (flipScore) de 1 à 10 : 10 = objet très rare, fortement sous-estimé par le vendeur, forte demande sur le marché secondaire. 1 = objet courant, sans intérêt de revente
+4. La meilleure plateforme de revente (bestResalePlatform) : Selency, Pamono, 1stDibs, Vinted, eBay, Catawiki, Drouot, etc.
+
+IMPORTANT: Si l'objet semble être une copie, une reproduction moderne, ou une imitation, attribue un confidence < 0.4 et un flipScore < 3.
 
 JSON uniquement:
 {
   "estimatedMinPrice": <euros>,
   "estimatedMaxPrice": <euros>,
-  "description": "<description détaillée du produit>",
-  "confidence": 0.1-1.0
+  "description": "<description détaillée : objet, style, période, matériaux, designer identifié ou probable, état apparent>",
+  "confidence": 0.1-1.0,
+  "flipScore": 1-10,
+  "bestResalePlatform": "<plateforme>"
 }
     `.trim()
   }
@@ -198,14 +204,16 @@ JSON uniquement:
 
   protected parseFinalEstimationResponse(content: string): FinalEstimationResult {
     const baseResult = this.parseResponse(content)
-    
-    let bestMatchSource: string | undefined
-    let bestMatchUrl: string | undefined
-    
+    const parsed = this.extractJson(content)
+
+    const flipScore: number | undefined = typeof parsed?.flipScore === 'number' ? parsed.flipScore : undefined
+    const bestResalePlatform: string | undefined = typeof parsed?.bestResalePlatform === 'string' ? parsed.bestResalePlatform : undefined
+
     return {
       ...baseResult,
-      bestMatchSource,
-      bestMatchUrl,
+      flipScore,
+      bestResalePlatform,
+      bestMatchSource: bestResalePlatform,
     }
   }
 
@@ -274,15 +282,16 @@ JSON uniquement:
   }
   
   protected getSystemInstruction(): string {
-      return `Expert en Arts Décoratifs et Design. Spécialité: signatures, matériaux nobles, designers iconiques (Jansen, Baguès, Willy Rizzo, Charles, Finn Juhl, Wegner, etc.), détection de copies.
+      return `Expert en Arts Décoratifs, Design Vintage et Brocante de valeur. Tu aides à identifier des objets sous-estimés sur des sites de particuliers (LeBonCoin) pour les revendre avec une forte marge sur des plateformes spécialisées.
 
-Analyse basée sur: photos fournies, connaissances (styles, périodes, designers, prix marché secondaire).
+Spécialités:
+- Mobilier design 1950-1990 : Knoll, Cassina, Ligne Roset, Artifort, Herman Miller, Vitra, Kartell
+- Luminaires : Maison Jansen, Baguès, Arteluce, Ingo Maurer, Stilnovo, Fontana Arte
+- Designers iconiques : Willy Rizzo, Finn Juhl, Hans Wegner, Arne Jacobsen, Pierre Paulin, Charlotte Perriand, Le Corbusier, Eames, Saarinen, Bertoia, Breuer, Mies van der Rohe
+- Céramiques et arts de la table : Vallauris, Biot, Capron, Ruelland, Picault, Salins, Longwy
+- Bronzes, marqueterie, bois noble, laiton, travertin, marbre
 
-Mission:
-1. Décrire le produit: identifier objet, style, période, matériaux, designer si identifiable
-2. Estimer prix marché seconde main basé sur tes connaissances du marché
-3. Fourchette plausible et réaliste
-4. Confiance selon clarté photos et certitude
+Tu détectes : signatures gravées/moulées, étiquettes de fabricant, matériaux d'époque, construction artisanale vs industrielle, reproductions modernes.
 
 Répondre UNIQUEMENT en JSON selon le schéma fourni.`
   }
