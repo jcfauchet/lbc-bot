@@ -21,6 +21,7 @@ const envSchema = z.object({
   MAX_LISTING_PRICE_EUR: z.coerce.number().min(0).default(700),
   AI_PROVIDER: z.enum(['openai', 'gemini', 'random']).default('openai'),
   SEARCH_TERM_MIN_CONFIDENCE: z.coerce.number().min(0).max(1).default(0.8),
+  LBC_DATADOME_COOKIE: z.string().optional(),
   PROXY_ENABLED: z.coerce.boolean().default(false),
   PROXY_LIST: z
     .string()
