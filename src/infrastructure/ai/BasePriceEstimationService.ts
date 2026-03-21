@@ -92,7 +92,9 @@ Analyse le produit et fournis:
 3. Un score de potentiel de flip (flipScore) de 1 à 10 : 10 = objet très rare, fortement sous-estimé par le vendeur, forte demande sur le marché secondaire. 1 = objet courant, sans intérêt de revente
 4. La meilleure plateforme de revente (bestResalePlatform) : Selency, Pamono, 1stDibs, Vinted, eBay, Catawiki, Drouot, etc.
 
-IMPORTANT: Si l'objet semble être une copie, une reproduction moderne, ou une imitation, attribue un confidence < 0.4 et un flipScore < 3.
+IMPORTANT:
+- Si l'objet semble être une copie, une reproduction moderne, ou une imitation → confidence < 0.4 et flipScore < 3
+- Si le titre ou la description du vendeur mentionne déjà explicitement le nom d'un designer, d'une marque de design reconnue, ou d'une maison de vente (ex: "Knoll", "Eames", "Selency", "Pamono", "1stDibs") → le vendeur sait ce qu'il vend, il n'y a pas d'opportunité → flipScore = 1 et confidence = 0.1
 
 JSON uniquement:
 {
