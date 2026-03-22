@@ -88,13 +88,26 @@ Critique sur titre/description (peuvent être inexactes). Designer: baser sur co
     return `
 Analyse le produit et fournis:
 1. Une description détaillée du produit (style, matériaux, qualité, signatures, designer possible)
-2. Une estimation de prix marché seconde main basée sur tes connaissances
-3. Un score de potentiel de flip (flipScore) de 1 à 10 : 10 = objet très rare, fortement sous-estimé par le vendeur, forte demande sur le marché secondaire. 1 = objet courant, sans intérêt de revente
+2. Une estimation de prix de revente RÉALISTE sur le marché secondaire français
+3. Un score de potentiel de flip (flipScore) de 1 à 10
 4. La meilleure plateforme de revente (bestResalePlatform) : Selency, Pamono, 1stDibs, Vinted, eBay, Catawiki, Drouot, etc.
 
-IMPORTANT:
-- Si l'objet semble être une copie, une reproduction moderne, ou une imitation → confidence < 0.4 et flipScore < 3
-- Si le titre ou la description du vendeur mentionne déjà explicitement le nom d'un designer, d'une marque de design reconnue, ou d'une maison de vente (ex: "Knoll", "Eames", "Selency", "Pamono", "1stDibs") → le vendeur sait ce qu'il vend, il n'y a pas d'opportunité → flipScore = 1 et confidence = 0.1
+RÈGLES D'ESTIMATION DE PRIX (très important) :
+- Estime le prix auquel l'objet SE VENDRAIT réellement en 30 jours, pas le prix maximum théorique
+- Base-toi sur les transactions récentes, pas sur les prix affichés sur Pamono/1stDibs (souvent 3x surestimés)
+- L'état est inconnu : suppose un état moyen avec des défauts normaux d'usure
+- Sois CONSERVATEUR et PESSIMISTE : mieux vaut sous-estimer que sur-estimer
+- Sur Selency/Vinted les prix sont 30-50% en dessous de Pamono — c'est là que tu dois te baser
+- Si tu n'es pas sûr du designer, estime comme un objet anonyme de style similaire
+
+RÈGLES DE SCORING (flipScore) :
+- 8-10 : objet clairement identifiable, forte demande, vendeur manifestement ignorant de la valeur
+- 5-7 : objet intéressant mais incertitude sur le designer ou l'authenticité
+- 1-4 : objet courant, difficile à revendre, ou vendeur qui connaît la valeur
+
+DISQUALIFICATIONS (→ flipScore = 1, confidence = 0.1) :
+- L'objet semble être une copie, reproduction ou imitation
+- Le titre/description mentionne déjà un designer, une marque de design ou une plateforme spécialisée
 
 JSON uniquement:
 {
