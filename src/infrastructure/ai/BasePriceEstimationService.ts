@@ -97,7 +97,7 @@ RÈGLES D'ESTIMATION DE PRIX (très important) :
 - Base-toi sur les transactions récentes, pas sur les prix affichés sur Pamono/1stDibs (souvent 3x surestimés)
 - L'état est inconnu : suppose un état moyen avec des défauts normaux d'usure
 - Sois CONSERVATEUR et PESSIMISTE : mieux vaut sous-estimer que sur-estimer
-- Sur Selency/Vinted les prix sont 30-50% en dessous de Pamono — c'est là que tu dois te baser
+- Base-toi sur les prix Selency (marché secondaire français réaliste), pas sur Pamono/1stDibs
 - Si tu n'es pas sûr du designer, estime comme un objet anonyme de style similaire
 
 RÈGLES DE SCORING (flipScore) :
