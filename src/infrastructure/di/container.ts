@@ -9,6 +9,8 @@ import { PrismaLbcProductListingImageRepository } from '@/infrastructure/prisma/
 import { PrismaNotificationRepository } from '@/infrastructure/prisma/repositories/PrismaNotificationRepository'
 import { PrismaLbcProductListingLabelRepository } from '@/infrastructure/prisma/repositories/PrismaLbcProductListingLabelRepository'
 import { PrismaTaxonomyRepository } from '@/infrastructure/prisma/repositories/PrismaTaxonomyRepository'
+import { PrismaFeedbackRepository } from '@/infrastructure/prisma/repositories/PrismaFeedbackRepository'
+import { EmbeddingService } from '@/infrastructure/ai/EmbeddingService'
 
 import { LeBonCoinListingScraper } from '@/infrastructure/scraping/listings/LeBonCoinListingScraper'
 import { LeBonCoinApiClient } from '@/infrastructure/api/LeBonCoinApiClient'
@@ -44,6 +46,8 @@ export class Container {
   public readonly notificationRepository: PrismaNotificationRepository
   public readonly listingLabelRepository: PrismaLbcProductListingLabelRepository
   public readonly taxonomyRepository: PrismaTaxonomyRepository
+  public readonly feedbackRepository: PrismaFeedbackRepository
+  public readonly embeddingService: EmbeddingService
 
   public readonly scraper: LeBonCoinListingScraper
   public readonly listingSourceApi: IListingSource
@@ -73,6 +77,8 @@ export class Container {
     this.notificationRepository = new PrismaNotificationRepository(this.prisma)
     this.listingLabelRepository = new PrismaLbcProductListingLabelRepository(this.prisma)
     this.taxonomyRepository = new PrismaTaxonomyRepository(this.prisma)
+    this.feedbackRepository = new PrismaFeedbackRepository(this.prisma)
+    this.embeddingService = new EmbeddingService(env.OPENAI_API_KEY)
 
     this.scraper = new LeBonCoinListingScraper()
     
@@ -121,7 +127,9 @@ export class Container {
       this.priceEstimationService,
       this.imageDownloadService,
       this.storageService,
-      this.textFilterService
+      this.textFilterService,
+      this.feedbackRepository,
+      this.embeddingService
     )
 
     this.runNotificationUseCase = new RunNotificationUseCase(

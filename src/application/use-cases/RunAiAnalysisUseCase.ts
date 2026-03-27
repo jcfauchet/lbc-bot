@@ -3,8 +3,10 @@ import { IAiAnalysisRepository } from '@/domain/repositories/IAiAnalysisReposito
 import { IListingImageRepository } from '@/domain/repositories/IListingImageRepository'
 import { IPriceEstimationService } from '@/domain/services/IPriceEstimationService'
 import { ITextFilterService } from '@/domain/services/ITextFilterService'
+import { IFeedbackRepository } from '@/domain/repositories/IFeedbackRepository'
 import { ImageDownloadService } from '@/infrastructure/storage/ImageDownloadService'
 import { IStorageService } from '@/infrastructure/storage/IStorageService'
+import { EmbeddingService } from '@/infrastructure/ai/EmbeddingService'
 import { AiAnalysis } from '@/domain/entities/AiAnalysis'
 import { ListingStatus } from '@/domain/value-objects/ListingStatus'
 import { env } from '@/infrastructure/config/env'
@@ -17,7 +19,9 @@ export class RunAiAnalysisUseCase {
     private priceEstimationService: IPriceEstimationService,
     private imageDownloadService: ImageDownloadService,
     private storageService: IStorageService,
-    private textFilterService: ITextFilterService
+    private textFilterService: ITextFilterService,
+    private feedbackRepository?: IFeedbackRepository,
+    private embeddingService?: EmbeddingService
   ) {}
 
   async execute(
@@ -61,11 +65,33 @@ export class RunAiAnalysisUseCase {
           continue
         }
 
+        // Retrieve similar feedbacks to guide the LLM
+        let feedbackExamples: import('@/domain/services/IPriceEstimationService').FeedbackExample[] = []
+        if (this.feedbackRepository && this.embeddingService) {
+          try {
+            const titleEmbedding = await this.embeddingService.embed(listing.title)
+            const similar = await this.feedbackRepository.findSimilar(titleEmbedding, 3)
+            feedbackExamples = similar.map((f) => ({
+              listingTitle: f.listingTitle,
+              priceCents: f.priceCents,
+              isGood: f.isGood,
+              comment: f.comment,
+              aiDescription: f.aiDescription,
+            }))
+            if (feedbackExamples.length > 0) {
+              console.log(`  → ${feedbackExamples.length} feedback(s) similaire(s) injecté(s)`)
+            }
+          } catch (err) {
+            console.warn('  → Could not fetch similar feedbacks:', err)
+          }
+        }
+
         const estimation = await this.priceEstimationService.estimatePrice(
           imageUrls,
           listing.title,
           undefined,
-          []
+          [],
+          feedbackExamples
         )
 
         console.log(`  → Estimated price: ${estimation.estimatedMinPrice.getEuros()}€ - ${estimation.estimatedMaxPrice.getEuros()}€`)

@@ -4,6 +4,7 @@ import {
   PreEstimationResult,
   FinalEstimationResult,
   SearchAnalysisResult,
+  FeedbackExample,
 } from '@/domain/services/IPriceEstimationService'
 import {
   GoogleGenAI,
@@ -30,13 +31,20 @@ export class GeminiPriceEstimationService extends BasePriceEstimationService {
     images: string[],
     title: string,
     description?: string,
+    _referenceProducts?: any[],
+    feedbackExamples?: FeedbackExample[]
   ): Promise<FinalEstimationResult> {
     try {
       const imageParts = await this.prepareImages(images)
 
+      const feedbackSection = feedbackExamples && feedbackExamples.length > 0
+        ? this.buildFeedbackSection(feedbackExamples)
+        : ''
+
       const userParts: Part[] = [
         { text: this.getSystemInstruction() },
         { text: this.buildUserContext(title, description) },
+        ...(feedbackSection ? [{ text: feedbackSection }] : []),
         ...imageParts,
         { text: this.getAnalysisInstructions() },
       ]

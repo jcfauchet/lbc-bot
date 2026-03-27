@@ -1,6 +1,7 @@
 import OpenAI from 'openai'
 import {
   FinalEstimationResult,
+  FeedbackExample,
 } from '@/domain/services/IPriceEstimationService'
 import { BasePriceEstimationService } from '../BasePriceEstimationService'
 import { IStorageService } from '@/infrastructure/storage/IStorageService'
@@ -21,16 +22,23 @@ export class OpenAiPriceEstimationService extends BasePriceEstimationService {
     images: string[],
     title: string,
     description?: string,
+    _referenceProducts?: any[],
+    feedbackExamples?: FeedbackExample[]
   ): Promise<FinalEstimationResult> {
     try {
       const imageContents = await this.prepareImages(images)
 
+      const feedbackSection = feedbackExamples && feedbackExamples.length > 0
+        ? this.buildFeedbackSection(feedbackExamples)
+        : ''
+
       const fullPrompt = [
         this.getSystemInstruction(),
         this.buildUserContext(title, description),
+        feedbackSection,
         this.getAnalysisInstructions(),
         'Use the web_search only if you are not sure about the price of the item.'
-      ].join('\n\n')
+      ].filter(Boolean).join('\n\n')
 
       const inputContent = [
         {

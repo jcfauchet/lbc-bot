@@ -1,5 +1,13 @@
 import { Money } from '../value-objects/Money'
 
+export interface FeedbackExample {
+  listingTitle: string
+  priceCents: number
+  isGood: boolean
+  comment?: string
+  aiDescription?: string
+}
+
 export interface PriceEstimationResult {
   estimatedMinPrice: Money
   estimatedMaxPrice: Money
@@ -22,12 +30,13 @@ export interface ReferenceProduct {
 
 export interface IPriceEstimationService {
   readonly providerName: string
-  
+
   estimatePrice(
     images: string[],
     title: string,
     description?: string,
-    referenceProducts?: ReferenceProduct[]
+    referenceProducts?: ReferenceProduct[],
+    feedbackExamples?: FeedbackExample[]
   ): Promise<FinalEstimationResult>
 }
 

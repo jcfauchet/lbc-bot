@@ -1,5 +1,6 @@
 import { Listing } from '@/domain/entities/Listing'
 import { AiAnalysis } from '@/domain/entities/AiAnalysis'
+import { env } from '@/infrastructure/config/env'
 
 export class EmailTemplates {
   static goodDealsDigest(
@@ -45,6 +46,11 @@ export class EmailTemplates {
               <p style="margin: 10px 0; color: #333;">
                 ${analysis.description}
               </p>
+              <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #eee; font-size: 13px; color: #999;">
+                Cette sélection était-elle pertinente ?
+                <a href="${env.APP_URL}/feedback?id=${listing.id}&vote=good" style="margin-left: 8px; color: #22c55e; text-decoration: none; font-weight: bold;">👍 Oui</a>
+                <a href="${env.APP_URL}/feedback?id=${listing.id}&vote=bad" style="margin-left: 8px; color: #ef4444; text-decoration: none; font-weight: bold;">👎 Non</a>
+              </div>
             </td>
           </tr>
         `

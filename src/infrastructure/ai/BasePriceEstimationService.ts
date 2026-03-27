@@ -5,6 +5,7 @@ import {
   PreEstimationResult,
   FinalEstimationResult,
   SearchTerm,
+  FeedbackExample,
 } from '@/domain/services/IPriceEstimationService'
 import { Money } from '@/domain/value-objects/Money'
 import fs from 'fs/promises'
@@ -21,7 +22,8 @@ export abstract class BasePriceEstimationService
     images: string[],
     title: string,
     description?: string,
-    referenceProducts?: any[]
+    referenceProducts?: any[],
+    feedbackExamples?: FeedbackExample[]
   ): Promise<FinalEstimationResult>
 
   protected buildPrompt(
@@ -70,6 +72,17 @@ Critique sur titre/description (peuvent être inexactes). Designer: baser sur co
 
 ${this.getAnalysisInstructions()}
     `.trim()
+  }
+
+  protected buildFeedbackSection(feedbackExamples: FeedbackExample[]): string {
+    if (feedbackExamples.length === 0) return ''
+    const lines = feedbackExamples.map((f) => {
+      const price = (f.priceCents / 100).toFixed(0)
+      const vote = f.isGood ? '✅' : '❌'
+      const comment = f.comment ? ` → "${f.comment}"` : ''
+      return `${vote} "${f.listingTitle}", ${price}€${comment}`
+    })
+    return `\n[Feedbacks utilisateur sur des objets similaires]\n${lines.join('\n')}\n`
   }
 
   protected buildUserContext(title: string, description?: string): string {

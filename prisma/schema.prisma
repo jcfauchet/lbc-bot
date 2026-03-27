@@ -38,6 +38,7 @@ model LbcProductListing {
   aiAnalysis  AiAnalysis?
   notifications Notification[]
   labels      ListingLabel[]
+  feedbacks   ListingFeedback[]
 
   @@index([searchId])
   @@index([lbcId])
@@ -111,6 +112,20 @@ model ListingLabel {
 }
 
 
+
+model ListingFeedback {
+  id            String   @id @default(cuid())
+  listingId     String
+  isGood        Boolean
+  comment       String?  @db.Text
+  embeddingText String?  @db.Text
+  createdAt     DateTime @default(now())
+
+  listing       LbcProductListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@map("listing_feedbacks")
+}
 
 model Category {
   id        String   @id @default(cuid())
