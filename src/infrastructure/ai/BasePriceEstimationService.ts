@@ -120,7 +120,15 @@ RÈGLES DE SCORING (flipScore) :
 
 DISQUALIFICATIONS (→ flipScore = 1, confidence = 0.1) :
 - L'objet semble être une copie, reproduction ou imitation
-- Le titre/description mentionne déjà un designer, une marque de design ou une plateforme spécialisée
+- L'objet ressemble clairement à de la grande distribution moderne (lignes génériques, finitions plastiques/MDF, style contemporain sans caractère)
+- Le titre/description mentionne une plateforme spécialisée (Selency, Pamono, 1stDibs) → le vendeur sait ce qu'il vend
+
+ATTRIBUTION DESIGNER — sois TRÈS sceptique :
+- N'attribue un designer célèbre que si tu vois des preuves visuelles claires : construction caractéristique, matériaux d'époque, détails iconiques identifiables
+- Si l'objet a l'air produit industriellement ou de grande série moderne → designer = null, traite-le comme anonyme
+- "Style Willy Rizzo" ou "inspiré de" ≠ pièce de Willy Rizzo
+- Si le vendeur mentionne un designer dans le titre mais l'objet ne le justifie pas visuellement → ignore l'attribution, flipScore réduit car vendeur surévalue
+- Si le vendeur mentionne un designer ET l'objet le justifie visuellement → opportunité réelle possible (vendeur peut sous-prixer)
 
 JSON uniquement:
 {
