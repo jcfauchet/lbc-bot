@@ -1,11 +1,14 @@
 import { container } from "@/infrastructure/di/container";
 import { format } from "date-fns";
 import Link from "next/link";
+import { FeedbackButton } from "@/components/FeedbackButton";
 
 export const dynamic = 'force-dynamic';
 
 export default async function Home() {
   const stats = await container.getDashboardStatsUseCase.execute();
+  const alertListingIds = stats.latestAlerts.map(a => a.listing.id);
+  const feedbackMap = await container.feedbackRepository.findByListingIds(alertListingIds);
   const maxDailyCount = Math.max(...stats.dailyStats.map(d => d.total), 1);
   const providerTotal = stats.aiProviderStats.reduce((sum, p) => sum + p.count, 0);
 
@@ -213,17 +216,25 @@ export default async function Home() {
                     )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {alert.listing.images[0] && (
-                      <a 
-                        href={`https://lens.google.com/upload?url=${encodeURIComponent(alert.listing.images[0].urlRemote)}`}
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="text-blue-600 hover:text-blue-800"
-                        title="Recherche Google Lens"
-                      >
-                        🔍
-                      </a>
-                    )}
+                    <div className="flex flex-col gap-2">
+                      {alert.listing.images[0] && (
+                        <a
+                          href={`https://lens.google.com/upload?url=${encodeURIComponent(alert.listing.images[0].urlRemote)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:text-blue-800"
+                          title="Recherche Google Lens"
+                        >
+                          🔍
+                        </a>
+                      )}
+                      <FeedbackButton
+                        listingId={alert.listing.id}
+                        initialFeedbackId={feedbackMap.get(alert.listing.id)?.id ?? null}
+                        initialVote={feedbackMap.get(alert.listing.id) ? (feedbackMap.get(alert.listing.id)!.isGood ? 'good' : 'bad') : null}
+                        placeholder="Vendu ? À quel prix ? (optionnel)"
+                      />
+                    </div>
                   </td>
                 </tr>
               ))}

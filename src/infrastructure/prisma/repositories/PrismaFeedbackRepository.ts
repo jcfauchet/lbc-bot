@@ -85,6 +85,25 @@ export class PrismaFeedbackRepository implements IFeedbackRepository {
     }))
   }
 
+  async findByListingIds(listingIds: string[]): Promise<Map<string, ListingFeedback>> {
+    if (listingIds.length === 0) return new Map()
+    const rows = await this.prisma.listingFeedback.findMany({
+      where: { listingId: { in: listingIds } },
+    })
+    const map = new Map<string, ListingFeedback>()
+    for (const row of rows) {
+      map.set(row.listingId, ListingFeedback.create({
+        id: row.id,
+        listingId: row.listingId,
+        isGood: row.isGood,
+        comment: row.comment ?? undefined,
+        embeddingText: row.embeddingText ?? undefined,
+        createdAt: row.createdAt,
+      }))
+    }
+    return map
+  }
+
   async findByListingId(listingId: string): Promise<ListingFeedback | null> {
     const row = await this.prisma.listingFeedback.findFirst({
       where: { listingId },

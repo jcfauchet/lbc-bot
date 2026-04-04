@@ -15,4 +15,5 @@ export interface IFeedbackRepository {
   updateComment(id: string, comment: string): Promise<void>
   findSimilar(embedding: number[], limit: number): Promise<SimilarFeedback[]>
   findByListingId(listingId: string): Promise<ListingFeedback | null>
+  findByListingIds(listingIds: string[]): Promise<Map<string, ListingFeedback>>
 }

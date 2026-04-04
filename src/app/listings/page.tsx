@@ -2,6 +2,7 @@ import { container } from "@/infrastructure/di/container";
 import { format } from "date-fns";
 import { ListingStatus } from "@/domain/value-objects/ListingStatus";
 import Link from "next/link";
+import { FeedbackButton } from "@/components/FeedbackButton";
 
 export const dynamic = 'force-dynamic';
 
@@ -26,6 +27,8 @@ function getStatusBadgeClass(status: string): string {
 
 export default async function ListingsPage() {
   const listings = await container.getNonNotifiedListingsUseCase.execute(150);
+  const listingIds = listings.map(l => l.id);
+  const feedbackMap = await container.feedbackRepository.findByListingIds(listingIds);
 
   return (
     <main className="p-8 max-w-7xl mx-auto">
@@ -172,10 +175,11 @@ export default async function ListingsPage() {
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    {listing.images[0] && (
-                        <a 
+                    <div className="flex flex-col gap-2">
+                      {listing.images[0] && (
+                        <a
                           href={`https://lens.google.com/upload?url=${encodeURIComponent(listing.images[0].urlRemote)}`}
-                          target="_blank" 
+                          target="_blank"
                           rel="noopener noreferrer"
                           className="text-blue-600 hover:text-blue-800"
                           title="Recherche Google Lens"
@@ -183,6 +187,13 @@ export default async function ListingsPage() {
                           🔍
                         </a>
                       )}
+                      <FeedbackButton
+                        listingId={listing.id}
+                        initialFeedbackId={feedbackMap.get(listing.id)?.id ?? null}
+                        initialVote={feedbackMap.get(listing.id) ? (feedbackMap.get(listing.id)!.isGood ? 'good' : 'bad') : null}
+                        placeholder="Tu aurais dû être notifié ? Pourquoi ?"
+                      />
+                    </div>
                   </td>
                 </tr>
               ))}
