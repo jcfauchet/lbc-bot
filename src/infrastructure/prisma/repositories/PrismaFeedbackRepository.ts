@@ -5,23 +5,42 @@ import { IFeedbackRepository, SimilarFeedback } from '@/domain/repositories/IFee
 export class PrismaFeedbackRepository implements IFeedbackRepository {
   constructor(private prisma: PrismaClient) {}
 
-  async save(feedback: ListingFeedback, embedding: number[]): Promise<ListingFeedback> {
-    const vectorLiteral = `[${embedding.join(',')}]`
-
-    await this.prisma.$executeRaw`
-      INSERT INTO "listing_feedbacks" ("id", "listingId", "isGood", "comment", "embeddingText", "embedding", "createdAt")
-      VALUES (
-        ${feedback.id},
-        ${feedback.listingId},
-        ${feedback.isGood},
-        ${feedback.comment ?? null},
-        ${feedback.embeddingText ?? null},
-        ${vectorLiteral}::vector,
-        ${feedback.createdAt}
-      )
-    `
+  async save(feedback: ListingFeedback, embedding?: number[]): Promise<ListingFeedback> {
+    if (embedding) {
+      const vectorLiteral = `[${embedding.join(',')}]`
+      await this.prisma.$executeRaw`
+        INSERT INTO "listing_feedbacks" ("id", "listingId", "isGood", "comment", "embeddingText", "embedding", "createdAt")
+        VALUES (
+          ${feedback.id},
+          ${feedback.listingId},
+          ${feedback.isGood},
+          ${feedback.comment ?? null},
+          ${feedback.embeddingText ?? null},
+          ${vectorLiteral}::vector,
+          ${feedback.createdAt}
+        )
+      `
+    } else {
+      await this.prisma.listingFeedback.create({
+        data: {
+          id: feedback.id,
+          listingId: feedback.listingId,
+          isGood: feedback.isGood,
+          comment: feedback.comment ?? null,
+          embeddingText: feedback.embeddingText ?? null,
+          createdAt: feedback.createdAt,
+        },
+      })
+    }
 
     return feedback
+  }
+
+  async updateEmbedding(id: string, embedding: number[]): Promise<void> {
+    const vectorLiteral = `[${embedding.join(',')}]`
+    await this.prisma.$executeRaw`
+      UPDATE "listing_feedbacks" SET "embedding" = ${vectorLiteral}::vector WHERE "id" = ${id}
+    `
   }
 
   async updateComment(id: string, comment: string): Promise<void> {

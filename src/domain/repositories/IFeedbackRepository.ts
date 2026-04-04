@@ -10,7 +10,8 @@ export interface SimilarFeedback {
 }
 
 export interface IFeedbackRepository {
-  save(feedback: ListingFeedback, embedding: number[]): Promise<ListingFeedback>
+  save(feedback: ListingFeedback, embedding?: number[]): Promise<ListingFeedback>
+  updateEmbedding(id: string, embedding: number[]): Promise<void>
   updateComment(id: string, comment: string): Promise<void>
   findSimilar(embedding: number[], limit: number): Promise<SimilarFeedback[]>
   findByListingId(listingId: string): Promise<ListingFeedback | null>

@@ -40,12 +40,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, id: existing.id })
     }
 
-    // Build text to embed: title + AI description
     const aiDescription = listing.aiAnalysis?.description ?? ''
     const embeddingText = `${listing.title}. ${aiDescription}`.trim()
-
-    const embeddingService = new EmbeddingService(env.OPENAI_API_KEY)
-    const embedding = await embeddingService.embed(embeddingText)
 
     const feedback = ListingFeedback.create({
       listingId,
@@ -54,7 +50,17 @@ export async function POST(req: NextRequest) {
       embeddingText,
     })
 
-    await repo.save(feedback, embedding)
+    // Save vote first — never block on embedding
+    await repo.save(feedback)
+
+    // Generate embedding in best-effort (failure doesn't lose the vote)
+    try {
+      const embeddingService = new EmbeddingService(env.OPENAI_API_KEY)
+      const embedding = await embeddingService.embed(embeddingText)
+      await repo.updateEmbedding(feedback.id, embedding)
+    } catch (err) {
+      console.error('Embedding generation failed (non-blocking):', err)
+    }
 
     return NextResponse.json({ ok: true, id: feedback.id })
   } catch (error) {

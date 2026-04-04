@@ -24,9 +24,13 @@ function FeedbackContent() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ listingId, vote }),
     })
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error('HTTP ' + r.status)
+        return r.json()
+      })
       .then((data) => {
         if (data.id) setFeedbackId(data.id)
+        else setError('Erreur lors de l\'enregistrement.')
         setLoading(false)
       })
       .catch(() => {
@@ -37,7 +41,12 @@ function FeedbackContent() {
 
   const handleCommentSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!feedbackId || !comment.trim()) return
+    if (!comment.trim()) return
+
+    if (!feedbackId) {
+      setError('Impossible d\'enregistrer le commentaire, feedbackId manquant.')
+      return
+    }
 
     await fetch('/api/feedback', {
       method: 'PATCH',
