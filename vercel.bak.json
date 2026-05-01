@@ -2,11 +2,11 @@
   "crons": [
     {
       "path": "/api/cron/scrape",
-      "schedule": "0 * * * *"
+      "schedule": "0 */2 * * *"
     },
     {
       "path": "/api/cron/analyze-and-notify",
-      "schedule": "*/10 * * * *"
+      "schedule": "*/15 * * * *"
     },
     {
       "path": "/api/cron/cleanup",
