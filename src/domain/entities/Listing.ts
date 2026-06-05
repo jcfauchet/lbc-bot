@@ -13,6 +13,7 @@ export interface ListingProps {
   publishedAt?: Date
   status: ListingStatus
   ignoreReason?: string
+  triageScore?: number
   createdAt: Date
   updatedAt: Date
 }
@@ -85,6 +86,10 @@ export class Listing {
     return this.props.ignoreReason
   }
 
+  get triageScore(): number | undefined {
+    return this.props.triageScore
+  }
+
   setIgnoreReason(reason: string): void {
     this.props.ignoreReason = reason
     this.props.updatedAt = new Date()
@@ -112,6 +117,17 @@ export class Listing {
 
   markAsAnalyzing(): void {
     this.props.status = ListingStatus.ANALYZING
+    this.props.updatedAt = new Date()
+  }
+
+  markAsPrefiltered(): void {
+    this.props.status = ListingStatus.PREFILTERED
+    this.props.updatedAt = new Date()
+  }
+
+  markAsTriaged(score: number): void {
+    this.props.status = ListingStatus.TRIAGED
+    this.props.triageScore = score
     this.props.updatedAt = new Date()
   }
 }
