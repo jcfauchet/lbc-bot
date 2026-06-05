@@ -28,6 +28,10 @@ const envSchema = z.object({
     .string()
     .optional()
     .transform((v) => v ? v.split(',').map((s) => s.trim()).filter(Boolean) : []),
+  SERPAPI_KEY: z.string().min(1),
+  LENS_DAILY_BUDGET: z.coerce.number().min(0).default(8),
+  LENS_MONTHLY_BUDGET: z.coerce.number().min(0).default(250),
+  TRIAGE_MIN_SCORE: z.coerce.number().min(0).max(10).default(5),
 })
 
 export type Env = z.infer<typeof envSchema>
