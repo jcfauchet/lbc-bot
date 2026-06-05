@@ -1,16 +1,11 @@
 #!/usr/bin/env node
-
 import { container } from '@/infrastructure/di/container'
 
 async function main() {
-  console.log('🤖 Starting AI analysis...')
-
+  console.log('💎 Stage C — Lens comp analysis (budgeted)...')
   try {
-    const result = await container.runAiAnalysisUseCase.execute(10)
-    
-    console.log('\n✅ Analysis completed!')
-    console.log(`   Analyzed: ${result.analyzed}`)
-    console.log(`   Errors: ${result.errors}`)
+    const res = await container.runCompAnalysisUseCase.execute()
+    console.log(`   processed: ${res.processed} | analyzed: ${res.analyzed} | ignored: ${res.ignored}`)
   } catch (error) {
     console.error('❌ Analysis failed:', error)
     process.exit(1)

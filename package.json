@@ -17,8 +17,11 @@
     "db:clear": "tsx prisma/clear-db.ts",
     "scrape": "tsx src/cli/scrape.ts",
     "scrape:references": "tsx src/cli/run-scrapers.ts",
+    "prefilter": "tsx src/cli/prefilter.ts",
+    "triage": "tsx src/cli/triage.ts",
     "analyze": "tsx src/cli/analyze.ts",
     "notify": "tsx src/cli/notify.ts",
+    "funnel": "pnpm scrape && pnpm prefilter && pnpm triage && pnpm analyze",
     "test": "vitest --run",
     "test:ui": "vitest --ui"
   },
