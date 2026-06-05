@@ -19,3 +19,4 @@ logs/*
 .pnpm-store/
 logs
 google.json
+*.tsbuildinfo

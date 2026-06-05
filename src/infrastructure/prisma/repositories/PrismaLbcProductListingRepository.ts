@@ -18,6 +18,7 @@ export class PrismaLbcProductListingRepository implements IListingRepository {
       region: listing.region,
       publishedAt: listing.publishedAt,
       status: listing.status,
+      triageScore: listing.triageScore,
     }
 
     const created = await this.prisma.lbcProductListing.create({ data })
@@ -76,6 +77,7 @@ export class PrismaLbcProductListingRepository implements IListingRepository {
       data: {
         status: listing.status,
         ignoreReason: listing.ignoreReason,
+        triageScore: listing.triageScore,
         updatedAt: new Date(),
       },
     })
@@ -117,6 +119,7 @@ export class PrismaLbcProductListingRepository implements IListingRepository {
       publishedAt: raw.publishedAt,
       status: raw.status as ListingStatus,
       ignoreReason: raw.ignoreReason,
+      triageScore: raw.triageScore ?? undefined,
       createdAt: raw.createdAt,
       updatedAt: raw.updatedAt,
     })

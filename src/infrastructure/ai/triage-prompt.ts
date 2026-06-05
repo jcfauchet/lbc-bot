@@ -11,10 +11,10 @@ export const TRIAGE_PROMPT = [
 ].join(' ')
 
 export function parseTriageScore(raw: string): TriageResult {
-  const match = raw.match(/-?\d+(\.\d+)?/)
-  if (!match) return { score: 0 }
-  const n = Math.round(Number(match[0]))
-  const score = Math.max(0, Math.min(10, n))
-  const rationaleMatch = raw.match(/"rationale"\s*:\s*"([^"]*)"/)
-  return { score, rationale: rationaleMatch?.[1] }
+  const rationale = raw.match(/"rationale"\s*:\s*"([^"]*)"/)?.[1]
+  const keyed = raw.match(/"score"\s*:\s*(-?\d+(?:\.\d+)?)/i) ?? raw.match(/score\D{0,12}(-?\d+(?:\.\d+)?)/i)
+  const num = keyed?.[1] ?? raw.match(/-?\d+(?:\.\d+)?/)?.[0]
+  if (num === undefined) return { score: 0, rationale }
+  const score = Math.max(0, Math.min(10, Math.round(Number(num))))
+  return { score, rationale }
 }

@@ -9,6 +9,10 @@ describe('parseTriageScore', () => {
     expect(parseTriageScore('score: 99').score).toBe(10)
     expect(parseTriageScore('no number here').score).toBe(0)
   })
+  it('prefers the score field/word over incidental numbers', () => {
+    expect(parseTriageScore('This 19th century piece scores a 7').score).toBe(7)
+    expect(parseTriageScore('{"score": 6, "rationale": "circa 1850 lamp"}').score).toBe(6)
+  })
 })
 
 describe('TRIAGE_PROMPT', () => {
