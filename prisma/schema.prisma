@@ -29,6 +29,7 @@ model LbcProductListing {
   region       String?
   publishedAt  DateTime?
   status       String    @default("new")
+  triageScore  Int?
   ignoreReason String?   @db.Text
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
@@ -136,4 +137,14 @@ model Category {
   updatedAt DateTime @updatedAt
 
   @@map("categories")
+}
+
+model LensCall {
+  id        String   @id @default(cuid())
+  listingId String?
+  success   Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("lens_calls")
 }
