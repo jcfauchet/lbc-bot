@@ -33,6 +33,14 @@ import { RunCleanupUseCase } from '@/application/use-cases/RunCleanupUseCase'
 import { GetDashboardStatsUseCase } from '@/application/use-cases/GetDashboardStatsUseCase'
 import { GetNonNotifiedListingsUseCase } from '@/application/use-cases/GetNonNotifiedListingsUseCase'
 import { GeminiPriceEstimationService } from '@/infrastructure/ai/Gemini/GeminiPriceEstimationService'
+import { SerpApiLensCompService } from '@/infrastructure/comps/SerpApiLensCompService'
+import { GeminiTriageService } from '@/infrastructure/ai/Gemini/GeminiTriageService'
+import { OpenAiTriageService } from '@/infrastructure/ai/OpenAi/OpenAiTriageService'
+import { FallbackTriageService } from '@/infrastructure/ai/FallbackTriageService'
+import { PrismaLensBudgetRepository } from '@/infrastructure/prisma/repositories/PrismaLensBudgetRepository'
+import { RunPreFilterUseCase } from '@/application/use-cases/RunPreFilterUseCase'
+import { RunTriageUseCase } from '@/application/use-cases/RunTriageUseCase'
+import { RunCompAnalysisUseCase } from '@/application/use-cases/RunCompAnalysisUseCase'
 
 export class Container {
   private static instance: Container
@@ -66,6 +74,13 @@ export class Container {
   public readonly runCleanupUseCase: RunCleanupUseCase
   public readonly getDashboardStatsUseCase: GetDashboardStatsUseCase
   public readonly getNonNotifiedListingsUseCase: GetNonNotifiedListingsUseCase
+
+  public readonly compService: SerpApiLensCompService
+  public readonly triageService: FallbackTriageService
+  public readonly lensBudgetRepository: PrismaLensBudgetRepository
+  public readonly runPreFilterUseCase: RunPreFilterUseCase
+  public readonly runTriageUseCase: RunTriageUseCase
+  public readonly runCompAnalysisUseCase: RunCompAnalysisUseCase
 
   private constructor() {
     this.prisma = prisma
@@ -111,6 +126,33 @@ export class Container {
     
     this.textFilterService = new TextFilterService()
     this.mailer = new ResendMailer(env.RESEND_API_KEY)
+
+    this.compService = new SerpApiLensCompService(env.SERPAPI_KEY)
+    this.triageService = new FallbackTriageService(
+      new GeminiTriageService(env.GOOGLE_GEMINI_API_KEY),
+      new OpenAiTriageService(env.OPENAI_API_KEY),
+    )
+    this.lensBudgetRepository = new PrismaLensBudgetRepository(this.prisma)
+
+    this.runPreFilterUseCase = new RunPreFilterUseCase(
+      this.listingRepository,
+      this.textFilterService,
+      { minEuros: env.MIN_LISTING_PRICE_EUR, maxEuros: env.MAX_LISTING_PRICE_EUR },
+    )
+    this.runTriageUseCase = new RunTriageUseCase(
+      this.listingRepository,
+      this.listingImageRepository,
+      this.triageService,
+      env.TRIAGE_MIN_SCORE,
+    )
+    this.runCompAnalysisUseCase = new RunCompAnalysisUseCase(
+      this.listingRepository,
+      this.aiAnalysisRepository,
+      this.listingImageRepository,
+      this.compService,
+      this.lensBudgetRepository,
+      { dailyBudget: env.LENS_DAILY_BUDGET, monthlyBudget: env.LENS_MONTHLY_BUDGET },
+    )
 
     this.runListingScrapingUseCase = new RunListingScrapingUseCase(
       this.searchRepository,
