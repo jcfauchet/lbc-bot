@@ -3,7 +3,6 @@ import { prisma } from '@/infrastructure/prisma/client'
 import { ListingFeedback } from '@/domain/entities/ListingFeedback'
 import { PrismaFeedbackRepository } from '@/infrastructure/prisma/repositories/PrismaFeedbackRepository'
 import { EmbeddingService } from '@/infrastructure/ai/EmbeddingService'
-import { env } from '@/infrastructure/config/env'
 
 // POST /api/feedback — save a feedback with optional comment
 export async function POST(req: NextRequest) {
@@ -55,9 +54,14 @@ export async function POST(req: NextRequest) {
 
     // Generate embedding in best-effort (failure doesn't lose the vote)
     try {
-      const embeddingService = new EmbeddingService(env.OPENAI_API_KEY)
-      const embedding = await embeddingService.embed(embeddingText)
-      await repo.updateEmbedding(feedback.id, embedding)
+      const openAiApiKey = process.env.OPENAI_API_KEY
+      if (openAiApiKey) {
+        const embeddingService = new EmbeddingService(openAiApiKey)
+        const embedding = await embeddingService.embed(embeddingText)
+        await repo.updateEmbedding(feedback.id, embedding)
+      } else {
+        console.warn('OPENAI_API_KEY missing; feedback embedding skipped')
+      }
     } catch (err) {
       console.error('Embedding generation failed (non-blocking):', err)
     }

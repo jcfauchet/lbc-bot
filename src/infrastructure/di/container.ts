@@ -77,6 +77,11 @@ export class Container {
   public readonly runCompAnalysisUseCase: RunCompAnalysisUseCase
 
   private constructor() {
+    const openAiApiKey = env.OPENAI_API_KEY ?? 'missing-openai-api-key'
+    const geminiApiKey = env.GOOGLE_GEMINI_API_KEY ?? 'missing-google-gemini-api-key'
+    const resendApiKey = env.RESEND_API_KEY ?? 'missing-resend-api-key'
+    const serpApiKey = env.SERPAPI_KEY ?? 'missing-serpapi-key'
+
     this.prisma = prisma
 
     this.listingRepository = new PrismaLbcProductListingRepository(this.prisma)
@@ -87,7 +92,7 @@ export class Container {
     this.listingLabelRepository = new PrismaLbcProductListingLabelRepository(this.prisma)
     this.taxonomyRepository = new PrismaTaxonomyRepository(this.prisma)
     this.feedbackRepository = new PrismaFeedbackRepository(this.prisma)
-    this.embeddingService = new EmbeddingService(env.OPENAI_API_KEY)
+    this.embeddingService = new EmbeddingService(openAiApiKey)
 
     this.scraper = new LeBonCoinListingScraper()
     
@@ -101,12 +106,12 @@ export class Container {
       this.listingImageRepository
     )
     this.textFilterService = new TextFilterService()
-    this.mailer = new ResendMailer(env.RESEND_API_KEY)
+    this.mailer = new ResendMailer(resendApiKey)
 
-    this.compService = new SerpApiLensCompService(env.SERPAPI_KEY)
+    this.compService = new SerpApiLensCompService(serpApiKey)
     this.triageService = new FallbackTriageService(
-      new GeminiTriageService(env.GOOGLE_GEMINI_API_KEY),
-      new OpenAiTriageService(env.OPENAI_API_KEY),
+      new GeminiTriageService(geminiApiKey),
+      new OpenAiTriageService(openAiApiKey),
     )
     this.lensBudgetRepository = new PrismaLensBudgetRepository(this.prisma)
 
@@ -145,7 +150,7 @@ export class Container {
       this.listingImageRepository,
       this.mailer,
       env.NOTIFICATION_EMAIL_TO,
-      env.NOTIFICATION_EMAIL_FROM,
+      env.NOTIFICATION_EMAIL_FROM ?? 'LBC Bot <bot@example.com>',
       env.MIN_MARGIN_IN_EUR
     )
 
@@ -178,4 +183,3 @@ export class Container {
 }
 
 export const container = Container.getInstance()
-

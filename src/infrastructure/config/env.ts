@@ -3,13 +3,14 @@ import { z } from 'zod'
 
 const envSchema = z.object({
   DATABASE_URL: z.string().url(),
-  OPENAI_API_KEY: z.string().min(1),
-  GOOGLE_GEMINI_API_KEY: z.string().min(1),
-  RESEND_API_KEY: z.string().min(1),
-  NOTIFICATION_EMAIL_FROM: z.string().email(),
+  OPENAI_API_KEY: z.string().min(1).optional(),
+  GOOGLE_GEMINI_API_KEY: z.string().min(1).optional(),
+  RESEND_API_KEY: z.string().min(1).optional(),
+  NOTIFICATION_EMAIL_FROM: z.string().email().optional(),
   NOTIFICATION_EMAIL_TO: z
     .string()
-    .transform((v) => v.split(',').map((s) => s.trim()))
+    .optional()
+    .transform((v) => v ? v.split(',').map((s) => s.trim()) : [])
     .pipe(z.array(z.string().email())),
   CRON_SECRET: z.string().min(1).optional(),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
@@ -28,13 +29,25 @@ const envSchema = z.object({
     .string()
     .optional()
     .transform((v) => v ? v.split(',').map((s) => s.trim()).filter(Boolean) : []),
-  SERPAPI_KEY: z.string().min(1),
+  SERPAPI_KEY: z.string().min(1).optional(),
   LENS_DAILY_BUDGET: z.coerce.number().min(0).default(8),
   LENS_MONTHLY_BUDGET: z.coerce.number().min(0).default(250),
   TRIAGE_MIN_SCORE: z.coerce.number().min(0).max(10).default(5),
 })
 
 export type Env = z.infer<typeof envSchema>
+
+export function requireEnv(name: keyof Env): string {
+  const value = env[name]
+  if (typeof value === 'string' && value.trim()) return value
+  throw new Error(`Missing required environment variable: ${name}`)
+}
+
+export function requireEnvList(name: keyof Env): string[] {
+  const value = env[name]
+  if (Array.isArray(value) && value.length > 0) return value
+  throw new Error(`Missing required environment variable: ${name}`)
+}
 
 export function loadEnv(): Env {
   const parsed = envSchema.safeParse(process.env)
@@ -48,4 +61,3 @@ export function loadEnv(): Env {
 }
 
 export const env = loadEnv()
-
