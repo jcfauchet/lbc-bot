@@ -15,15 +15,15 @@ export async function GET(request: Request) {
   return withErrorHandling(async () => {
     logInfo('CRON:analyze', 'Starting scheduled analysis job')
     
-    const result = await container.runAiAnalysisUseCase.execute(10)
-    
-    logInfo('CRON:analyze', `Analysis completed: ${result.analyzed} analyzed`, result)
+    await container.runPreFilterUseCase.execute()
+    await container.runTriageUseCase.execute()
+    const result = await container.runCompAnalysisUseCase.execute()
 
     const notificationResult = await container.runNotificationUseCase.execute()
-    
+
+    logInfo('CRON:analyze', `Funnel completed: ${result.analyzed} analyzed, ${result.processed} processed, ${result.ignored} ignored`, result)
     logInfo('CRON:analyze', `Notification completed: ${notificationResult.sent} sent`, notificationResult)
 
-    
     return NextResponse.json({
       success: true,
       data: result,

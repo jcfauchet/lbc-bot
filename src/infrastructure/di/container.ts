@@ -18,21 +18,17 @@ import { IListingSource } from '@/domain/services/IListingSource'
 import { CloudinaryStorageService } from '@/infrastructure/storage/CloudinaryStorageService'
 import { IStorageService } from '@/infrastructure/storage/IStorageService'
 import { ImageDownloadService } from '@/infrastructure/storage/ImageDownloadService'
-import { OpenAiPriceEstimationService } from '@/infrastructure/ai/OpenAi/OpenAiPriceEstimationService'
 import { ResendMailer } from '@/infrastructure/mail/ResendMailer'
 
 
-import { IPriceEstimationService } from '@/domain/services/IPriceEstimationService'
 import { ITextFilterService } from '@/domain/services/ITextFilterService'
 import { TextFilterService } from '@/infrastructure/filtering/TextFilterService'
 
 import { RunListingScrapingUseCase } from '@/application/use-cases/RunListingScrapingUseCase'
-import { RunAiAnalysisUseCase } from '@/application/use-cases/RunAiAnalysisUseCase'
 import { RunNotificationUseCase } from '@/application/use-cases/RunNotificationUseCase'
 import { RunCleanupUseCase } from '@/application/use-cases/RunCleanupUseCase'
 import { GetDashboardStatsUseCase } from '@/application/use-cases/GetDashboardStatsUseCase'
 import { GetNonNotifiedListingsUseCase } from '@/application/use-cases/GetNonNotifiedListingsUseCase'
-import { GeminiPriceEstimationService } from '@/infrastructure/ai/Gemini/GeminiPriceEstimationService'
 import { SerpApiLensCompService } from '@/infrastructure/comps/SerpApiLensCompService'
 import { GeminiTriageService } from '@/infrastructure/ai/Gemini/GeminiTriageService'
 import { OpenAiTriageService } from '@/infrastructure/ai/OpenAi/OpenAiTriageService'
@@ -62,14 +58,12 @@ export class Container {
   public readonly listingSourceScraper: IListingSource
   public readonly storageService: IStorageService
   public readonly imageDownloadService: ImageDownloadService
-  public readonly priceEstimationService: IPriceEstimationService
   public readonly textFilterService: ITextFilterService
   public readonly mailer: ResendMailer
 
 
 
   public readonly runListingScrapingUseCase: RunListingScrapingUseCase
-  public readonly runAiAnalysisUseCase: RunAiAnalysisUseCase
   public readonly runNotificationUseCase: RunNotificationUseCase
   public readonly runCleanupUseCase: RunCleanupUseCase
   public readonly getDashboardStatsUseCase: GetDashboardStatsUseCase
@@ -106,24 +100,6 @@ export class Container {
       this.storageService,
       this.listingImageRepository
     )
-    const getRandomProvider = (): 'openai' | 'gemini' => {
-      return Math.random() < 0.5 ? 'openai' : 'gemini'
-    }
-
-    const selectedProvider: 'openai' | 'gemini' = env.AI_PROVIDER === 'random' 
-      ? getRandomProvider() 
-      : (env.AI_PROVIDER as 'openai' | 'gemini')
-
-    this.priceEstimationService = selectedProvider === 'openai' 
-      ? new OpenAiPriceEstimationService(
-          env.OPENAI_API_KEY,
-          this.storageService
-        )
-      : new GeminiPriceEstimationService(
-          env.GOOGLE_GEMINI_API_KEY,
-          this.storageService
-        )
-    
     this.textFilterService = new TextFilterService()
     this.mailer = new ResendMailer(env.RESEND_API_KEY)
 
@@ -160,18 +136,6 @@ export class Container {
       this.listingImageRepository,
       this.listingSourceApi,
       this.listingSourceScraper
-    )
-
-    this.runAiAnalysisUseCase = new RunAiAnalysisUseCase(
-      this.listingRepository,
-      this.aiAnalysisRepository,
-      this.listingImageRepository,
-      this.priceEstimationService,
-      this.imageDownloadService,
-      this.storageService,
-      this.textFilterService,
-      this.feedbackRepository,
-      this.embeddingService
     )
 
     this.runNotificationUseCase = new RunNotificationUseCase(

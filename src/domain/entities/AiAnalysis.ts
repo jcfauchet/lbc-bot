@@ -1,5 +1,10 @@
 import { Money } from '../value-objects/Money'
-import { SearchTerm } from '../services/IPriceEstimationService'
+
+export interface SearchTerm {
+  query: string
+  designer?: string
+  confidence: number
+}
 
 export interface AiAnalysisProps {
   id: string
