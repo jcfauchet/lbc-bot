@@ -1,6 +1,6 @@
 import OpenAI from 'openai'
 import type { ITriageService, TriageResult } from '@/domain/services/ITriageService'
-import { TRIAGE_PROMPT, parseTriageScore } from '../triage-prompt'
+import { buildTriagePrompt, parseTriageScore } from '../triage-prompt'
 
 export class OpenAiTriageService implements ITriageService {
   readonly providerName = 'openai'
@@ -12,13 +12,13 @@ export class OpenAiTriageService implements ITriageService {
     this.model = model
   }
 
-  async triage(imageUrl: string, title: string): Promise<TriageResult> {
+  async triage(imageUrl: string, title: string, guidance?: string | null): Promise<TriageResult> {
     const completion = await this.client.chat.completions.create({
       model: this.model,
       messages: [{
         role: 'user',
         content: [
-          { type: 'text', text: `${TRIAGE_PROMPT}\nListing title: ${title}` },
+          { type: 'text', text: `${buildTriagePrompt(guidance)}\nListing title: ${title}` },
           { type: 'image_url', image_url: { url: imageUrl } },
         ],
       }],

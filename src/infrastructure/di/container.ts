@@ -10,7 +10,9 @@ import { PrismaNotificationRepository } from '@/infrastructure/prisma/repositori
 import { PrismaLbcProductListingLabelRepository } from '@/infrastructure/prisma/repositories/PrismaLbcProductListingLabelRepository'
 import { PrismaTaxonomyRepository } from '@/infrastructure/prisma/repositories/PrismaTaxonomyRepository'
 import { PrismaFeedbackRepository } from '@/infrastructure/prisma/repositories/PrismaFeedbackRepository'
+import { PrismaTriageGuidanceRepository } from '@/infrastructure/prisma/repositories/PrismaTriageGuidanceRepository'
 import { EmbeddingService } from '@/infrastructure/ai/EmbeddingService'
+import { GeminiFeedbackLearningService } from '@/infrastructure/ai/Gemini/GeminiFeedbackLearningService'
 
 import { LeBonCoinListingScraper } from '@/infrastructure/scraping/listings/LeBonCoinListingScraper'
 import { LeBonCoinApiClient } from '@/infrastructure/api/LeBonCoinApiClient'
@@ -38,6 +40,7 @@ import { PrismaLensBudgetRepository } from '@/infrastructure/prisma/repositories
 import { RunPreFilterUseCase } from '@/application/use-cases/RunPreFilterUseCase'
 import { RunTriageUseCase } from '@/application/use-cases/RunTriageUseCase'
 import { RunCompAnalysisUseCase } from '@/application/use-cases/RunCompAnalysisUseCase'
+import { RunFeedbackLearningUseCase } from '@/application/use-cases/RunFeedbackLearningUseCase'
 
 export class Container {
   private static instance: Container
@@ -52,7 +55,9 @@ export class Container {
   public readonly listingLabelRepository: PrismaLbcProductListingLabelRepository
   public readonly taxonomyRepository: PrismaTaxonomyRepository
   public readonly feedbackRepository: PrismaFeedbackRepository
+  public readonly triageGuidanceRepository: PrismaTriageGuidanceRepository
   public readonly embeddingService: EmbeddingService
+  public readonly feedbackLearningService: GeminiFeedbackLearningService
 
   public readonly scraper: LeBonCoinListingScraper
   public readonly listingSourceApi: IListingSource
@@ -77,6 +82,7 @@ export class Container {
   public readonly runPreFilterUseCase: RunPreFilterUseCase
   public readonly runTriageUseCase: RunTriageUseCase
   public readonly runCompAnalysisUseCase: RunCompAnalysisUseCase
+  public readonly runFeedbackLearningUseCase: RunFeedbackLearningUseCase
 
   private constructor() {
     const openAiApiKey = env.OPENAI_API_KEY ?? 'missing-openai-api-key'
@@ -94,7 +100,9 @@ export class Container {
     this.listingLabelRepository = new PrismaLbcProductListingLabelRepository(this.prisma)
     this.taxonomyRepository = new PrismaTaxonomyRepository(this.prisma)
     this.feedbackRepository = new PrismaFeedbackRepository(this.prisma)
+    this.triageGuidanceRepository = new PrismaTriageGuidanceRepository(this.prisma)
     this.embeddingService = new EmbeddingService(openAiApiKey)
+    this.feedbackLearningService = new GeminiFeedbackLearningService(geminiApiKey)
 
     this.scraper = new LeBonCoinListingScraper()
     
@@ -128,6 +136,7 @@ export class Container {
       this.triageService,
       env.TRIAGE_MIN_SCORE,
       env.TRIAGE_MAX_PER_RUN,
+      this.triageGuidanceRepository,
     )
     this.runCompAnalysisUseCase = new RunCompAnalysisUseCase(
       this.listingRepository,
@@ -173,6 +182,13 @@ export class Container {
 
     this.getRecentNotifiedListingsUseCase = new GetRecentNotifiedListingsUseCase(
       this.prisma
+    )
+
+    this.runFeedbackLearningUseCase = new RunFeedbackLearningUseCase(
+      this.feedbackRepository,
+      this.feedbackLearningService,
+      this.triageGuidanceRepository,
+      env.FEEDBACK_LEARNING_MAX_ITEMS,
     )
   }
 

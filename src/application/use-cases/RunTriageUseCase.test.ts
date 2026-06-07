@@ -10,6 +10,9 @@ const mk = (id: string) => {
   return l
 }
 
+const guidanceRepo = (content: string | null = null) =>
+  ({ getLatest: vi.fn(async () => (content ? { id: 'g', content, sourceFeedbackCount: 1, createdAt: new Date() } : null)), save: vi.fn() } as any)
+
 describe('RunTriageUseCase', () => {
   it('triages above threshold and ignores below', async () => {
     const high = mk('h'); const low = mk('l')
@@ -27,7 +30,7 @@ describe('RunTriageUseCase', () => {
       .mockResolvedValueOnce({ score: 8 })
       .mockResolvedValueOnce({ score: 2 })
 
-    const useCase = new RunTriageUseCase(listingRepository, imageRepository, triageService, 5, 100)
+    const useCase = new RunTriageUseCase(listingRepository, imageRepository, triageService, 5, 100, guidanceRepo())
     const res = await useCase.execute()
 
     expect(out['h'].status).toBe(ListingStatus.TRIAGED)
@@ -52,7 +55,7 @@ describe('RunTriageUseCase', () => {
     const imageRepository = { findByListingId: vi.fn(async () => [{ urlRemote: 'https://img/x.jpg' }]) } as any
     const triageService = { providerName: 'gemini', triage: vi.fn(async () => ({ score: 8 })) } as any
 
-    const useCase = new RunTriageUseCase(listingRepository, imageRepository, triageService, 5, 1)
+    const useCase = new RunTriageUseCase(listingRepository, imageRepository, triageService, 5, 1, guidanceRepo())
     const res = await useCase.execute()
 
     expect(triageService.triage).toHaveBeenCalledTimes(1)
@@ -71,10 +74,24 @@ describe('RunTriageUseCase', () => {
     const imageRepository = { findByListingId: vi.fn(async () => []) } as any
     const triageService = { providerName: 'gemini', triage: vi.fn() } as any
 
-    const useCase = new RunTriageUseCase(listingRepository, imageRepository, triageService, 5, 100)
+    const useCase = new RunTriageUseCase(listingRepository, imageRepository, triageService, 5, 100, guidanceRepo())
     await useCase.execute()
 
     expect(out['n']).toBe(ListingStatus.IGNORED)
     expect(triageService.triage).not.toHaveBeenCalled()
+  })
+
+  it('forwards the latest guidance to the triage service', async () => {
+    const listingRepository = {
+      findByStatus: vi.fn(async () => [mk('h')]),
+      update: vi.fn(async (l: Listing) => l),
+    } as any
+    const imageRepository = { findByListingId: vi.fn(async () => [{ urlRemote: 'https://img/x.jpg' }]) } as any
+    const triageService = { providerName: 'gemini', triage: vi.fn(async () => ({ score: 8 })) } as any
+
+    const useCase = new RunTriageUseCase(listingRepository, imageRepository, triageService, 5, 100, guidanceRepo('- avoid repros'))
+    await useCase.execute()
+
+    expect(triageService.triage).toHaveBeenCalledWith('https://img/x.jpg', 't', '- avoid repros')
   })
 })

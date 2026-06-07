@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { TRIAGE_PROMPT, parseTriageScore } from './triage-prompt'
+import { TRIAGE_PROMPT, buildTriagePrompt, parseTriageScore } from './triage-prompt'
 
 describe('parseTriageScore', () => {
   it('extracts a 0-10 integer from a JSON-ish reply', () => {
@@ -18,5 +18,25 @@ describe('parseTriageScore', () => {
 describe('TRIAGE_PROMPT', () => {
   it('instructs NOT to name a designer', () => {
     expect(TRIAGE_PROMPT.toLowerCase()).toContain('do not')
+  })
+})
+
+describe('buildTriagePrompt', () => {
+  it('returns the base prompt when no guidance', () => {
+    expect(buildTriagePrompt()).toBe(TRIAGE_PROMPT)
+    expect(buildTriagePrompt('')).toBe(TRIAGE_PROMPT)
+    expect(buildTriagePrompt('   ')).toBe(TRIAGE_PROMPT)
+  })
+
+  it('appends guidance when present', () => {
+    const out = buildTriagePrompt('- avoid flat-pack lookalikes')
+    expect(out).toContain(TRIAGE_PROMPT)
+    expect(out).toContain('avoid flat-pack lookalikes')
+    expect(out.toLowerCase()).toContain('lessons learned')
+  })
+
+  it('caps guidance length', () => {
+    const out = buildTriagePrompt('x'.repeat(5000))
+    expect(out.length).toBeLessThan(TRIAGE_PROMPT.length + 2200)
   })
 })

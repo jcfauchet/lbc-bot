@@ -148,3 +148,13 @@ model LensCall {
   @@index([createdAt])
   @@map("lens_calls")
 }
+
+model TriageGuidance {
+  id                  String   @id @default(cuid())
+  content             String   @db.Text
+  sourceFeedbackCount Int
+  createdAt           DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("triage_guidance")
+}

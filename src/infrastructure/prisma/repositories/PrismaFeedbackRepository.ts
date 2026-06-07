@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client'
 import { ListingFeedback } from '@/domain/entities/ListingFeedback'
-import { IFeedbackRepository, SimilarFeedback } from '@/domain/repositories/IFeedbackRepository'
+import { IFeedbackRepository, SimilarFeedback, NegativeFeedbackItem } from '@/domain/repositories/IFeedbackRepository'
 
 export class PrismaFeedbackRepository implements IFeedbackRepository {
   constructor(private prisma: PrismaClient) {}
@@ -82,6 +82,34 @@ export class PrismaFeedbackRepository implements IFeedbackRepository {
       comment: row.comment ?? undefined,
       aiDescription: row.aiDescription ?? undefined,
       similarity: Number(row.similarity),
+    }))
+  }
+
+  async findRecentNegative(limit: number): Promise<NegativeFeedbackItem[]> {
+    const rows = await this.prisma.$queryRaw<Array<{
+      listingTitle: string
+      priceCents: number
+      comment: string | null
+      aiDescription: string | null
+    }>>`
+      SELECT
+        p.title AS "listingTitle",
+        p."priceCents",
+        f."comment",
+        a.description AS "aiDescription"
+      FROM "listing_feedbacks" f
+      JOIN "lbc_product_listings" p ON p.id = f."listingId"
+      LEFT JOIN "ai_analyses" a ON a."listingId" = f."listingId"
+      WHERE f."isGood" = false
+      ORDER BY f."createdAt" DESC
+      LIMIT ${limit}
+    `
+
+    return rows.map((row) => ({
+      listingTitle: row.listingTitle,
+      priceCents: row.priceCents,
+      comment: row.comment ?? undefined,
+      aiDescription: row.aiDescription ?? undefined,
     }))
   }
 

@@ -6,5 +6,5 @@ export interface TriageResult {
 
 export interface ITriageService {
   readonly providerName: string
-  triage(imageUrl: string, title: string): Promise<TriageResult>
+  triage(imageUrl: string, title: string, guidance?: string | null): Promise<TriageResult>
 }

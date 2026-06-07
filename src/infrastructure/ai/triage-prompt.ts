@@ -10,6 +10,25 @@ export const TRIAGE_PROMPT = [
   'Reply with strict JSON: {"score": <0-10 integer>, "rationale": "<short>"}',
 ].join(' ')
 
+/** Hard cap on injected guidance length to keep prompt token cost bounded. */
+const MAX_GUIDANCE_CHARS = 2000
+
+/**
+ * Builds the triage prompt, optionally appending learned guidance distilled from
+ * past negative feedback. The guidance is advisory: the model still scores 0-10
+ * and the score threshold is unchanged, so guidance can nuance but never hard-filter.
+ */
+export function buildTriagePrompt(guidance?: string | null): string {
+  const trimmed = guidance?.trim()
+  if (!trimmed) return TRIAGE_PROMPT
+  return [
+    TRIAGE_PROMPT,
+    '',
+    'Lessons learned from past mistakes (listings that were notified but judged NOT worth it). Lower the score when the piece matches these:',
+    trimmed.slice(0, MAX_GUIDANCE_CHARS),
+  ].join('\n')
+}
+
 export function parseTriageScore(raw: string): TriageResult {
   const rationale = raw.match(/"rationale"\s*:\s*"([^"]*)"/)?.[1]
   const keyed = raw.match(/"score"\s*:\s*(-?\d+(?:\.\d+)?)/i) ?? raw.match(/score\D{0,12}(-?\d+(?:\.\d+)?)/i)

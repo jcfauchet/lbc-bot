@@ -1,6 +1,7 @@
 import type { IListingRepository } from '@/domain/repositories/IListingRepository'
 import type { IListingImageRepository } from '@/domain/repositories/IListingImageRepository'
 import type { ITriageService } from '@/domain/services/ITriageService'
+import type { ITriageGuidanceRepository } from '@/domain/repositories/ITriageGuidanceRepository'
 import { ListingStatus } from '@/domain/value-objects/ListingStatus'
 
 export class RunTriageUseCase {
@@ -10,9 +11,14 @@ export class RunTriageUseCase {
     private triageService: ITriageService,
     private minScore: number,
     private maxPerRun: number,
+    private guidanceRepository: ITriageGuidanceRepository,
   ) {}
 
   async execute(): Promise<{ triaged: number; ignored: number }> {
+    // Learned guidance distilled from past negative feedback, injected into the
+    // triage prompt to reduce false positives. Loaded once per run.
+    const guidance = (await this.guidanceRepository.getLatest())?.content ?? null
+
     // Cap the work per run, newest first, so a fresh scrape batch never blows
     // past the serverless function timeout. The cron runs every 15 min and
     // drains the remainder on subsequent passes.
@@ -33,7 +39,7 @@ export class RunTriageUseCase {
         continue
       }
 
-      const { score } = await this.triageService.triage(imageUrl, listing.title)
+      const { score } = await this.triageService.triage(imageUrl, listing.title, guidance)
       if (score >= this.minScore) {
         listing.markAsTriaged(score)
         triaged++

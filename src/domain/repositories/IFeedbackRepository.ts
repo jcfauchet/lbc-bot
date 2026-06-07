@@ -9,11 +9,19 @@ export interface SimilarFeedback {
   similarity: number
 }
 
+export interface NegativeFeedbackItem {
+  listingTitle: string
+  priceCents: number
+  comment?: string
+  aiDescription?: string
+}
+
 export interface IFeedbackRepository {
   save(feedback: ListingFeedback, embedding?: number[]): Promise<ListingFeedback>
   updateEmbedding(id: string, embedding: number[]): Promise<void>
   updateComment(id: string, comment: string): Promise<void>
   findSimilar(embedding: number[], limit: number): Promise<SimilarFeedback[]>
+  findRecentNegative(limit: number): Promise<NegativeFeedbackItem[]>
   findByListingId(listingId: string): Promise<ListingFeedback | null>
   findByListingIds(listingIds: string[]): Promise<Map<string, ListingFeedback>>
 }
