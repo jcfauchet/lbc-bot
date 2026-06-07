@@ -27,13 +27,38 @@ describe('RunTriageUseCase', () => {
       .mockResolvedValueOnce({ score: 8 })
       .mockResolvedValueOnce({ score: 2 })
 
-    const useCase = new RunTriageUseCase(listingRepository, imageRepository, triageService, 5)
+    const useCase = new RunTriageUseCase(listingRepository, imageRepository, triageService, 5, 100)
     const res = await useCase.execute()
 
     expect(out['h'].status).toBe(ListingStatus.TRIAGED)
     expect(out['h'].score).toBe(8)
     expect(out['l'].status).toBe(ListingStatus.IGNORED)
     expect(res).toEqual({ triaged: 1, ignored: 1 })
+  })
+
+  it('processes at most maxPerRun listings, newest first', async () => {
+    const mkAt = (id: string, createdAt: Date) => {
+      const l = Listing.create({ lbcId: id, searchId: 's', url: 'u', title: 't', price: Money.fromEuros(80), status: ListingStatus.PREFILTERED })
+      ;(l as any).props = { ...(l as any).props, id, createdAt }
+      return l
+    }
+    const older = mkAt('older', new Date('2026-06-01T10:00:00Z'))
+    const newer = mkAt('newer', new Date('2026-06-06T10:00:00Z'))
+    const out: Record<string, ListingStatus> = {}
+    const listingRepository = {
+      findByStatus: vi.fn(async () => [older, newer]),
+      update: vi.fn(async (l: Listing) => { out[l.id] = l.status; return l }),
+    } as any
+    const imageRepository = { findByListingId: vi.fn(async () => [{ urlRemote: 'https://img/x.jpg' }]) } as any
+    const triageService = { providerName: 'gemini', triage: vi.fn(async () => ({ score: 8 })) } as any
+
+    const useCase = new RunTriageUseCase(listingRepository, imageRepository, triageService, 5, 1)
+    const res = await useCase.execute()
+
+    expect(triageService.triage).toHaveBeenCalledTimes(1)
+    expect(out['newer']).toBe(ListingStatus.TRIAGED)
+    expect(out['older']).toBeUndefined()
+    expect(res.triaged).toBe(1)
   })
 
   it('ignores listings with no image', async () => {
@@ -46,7 +71,7 @@ describe('RunTriageUseCase', () => {
     const imageRepository = { findByListingId: vi.fn(async () => []) } as any
     const triageService = { providerName: 'gemini', triage: vi.fn() } as any
 
-    const useCase = new RunTriageUseCase(listingRepository, imageRepository, triageService, 5)
+    const useCase = new RunTriageUseCase(listingRepository, imageRepository, triageService, 5, 100)
     await useCase.execute()
 
     expect(out['n']).toBe(ListingStatus.IGNORED)

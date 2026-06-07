@@ -9,10 +9,16 @@ export class RunTriageUseCase {
     private imageRepository: IListingImageRepository,
     private triageService: ITriageService,
     private minScore: number,
+    private maxPerRun: number,
   ) {}
 
   async execute(): Promise<{ triaged: number; ignored: number }> {
-    const listings = await this.listingRepository.findByStatus(ListingStatus.PREFILTERED)
+    // Cap the work per run, newest first, so a fresh scrape batch never blows
+    // past the serverless function timeout. The cron runs every 15 min and
+    // drains the remainder on subsequent passes.
+    const listings = (await this.listingRepository.findByStatus(ListingStatus.PREFILTERED))
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, this.maxPerRun)
     let triaged = 0
     let ignored = 0
 

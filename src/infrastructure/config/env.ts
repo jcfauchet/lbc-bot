@@ -33,6 +33,7 @@ const envSchema = z.object({
   LENS_DAILY_BUDGET: z.coerce.number().min(0).default(8),
   LENS_MONTHLY_BUDGET: z.coerce.number().min(0).default(250),
   TRIAGE_MIN_SCORE: z.coerce.number().min(0).max(10).default(5),
+  TRIAGE_MAX_PER_RUN: z.coerce.number().min(1).default(25),
 })
 
 export type Env = z.infer<typeof envSchema>

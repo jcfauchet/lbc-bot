@@ -125,6 +125,7 @@ export class Container {
       this.listingImageRepository,
       this.triageService,
       env.TRIAGE_MIN_SCORE,
+      env.TRIAGE_MAX_PER_RUN,
     )
     this.runCompAnalysisUseCase = new RunCompAnalysisUseCase(
       this.listingRepository,
