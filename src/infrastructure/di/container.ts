@@ -29,6 +29,7 @@ import { RunNotificationUseCase } from '@/application/use-cases/RunNotificationU
 import { RunCleanupUseCase } from '@/application/use-cases/RunCleanupUseCase'
 import { GetDashboardStatsUseCase } from '@/application/use-cases/GetDashboardStatsUseCase'
 import { GetNonNotifiedListingsUseCase } from '@/application/use-cases/GetNonNotifiedListingsUseCase'
+import { GetRecentNotifiedListingsUseCase } from '@/application/use-cases/GetRecentNotifiedListingsUseCase'
 import { SerpApiLensCompService } from '@/infrastructure/comps/SerpApiLensCompService'
 import { GeminiTriageService } from '@/infrastructure/ai/Gemini/GeminiTriageService'
 import { OpenAiTriageService } from '@/infrastructure/ai/OpenAi/OpenAiTriageService'
@@ -68,6 +69,7 @@ export class Container {
   public readonly runCleanupUseCase: RunCleanupUseCase
   public readonly getDashboardStatsUseCase: GetDashboardStatsUseCase
   public readonly getNonNotifiedListingsUseCase: GetNonNotifiedListingsUseCase
+  public readonly getRecentNotifiedListingsUseCase: GetRecentNotifiedListingsUseCase
 
   public readonly compService: SerpApiLensCompService
   public readonly triageService: FallbackTriageService
@@ -167,6 +169,10 @@ export class Container {
     this.getNonNotifiedListingsUseCase = new GetNonNotifiedListingsUseCase(
       this.prisma,
       env.MIN_MARGIN_IN_EUR
+    )
+
+    this.getRecentNotifiedListingsUseCase = new GetRecentNotifiedListingsUseCase(
+      this.prisma
     )
   }
 

@@ -77,6 +77,17 @@ export class EmailTemplates {
     </p>
   </div>
   
+  <div style="background: white; padding: 16px 20px; text-align: center; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+    <a href="${env.APP_URL}/feedback/inbox"
+       style="display: inline-block; background: #667eea; color: white; text-decoration: none;
+              font-weight: bold; padding: 12px 22px; border-radius: 8px;">
+      🗳️ Noter toutes les annonces sur une page
+    </a>
+    <p style="margin: 8px 0 0 0; font-size: 12px; color: #999;">
+      Tout au même endroit, sans revenir à ce mail.
+    </p>
+  </div>
+
   <table style="width: 100%; border-collapse: collapse; background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
     ${listingRows}
   </table>
