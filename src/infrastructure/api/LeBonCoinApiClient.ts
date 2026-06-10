@@ -248,6 +248,7 @@ export class LeBonCoinApiClient implements IListingSource {
             lbcId: ad.list_id.toString(),
             url: ad.url.startsWith('http') ? ad.url : `https://www.leboncoin.fr${ad.url}`,
             title: ad.subject,
+            description: ad.body,
             priceCents: ad.price[0] * 100,
             city: ad.location?.city || '',
             region: ad.location?.region_name || '',

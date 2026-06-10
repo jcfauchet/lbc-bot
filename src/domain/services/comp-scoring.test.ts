@@ -8,13 +8,15 @@ const m = (value: number | undefined, isValueDomain: boolean, currency = 'EUR'):
 })
 
 describe('scoreComps', () => {
-  it('returns reliable with median/range from priced value comps (>=3)', () => {
+  it('returns reliable with median and an interquartile range from priced value comps (>=3)', () => {
     const r = scoreComps([m(1000, true), m(2000, true), m(3000, true), m(99, false)])
     expect(r.confidence).toBe('reliable')
     expect(r.pricedCompCount).toBe(3)
     expect(r.estimatedValueEur).toBe(2000)
-    expect(r.rangeMinEur).toBe(1000)
-    expect(r.rangeMaxEur).toBe(3000)
+    // Range is the interquartile band (p25-p75), not the raw min/max, so a
+    // single outlier comp cannot blow the estimate wide open.
+    expect(r.rangeMinEur).toBe(1500)
+    expect(r.rangeMaxEur).toBe(2500)
   })
 
   it('ignores priced comps that are not on value domains', () => {
@@ -28,6 +30,13 @@ describe('scoreComps', () => {
     const r = scoreComps([m(1200, true), m(1800, true)])
     expect(r.confidence).toBe('to_verify')
     expect(r.estimatedValueEur).toBe(1500)
+  })
+
+  it('downgrades to to_verify when value comps disagree wildly despite count>=3', () => {
+    // Median 250 but a 5000€ outlier makes the spread enormous: the comps do
+    // not actually agree, so the estimate is not reliable.
+    const r = scoreComps([m(100, true), m(200, true), m(300, true), m(5000, true)])
+    expect(r.confidence).toBe('to_verify')
   })
 
   it('converts USD to EUR with the fixed rate', () => {

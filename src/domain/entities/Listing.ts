@@ -7,6 +7,7 @@ export interface ListingProps {
   searchId: string
   url: string
   title: string
+  description?: string
   price: Money
   city?: string
   region?: string
@@ -52,6 +53,10 @@ export class Listing {
 
   get title(): string {
     return this.props.title
+  }
+
+  get description(): string | undefined {
+    return this.props.description
   }
 
   get price(): Money {

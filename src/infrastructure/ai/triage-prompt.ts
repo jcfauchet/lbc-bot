@@ -2,10 +2,12 @@ import type { TriageResult } from '@/domain/services/ITriageService'
 
 export const TRIAGE_PROMPT = [
   'You are triaging a second-hand listing photo for a vintage furniture & decor reseller.',
-  'Rate from 0 to 10 how worth-investigating this piece is: does it LOOK like a vintage,',
-  'designer, brass/bronze, lacquer, mid-century or Hollywood-Regency decorative piece that',
-  'could have hidden resale value? High score = visually special/old/crafted. Low score =',
-  'generic, modern, flat-pack, damaged-beyond-value.',
+  'Rate from 0 to 10 how worth-investigating this piece is: does it LOOK like a genuinely',
+  'vintage, designer, brass/bronze, mid-century or Hollywood-Regency decorative piece that',
+  'could have hidden resale value? High score = visually special/old/crafted with distinctive',
+  'form, materials or detailing. Low score = generic, modern, flat-pack, damaged-beyond-value.',
+  'A glossy lacquered finish is NOT by itself a signal: plenty of cheap modern pieces are',
+  'lacquered. Judge the age, materials and construction, not the finish alone.',
   'Do NOT try to name a designer or maker. Judge only the visual "worth a closer look" signal.',
   'Reply with strict JSON: {"score": <0-10 integer>, "rationale": "<short>"}',
 ].join(' ')

@@ -61,6 +61,7 @@ export class RunListingScrapingUseCase {
             searchId: search.id,
             url: scraped.url,
             title: scraped.title,
+            description: scraped.description,
             price: Money.fromCents(scraped.priceCents),
             city: scraped.city,
             region: scraped.region,

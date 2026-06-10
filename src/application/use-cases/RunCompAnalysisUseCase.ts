@@ -4,6 +4,7 @@ import type { IListingImageRepository } from '@/domain/repositories/IListingImag
 import type { ICompService } from '@/domain/services/ICompService'
 import type { ILensBudgetRepository } from '@/domain/repositories/ILensBudgetRepository'
 import { scoreComps } from '@/domain/services/comp-scoring'
+import { hasReplicaSignal } from '@/domain/services/listing-signals'
 import { AiAnalysis } from '@/domain/entities/AiAnalysis'
 import { Money } from '@/domain/value-objects/Money'
 import { ListingStatus } from '@/domain/value-objects/ListingStatus'
@@ -38,6 +39,18 @@ export class RunCompAnalysisUseCase {
 
     for (const listing of candidates) {
       if (remaining <= 0) break
+
+      // The seller describes this as a look-alike ("dans le style de", "réplique",
+      // "ressemble à <designer>"). It is not the genuine piece, so estimating it
+      // against comps of the real designer would be misleading. Drop it before
+      // spending a (paid) reverse-image-search credit.
+      if (hasReplicaSignal(`${listing.title} ${listing.description ?? ''}`)) {
+        listing.markAsIgnored()
+        listing.setIgnoreReason('Annonce décrite comme une imitation / "dans le style de"')
+        await this.listingRepository.update(listing)
+        ignored++
+        continue
+      }
 
       const images = await this.imageRepository.findByListingId(listing.id)
       const imageUrl = images[0]?.urlRemote

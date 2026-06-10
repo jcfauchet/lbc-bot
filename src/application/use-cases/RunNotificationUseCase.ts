@@ -17,12 +17,19 @@ export class RunNotificationUseCase {
     private mailer: IMailer,
     private recipientEmails: string[],
     private fromEmail: string,
-    private minMargin: number = 60
+    private minMargin: number = 60,
+    // Below this, the comps disagreed too much (e.g. one luxury outlier) for the
+    // estimate to be trustworthy. Such deals are surfaced in the inbox but never
+    // emailed, to avoid the "estimation trop large / trop élevée" feedback.
+    private minConfidence: number = 0.8
   ) {}
 
   async execute(): Promise<{ sent: number; errors: number }> {
-    const goodAnalyses = await this.aiAnalysisRepository.findByMinMargin(
+    const allAnalyses = await this.aiAnalysisRepository.findByMinMargin(
       this.minMargin
+    )
+    const goodAnalyses = allAnalyses.filter(
+      (a) => a.confidence === undefined || a.confidence >= this.minConfidence
     )
 
     if (goodAnalyses.length === 0) {

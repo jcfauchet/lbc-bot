@@ -24,6 +24,7 @@ model LbcProductListing {
   searchId     String
   url          String
   title        String
+  description  String?   @db.Text
   priceCents   Int
   city         String?
   region       String?

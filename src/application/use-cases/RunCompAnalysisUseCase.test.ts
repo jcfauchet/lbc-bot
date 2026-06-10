@@ -4,8 +4,8 @@ import { Listing } from '@/domain/entities/Listing'
 import { ListingStatus } from '@/domain/value-objects/ListingStatus'
 import { Money } from '@/domain/value-objects/Money'
 
-const mk = (id: string, score: number, euros = 80) => {
-  const l = Listing.create({ lbcId: id, searchId: 's', url: 'u', title: id, price: Money.fromEuros(euros), status: ListingStatus.TRIAGED })
+const mk = (id: string, score: number, euros = 80, opts: { title?: string; description?: string } = {}) => {
+  const l = Listing.create({ lbcId: id, searchId: 's', url: 'u', title: opts.title ?? id, description: opts.description, price: Money.fromEuros(euros), status: ListingStatus.TRIAGED })
   ;(l as any).props = { ...(l as any).props, id, triageScore: score }
   return l
 }
@@ -48,9 +48,28 @@ describe('RunCompAnalysisUseCase', () => {
     expect(d.compService.findComps).toHaveBeenCalledTimes(2)
     expect(d.saved).toHaveLength(2)
     expect(d.statuses['high']).toBe(ListingStatus.ANALYZED)
-    expect(d.saved[0].estimatedMinPrice.getEuros()).toBe(1000)
-    expect(d.saved[0].estimatedMaxPrice.getEuros()).toBe(3000)
+    // Interquartile band of [1000, 2000, 3000], not the raw min/max.
+    expect(d.saved[0].estimatedMinPrice.getEuros()).toBe(1500)
+    expect(d.saved[0].estimatedMaxPrice.getEuros()).toBe(2500)
     expect(res.analyzed).toBe(2)
+  })
+
+  it('skips a listing the seller describes as a look-alike without spending a comp credit', async () => {
+    const d = deps({
+      listings: [mk('replica', 9, 500, { title: 'Table dans le style de Willy Rizzo', description: 'Belle table, ressemble à du Willy Rizzo' })],
+    })
+    const useCase = new RunCompAnalysisUseCase(
+      d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
+      { dailyBudget: 8, monthlyBudget: 250 },
+    )
+    const res = await useCase.execute()
+
+    expect(d.compService.findComps).not.toHaveBeenCalled()
+    expect(d.budgetRepository.recordCall).not.toHaveBeenCalled()
+    expect(d.statuses['replica']).toBe(ListingStatus.IGNORED)
+    expect(d.saved).toHaveLength(0)
+    expect(res.analyzed).toBe(0)
+    expect(res.ignored).toBe(1)
   })
 
   it('stops at the remaining daily budget', async () => {

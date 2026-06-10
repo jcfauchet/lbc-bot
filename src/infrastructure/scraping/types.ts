@@ -2,6 +2,7 @@ export interface ScrapedListing {
   lbcId: string
   url: string
   title: string
+  description?: string
   priceCents: number
   city?: string
   region?: string
