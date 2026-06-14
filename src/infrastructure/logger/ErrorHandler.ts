@@ -40,19 +40,11 @@ export class ExternalServiceError extends AppError {
 }
 
 export function handleError(error: unknown, context: string): void {
-  if (error instanceof AppError) {
-    logError(context, error)
-    
-    if (!error.isOperational) {
-      process.exit(1)
-    }
-  } else {
-    logError(context, error)
-    
-    if (error instanceof Error && !error.message.includes('operational')) {
-      process.exit(1)
-    }
-  }
+  // Just log. Never call process.exit here: this runs inside serverless
+  // functions (cron routes), where exiting kills the lambda mid-request,
+  // turns every error into an opaque 500 and can abort logs before they
+  // flush. withErrorHandling rethrows so the route still returns a 500.
+  logError(context, error)
 }
 
 export async function withErrorHandling<T>(

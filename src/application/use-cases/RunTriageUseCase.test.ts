@@ -81,6 +81,28 @@ describe('RunTriageUseCase', () => {
     expect(triageService.triage).not.toHaveBeenCalled()
   })
 
+  it('skips a listing whose triage throws, ignores it, and continues to the next', async () => {
+    const bad = mk('bad'); const good = mk('good')
+    const out: Record<string, { status: ListingStatus; reason?: string }> = {}
+    const listingRepository = {
+      findByStatus: vi.fn(async () => [bad, good]),
+      update: vi.fn(async (l: Listing) => { out[l.id] = { status: l.status, reason: l.ignoreReason }; return l }),
+    } as any
+    const imageRepository = { findByListingId: vi.fn(async () => [{ urlRemote: 'https://img/x.jpg' }]) } as any
+    const triageService = { providerName: 'gemini', triage: vi.fn() } as any
+    triageService.triage
+      .mockRejectedValueOnce(new Error('vision API 400'))
+      .mockResolvedValueOnce({ score: 8 })
+
+    const useCase = new RunTriageUseCase(listingRepository, imageRepository, triageService, 5, 100, guidanceRepo())
+    const res = await useCase.execute()
+
+    // The bad listing must not abort the run; the good one is still triaged.
+    expect(out['bad'].status).toBe(ListingStatus.IGNORED)
+    expect(out['good'].status).toBe(ListingStatus.TRIAGED)
+    expect(res.triaged).toBe(1)
+  })
+
   it('forwards the latest guidance to the triage service', async () => {
     const listingRepository = {
       findByStatus: vi.fn(async () => [mk('h')]),

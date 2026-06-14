@@ -39,7 +39,21 @@ export class RunTriageUseCase {
         continue
       }
 
-      const { score } = await this.triageService.triage(imageUrl, listing.title, guidance)
+      // A single listing whose image breaks the vision model must not abort the
+      // whole funnel run (triage -> comp -> notify). Isolate it like comp does
+      // for its reverse-image search: log, mark ignored, move on.
+      let score: number
+      try {
+        ;({ score } = await this.triageService.triage(imageUrl, listing.title, guidance))
+      } catch (err) {
+        console.error(`Triage failed for ${listing.id}:`, err)
+        listing.markAsIgnored()
+        listing.setIgnoreReason(`triage failed: ${err instanceof Error ? err.message : 'unknown error'}`)
+        await this.listingRepository.update(listing)
+        ignored++
+        continue
+      }
+
       if (score >= this.minScore) {
         listing.markAsTriaged(score)
         triaged++
