@@ -100,6 +100,7 @@ export default async function FeedbackInboxPage() {
                   listingId={listing.id}
                   initialFeedbackId={existing?.id ?? null}
                   initialVote={existing ? (existing.isGood ? 'good' : 'bad') : null}
+                  initialComment={existing?.comment ?? null}
                   placeholder="Vendu ? À quel prix ? (optionnel)"
                 />
               </div>

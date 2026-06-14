@@ -6,6 +6,7 @@ interface Props {
   listingId: string
   initialFeedbackId?: string | null
   initialVote?: 'good' | 'bad' | null
+  initialComment?: string | null
   placeholder?: string
 }
 
@@ -13,13 +14,14 @@ export function FeedbackButton({
   listingId,
   initialFeedbackId = null,
   initialVote = null,
+  initialComment = null,
   placeholder = 'Pourquoi ? (optionnel)',
 }: Props) {
   const [feedbackId, setFeedbackId] = useState<string | null>(initialFeedbackId)
   const [vote, setVote] = useState<'good' | 'bad' | null>(initialVote)
-  const [showComment, setShowComment] = useState(false)
-  const [comment, setComment] = useState('')
-  const [submitted, setSubmitted] = useState(false)
+  const [comment, setComment] = useState(initialComment ?? '')
+  const [savedComment, setSavedComment] = useState(initialComment ?? '')
+  const [editing, setEditing] = useState(false)
   const [loading, setLoading] = useState(false)
 
   const handleVote = async (v: 'good' | 'bad') => {
@@ -35,7 +37,7 @@ export function FeedbackButton({
       const data = await res.json()
       if (data.id) setFeedbackId(data.id)
       setVote(v)
-      setShowComment(true)
+      if (!savedComment) setEditing(true)
     } catch {
       // ignore
     } finally {
@@ -51,12 +53,12 @@ export function FeedbackButton({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: feedbackId, comment: comment.trim() }),
     })
-    setSubmitted(true)
-    setShowComment(false)
+    setSavedComment(comment.trim())
+    setEditing(false)
   }
 
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-1 items-end">
       <div className="flex gap-0.5 items-center">
         <button
           onClick={() => handleVote('good')}
@@ -78,11 +80,10 @@ export function FeedbackButton({
         >
           👎
         </button>
-        {submitted && <span className="text-xs text-green-600 ml-1">✓</span>}
       </div>
 
-      {showComment && !submitted && (
-        <form onSubmit={handleCommentSubmit} className="flex flex-col gap-1 mt-0.5">
+      {editing && (
+        <form onSubmit={handleCommentSubmit} className="flex flex-col gap-1 mt-0.5 items-end">
           <textarea
             value={comment}
             onChange={(e) => setComment(e.target.value)}
@@ -101,13 +102,39 @@ export function FeedbackButton({
             </button>
             <button
               type="button"
-              onClick={() => setShowComment(false)}
+              onClick={() => {
+                setComment(savedComment)
+                setEditing(false)
+              }}
               className="text-xs text-gray-400 hover:text-gray-600"
             >
-              Passer
+              Annuler
             </button>
           </div>
         </form>
+      )}
+
+      {/* Re-display the saved comment on reload, click to edit it. */}
+      {!editing && savedComment && (
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          title="Modifier la note"
+          className="text-xs text-gray-500 italic text-right max-w-[8rem] sm:max-w-[9rem] line-clamp-2 hover:text-gray-700 cursor-pointer"
+        >
+          “{savedComment}” ✏️
+        </button>
+      )}
+
+      {/* Voted without a note yet: let them add one later too. */}
+      {!editing && !savedComment && vote && feedbackId && (
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className="text-xs text-gray-400 hover:text-gray-600 cursor-pointer"
+        >
+          + note
+        </button>
       )}
     </div>
   )

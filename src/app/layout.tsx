@@ -19,13 +19,17 @@ export default function RootLayout({
         <meta name="robots" content="noindex, nofollow" />
       </head>
       <body>
-        <header>
-          <nav className="flex gap-4 justify-center items-center p-4 bg-gray-100">
-            <Link href="/" className="text-blue-600 no-underline hover:underline">Home</Link>
-            <Link href="/searches" className="text-blue-600 no-underline hover:underline">Searches</Link>
-            <Link href="/categories" className="text-blue-600 no-underline hover:underline">categories</Link>
-          </nav>
-        </header>
+        {/* Dev dashboard nav only: in production the middleware 404s everything
+            except /feedback/*, so these links would be dead. */}
+        {process.env.NODE_ENV !== 'production' && (
+          <header>
+            <nav className="flex gap-4 justify-center items-center p-4 bg-gray-100">
+              <Link href="/" className="text-blue-600 no-underline hover:underline">Home</Link>
+              <Link href="/searches" className="text-blue-600 no-underline hover:underline">Searches</Link>
+              <Link href="/categories" className="text-blue-600 no-underline hover:underline">categories</Link>
+            </nav>
+          </header>
+        )}
 
         {children}
 

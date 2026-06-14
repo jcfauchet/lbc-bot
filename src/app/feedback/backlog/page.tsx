@@ -127,6 +127,7 @@ export default async function BacklogPage({
                   listingId={item.id}
                   initialFeedbackId={existing?.id ?? null}
                   initialVote={existing ? (existing.isGood ? 'good' : 'bad') : null}
+                  initialComment={existing?.comment ?? null}
                   placeholder="Pourquoi ? (optionnel)"
                 />
               </div>
