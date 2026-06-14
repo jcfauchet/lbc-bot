@@ -32,6 +32,8 @@ const envSchema = z.object({
   SERPAPI_KEY: z.string().min(1).optional(),
   LENS_DAILY_BUDGET: z.coerce.number().min(0).default(8),
   LENS_MONTHLY_BUDGET: z.coerce.number().min(0).default(250),
+  // Dealer asking prices (comps) -> realistic quick-resale value.
+  RESALE_REALIZATION_FACTOR: z.coerce.number().min(0.1).max(1).default(0.6),
   TRIAGE_MIN_SCORE: z.coerce.number().min(0).max(10).default(5),
   TRIAGE_MAX_PER_RUN: z.coerce.number().min(1).default(25),
   FEEDBACK_LEARNING_MAX_ITEMS: z.coerce.number().min(1).default(200),

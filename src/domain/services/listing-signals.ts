@@ -31,3 +31,49 @@ export function hasReplicaSignal(text?: string | null): boolean {
   }
   return false
 }
+
+/**
+ * Known 20th-century designers, makers and editions. Stored accent-stripped and
+ * lower-cased; matched on word boundaries. Not exhaustive on purpose — it is
+ * extended as new attributions show up in feedback.
+ */
+const KNOWN_MAKERS = [
+  'willy rizzo', 'michel boyer', 'verner panton', 'joe colombo', 'castiglioni',
+  'giancarlo piretti', 'anna castelli', 'roger capron', 'jean prouve',
+  'charlotte perriand', 'pierre jeanneret', 'le corbusier', 'pierre paulin',
+  'eero saarinen', 'arne jacobsen', 'hans wegner', 'alvar aalto', 'isamu noguchi',
+  'george nelson', 'eames', 'ettore sottsass', 'alessandro mendini',
+  'philippe starck', 'gae aulenti', 'mathieu matego', 'matego', 'serge mouille',
+  'pierre guariche', 'jacques adnet', 'gio ponti', 'mario sabot',
+  'charles hollis jones', 'david lange', 'jacques hittier', 'henning kjaernulf',
+  'michel dumas', 'gerald thurston', 'pierre cardin', 'maison jansen', 'jansen',
+  'bagues', 'kartell', 'vitra', 'knoll', 'cassina', 'artemide', 'flos',
+  'roche bobois', 'ligne roset', 'fontana arte', 'b&b italia', 'poltrona frau',
+  'thonet', 'fritz hansen', 'herman miller', 'airborne', 'steiner', 'disderot',
+  'bieffeplast',
+] as const
+
+const MAKER_PATTERNS = KNOWN_MAKERS.map(
+  (name) => new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`),
+)
+
+/** "signée Barrois", "estampillé Jansen", "édité par X", "attribué à X". */
+const ATTRIBUTION_VERB = /(?<!non\s)(?<!pas\s)\b(signe|signee|estampille|estampillee|edite par|edition de|attribue a)\s+\w/
+
+function strip(text: string): string {
+  return text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+}
+
+/**
+ * True when the seller already names a known designer/maker (or explicitly
+ * attributes the piece). Such listings are already priced to their value, so
+ * there is no hidden margin — the strategy targets pieces whose value the seller
+ * did NOT recognise.
+ */
+export function hasKnownDesignerAttribution(text?: string | null): boolean {
+  if (!text) return false
+  const norm = strip(text)
+  if (MAKER_PATTERNS.some((re) => re.test(norm))) return true
+  if (ATTRIBUTION_VERB.test(norm)) return true
+  return false
+}

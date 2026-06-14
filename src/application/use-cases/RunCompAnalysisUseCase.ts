@@ -4,12 +4,22 @@ import type { IListingImageRepository } from '@/domain/repositories/IListingImag
 import type { ICompService } from '@/domain/services/ICompService'
 import type { ILensBudgetRepository } from '@/domain/repositories/ILensBudgetRepository'
 import { scoreComps } from '@/domain/services/comp-scoring'
-import { hasReplicaSignal } from '@/domain/services/listing-signals'
+import { hasReplicaSignal, hasKnownDesignerAttribution } from '@/domain/services/listing-signals'
 import { AiAnalysis } from '@/domain/entities/AiAnalysis'
 import { Money } from '@/domain/value-objects/Money'
 import { ListingStatus } from '@/domain/value-objects/ListingStatus'
 
-export interface LensBudgetConfig { dailyBudget: number; monthlyBudget: number }
+export interface LensBudgetConfig {
+  dailyBudget: number
+  monthlyBudget: number
+  /**
+   * Converts dealer asking prices (the comps come from 1stdibs/Selency/Chairish)
+   * into a realistic quick-resale value. Dealers ask 1.5-3x what a fast flip
+   * actually fetches, which is why deals kept reading as "trop cher pour la
+   * revente". Defaults to 1 (no discount) when unset.
+   */
+  resaleFactor?: number
+}
 
 function startOfDay(): Date { const d = new Date(); d.setHours(0, 0, 0, 0); return d }
 function startOfMonth(): Date { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1) }
@@ -44,9 +54,21 @@ export class RunCompAnalysisUseCase {
       // "ressemble à <designer>"). It is not the genuine piece, so estimating it
       // against comps of the real designer would be misleading. Drop it before
       // spending a (paid) reverse-image-search credit.
-      if (hasReplicaSignal(`${listing.title} ${listing.description ?? ''}`)) {
+      const listingText = `${listing.title} ${listing.description ?? ''}`
+      if (hasReplicaSignal(listingText)) {
         listing.markAsIgnored()
         listing.setIgnoreReason('Annonce décrite comme une imitation / "dans le style de"')
+        await this.listingRepository.update(listing)
+        ignored++
+        continue
+      }
+
+      // The seller already names a known designer/maker, so the price is aligned
+      // with the piece's value: no hidden margin. The strategy targets pieces
+      // whose value the seller did not recognise. Skip before spending a credit.
+      if (hasKnownDesignerAttribution(listingText)) {
+        listing.markAsIgnored()
+        listing.setIgnoreReason('Designer/éditeur déjà nommé par le vendeur (pas de marge cachée)')
         await this.listingRepository.update(listing)
         ignored++
         continue
@@ -83,9 +105,10 @@ export class RunCompAnalysisUseCase {
         continue
       }
 
-      const estMin = Money.fromEuros(score.rangeMinEur!)
-      const estMax = Money.fromEuros(score.rangeMaxEur!)
-      const median = Money.fromEuros(score.estimatedValueEur)
+      const resaleFactor = this.config.resaleFactor ?? 1
+      const estMin = Money.fromEuros(score.rangeMinEur! * resaleFactor)
+      const estMax = Money.fromEuros(score.rangeMaxEur! * resaleFactor)
+      const median = Money.fromEuros(score.estimatedValueEur * resaleFactor)
       const topComp = comps.matches.find((m) => m.isValueDomain && m.price)?.link
 
       const analysis = AiAnalysis.create({
@@ -93,7 +116,7 @@ export class RunCompAnalysisUseCase {
         estimatedMinPrice: estMin,
         estimatedMaxPrice: estMax,
         margin: median.minus(listing.price),
-        description: `Median value ${score.estimatedValueEur}€ from ${score.pricedCompCount} value comps (${score.confidence}). Range ${score.rangeMinEur}–${score.rangeMaxEur}€.`,
+        description: `Realistic resale ${median.getEuros()}€ (dealer median ${score.estimatedValueEur}€ ×${resaleFactor}) from ${score.pricedCompCount} value comps (${score.confidence}). Range ${estMin.getEuros()}–${estMax.getEuros()}€.`,
         confidence: score.confidence === 'reliable' ? 0.9 : 0.6,
         provider: this.compService.providerName,
         bestMatchSource: topComp ?? undefined,
