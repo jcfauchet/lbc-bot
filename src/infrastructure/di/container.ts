@@ -31,6 +31,7 @@ import { RunNotificationUseCase } from '@/application/use-cases/RunNotificationU
 import { RunCleanupUseCase } from '@/application/use-cases/RunCleanupUseCase'
 import { GetDashboardStatsUseCase } from '@/application/use-cases/GetDashboardStatsUseCase'
 import { GetNonNotifiedListingsUseCase } from '@/application/use-cases/GetNonNotifiedListingsUseCase'
+import { GetTriageBacklogUseCase } from '@/application/use-cases/GetTriageBacklogUseCase'
 import { GetRecentNotifiedListingsUseCase } from '@/application/use-cases/GetRecentNotifiedListingsUseCase'
 import { SerpApiLensCompService } from '@/infrastructure/comps/SerpApiLensCompService'
 import { GeminiTriageService } from '@/infrastructure/ai/Gemini/GeminiTriageService'
@@ -75,6 +76,7 @@ export class Container {
   public readonly getDashboardStatsUseCase: GetDashboardStatsUseCase
   public readonly getNonNotifiedListingsUseCase: GetNonNotifiedListingsUseCase
   public readonly getRecentNotifiedListingsUseCase: GetRecentNotifiedListingsUseCase
+  public readonly getTriageBacklogUseCase: GetTriageBacklogUseCase
 
   public readonly compService: SerpApiLensCompService
   public readonly triageService: FallbackTriageService
@@ -183,6 +185,8 @@ export class Container {
     this.getRecentNotifiedListingsUseCase = new GetRecentNotifiedListingsUseCase(
       this.prisma
     )
+
+    this.getTriageBacklogUseCase = new GetTriageBacklogUseCase(this.prisma)
 
     this.runFeedbackLearningUseCase = new RunFeedbackLearningUseCase(
       this.feedbackRepository,
