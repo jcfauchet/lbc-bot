@@ -87,7 +87,7 @@ export function FeedbackButton({
             value={comment}
             onChange={(e) => setComment(e.target.value)}
             placeholder={placeholder}
-            className="text-xs border border-gray-200 rounded p-1 w-36 resize-none focus:outline-none focus:border-gray-400"
+            className="text-xs border border-gray-200 rounded p-1 w-32 sm:w-36 resize-none focus:outline-none focus:border-gray-400"
             rows={2}
             autoFocus
           />

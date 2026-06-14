@@ -55,7 +55,7 @@ export default async function BacklogPage({
         </p>
       </div>
 
-      <div className="flex gap-2 mb-6">
+      <div className="flex flex-wrap gap-2 mb-6">
         {SCORE_FILTERS.map((f) => {
           const active = minScore === f.value
           return (
@@ -102,10 +102,10 @@ export default async function BacklogPage({
 
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-0.5">
-                  <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${scoreColor(item.triageScore)}`}>
+                  <span className={`text-xs font-semibold px-1.5 py-0.5 rounded shrink-0 ${scoreColor(item.triageScore)}`}>
                     {item.triageScore ?? '–'}/10
                   </span>
-                  <span className="text-xs text-gray-400">
+                  <span className="text-xs text-gray-400 truncate min-w-0">
                     {item.city ?? ''} · vue le {format(item.createdAt, 'dd/MM')}
                   </span>
                 </div>
