@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client'
 import { ListingFeedback } from '@/domain/entities/ListingFeedback'
-import { IFeedbackRepository, SimilarFeedback, NegativeFeedbackItem } from '@/domain/repositories/IFeedbackRepository'
+import { IFeedbackRepository, SimilarFeedback, FeedbackDigestItem } from '@/domain/repositories/IFeedbackRepository'
 
 export class PrismaFeedbackRepository implements IFeedbackRepository {
   constructor(private prisma: PrismaClient) {}
@@ -85,7 +85,15 @@ export class PrismaFeedbackRepository implements IFeedbackRepository {
     }))
   }
 
-  async findRecentNegative(limit: number): Promise<NegativeFeedbackItem[]> {
+  async findRecentNegative(limit: number): Promise<FeedbackDigestItem[]> {
+    return this.findRecentByVote(false, limit)
+  }
+
+  async findRecentPositive(limit: number): Promise<FeedbackDigestItem[]> {
+    return this.findRecentByVote(true, limit)
+  }
+
+  private async findRecentByVote(isGood: boolean, limit: number): Promise<FeedbackDigestItem[]> {
     const rows = await this.prisma.$queryRaw<Array<{
       listingTitle: string
       priceCents: number
@@ -100,7 +108,7 @@ export class PrismaFeedbackRepository implements IFeedbackRepository {
       FROM "listing_feedbacks" f
       JOIN "lbc_product_listings" p ON p.id = f."listingId"
       LEFT JOIN "ai_analyses" a ON a."listingId" = f."listingId"
-      WHERE f."isGood" = false
+      WHERE f."isGood" = ${isGood}
       ORDER BY f."createdAt" DESC
       LIMIT ${limit}
     `

@@ -37,6 +37,9 @@ const envSchema = z.object({
   TRIAGE_MIN_SCORE: z.coerce.number().min(0).max(10).default(5),
   TRIAGE_MAX_PER_RUN: z.coerce.number().min(1).default(25),
   FEEDBACK_LEARNING_MAX_ITEMS: z.coerce.number().min(1).default(200),
+  // Above this cosine similarity, a candidate is treated as a near-duplicate of a
+  // piece the user already rejected and skipped before spending a comp credit.
+  SIMILAR_FEEDBACK_SKIP_THRESHOLD: z.coerce.number().min(0).max(1).default(0.92),
 })
 
 export type Env = z.infer<typeof envSchema>

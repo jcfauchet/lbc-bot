@@ -16,18 +16,20 @@ export class PrismaTriageGuidanceRepository implements ITriageGuidanceRepository
       id: row.id,
       content: row.content,
       sourceFeedbackCount: row.sourceFeedbackCount,
+      contentHash: row.contentHash ?? null,
       createdAt: row.createdAt,
     }
   }
 
-  async save(content: string, sourceFeedbackCount: number): Promise<TriageGuidance> {
+  async save(content: string, sourceFeedbackCount: number, contentHash: string): Promise<TriageGuidance> {
     const row = await this.prisma.triageGuidance.create({
-      data: { content, sourceFeedbackCount },
+      data: { content, sourceFeedbackCount, contentHash },
     })
     return {
       id: row.id,
       content: row.content,
       sourceFeedbackCount: row.sourceFeedbackCount,
+      contentHash: row.contentHash ?? null,
       createdAt: row.createdAt,
     }
   }

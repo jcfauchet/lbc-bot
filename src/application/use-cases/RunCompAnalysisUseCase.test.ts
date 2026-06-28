@@ -123,6 +123,67 @@ describe('RunCompAnalysisUseCase', () => {
     expect(res.ignored).toBe(1)
   })
 
+  it('skips a near-duplicate of a rejected listing before spending a comp credit', async () => {
+    const d = deps({ listings: [mk('dup', 9, 120, { title: 'Lampe laiton générique' })] })
+    const embedder = { embed: vi.fn(async () => [0.1, 0.2, 0.3]) }
+    const feedbackRepository = {
+      findSimilar: vi.fn(async () => [{ listingTitle: 'x', priceCents: 9000, isGood: false, comment: 'trop cher pour la revente', similarity: 0.96 }]),
+    } as any
+    const useCase = new RunCompAnalysisUseCase(
+      d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
+      { dailyBudget: 8, monthlyBudget: 250, resaleFactor: 1, similarFeedbackSkipThreshold: 0.92 },
+      feedbackRepository, embedder,
+    )
+    const res = await useCase.execute()
+
+    expect(feedbackRepository.findSimilar).toHaveBeenCalledOnce()
+    expect(d.compService.findComps).not.toHaveBeenCalled()
+    expect(d.budgetRepository.recordCall).not.toHaveBeenCalled()
+    expect(d.statuses['dup']).toBe(ListingStatus.IGNORED)
+    expect(res.ignored).toBe(1)
+  })
+
+  it('does not skip when the closest feedback is positive or below threshold', async () => {
+    const d = deps({ listings: [mk('keep', 9, 120)], comps: { matches: [
+      { title: 'a', source: '1stdibs', link: 'https://1stdibs.com/a', isValueDomain: true, price: { value: 1000, currency: 'EUR' } },
+      { title: 'b', source: '1stdibs', link: 'https://1stdibs.com/b', isValueDomain: true, price: { value: 2000, currency: 'EUR' } },
+      { title: 'c', source: '1stdibs', link: 'https://1stdibs.com/c', isValueDomain: true, price: { value: 3000, currency: 'EUR' } },
+    ] } })
+    const embedder = { embed: vi.fn(async () => [0.1, 0.2, 0.3]) }
+    const feedbackRepository = {
+      // A liked piece at high similarity, plus a rejected one below threshold: neither should skip.
+      findSimilar: vi.fn(async () => [{ listingTitle: 'x', priceCents: 9000, isGood: true, similarity: 0.99 }]),
+    } as any
+    const useCase = new RunCompAnalysisUseCase(
+      d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
+      { dailyBudget: 8, monthlyBudget: 250, resaleFactor: 1, similarFeedbackSkipThreshold: 0.92 },
+      feedbackRepository, embedder,
+    )
+    const res = await useCase.execute()
+
+    expect(d.compService.findComps).toHaveBeenCalledOnce()
+    expect(res.analyzed).toBe(1)
+  })
+
+  it('proceeds with comp analysis when the embedding check throws', async () => {
+    const d = deps({ listings: [mk('resilient', 9, 120)], comps: { matches: [
+      { title: 'a', source: '1stdibs', link: 'https://1stdibs.com/a', isValueDomain: true, price: { value: 1000, currency: 'EUR' } },
+      { title: 'b', source: '1stdibs', link: 'https://1stdibs.com/b', isValueDomain: true, price: { value: 2000, currency: 'EUR' } },
+      { title: 'c', source: '1stdibs', link: 'https://1stdibs.com/c', isValueDomain: true, price: { value: 3000, currency: 'EUR' } },
+    ] } })
+    const embedder = { embed: vi.fn(async () => { throw new Error('embedding down') }) }
+    const feedbackRepository = { findSimilar: vi.fn() } as any
+    const useCase = new RunCompAnalysisUseCase(
+      d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
+      { dailyBudget: 8, monthlyBudget: 250, resaleFactor: 1 },
+      feedbackRepository, embedder,
+    )
+    const res = await useCase.execute()
+
+    expect(d.compService.findComps).toHaveBeenCalledOnce()
+    expect(res.analyzed).toBe(1)
+  })
+
   it('ignores a listing with no value comps', async () => {
     const d = deps({ listings: [mk('a', 9)], comps: { matches: [
       { title: 'x', source: 'youtube', link: 'https://youtube.com/x', isValueDomain: false },

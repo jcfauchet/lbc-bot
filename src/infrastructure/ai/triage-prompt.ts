@@ -17,8 +17,9 @@ const MAX_GUIDANCE_CHARS = 2000
 
 /**
  * Builds the triage prompt, optionally appending learned guidance distilled from
- * past negative feedback. The guidance is advisory: the model still scores 0-10
- * and the score threshold is unchanged, so guidance can nuance but never hard-filter.
+ * past feedback. The guidance carries its own LOWER/RAISE sections. It is advisory:
+ * the model still scores 0-10 and the score threshold is unchanged, so guidance can
+ * nuance but never hard-filter.
  */
 export function buildTriagePrompt(guidance?: string | null): string {
   const trimmed = guidance?.trim()
@@ -26,7 +27,7 @@ export function buildTriagePrompt(guidance?: string | null): string {
   return [
     TRIAGE_PROMPT,
     '',
-    'Lessons learned from past mistakes (listings that were notified but judged NOT worth it). Lower the score when the piece matches these:',
+    'Lessons learned from past feedback (listings the user later judged worth it or not). Apply them when scoring:',
     trimmed.slice(0, MAX_GUIDANCE_CHARS),
   ].join('\n')
 }

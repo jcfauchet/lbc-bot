@@ -154,6 +154,7 @@ model TriageGuidance {
   id                  String   @id @default(cuid())
   content             String   @db.Text
   sourceFeedbackCount Int
+  contentHash         String?
   createdAt           DateTime @default(now())
 
   @@index([createdAt])

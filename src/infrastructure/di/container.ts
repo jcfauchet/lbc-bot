@@ -146,7 +146,14 @@ export class Container {
       this.listingImageRepository,
       this.compService,
       this.lensBudgetRepository,
-      { dailyBudget: env.LENS_DAILY_BUDGET, monthlyBudget: env.LENS_MONTHLY_BUDGET, resaleFactor: env.RESALE_REALIZATION_FACTOR },
+      {
+        dailyBudget: env.LENS_DAILY_BUDGET,
+        monthlyBudget: env.LENS_MONTHLY_BUDGET,
+        resaleFactor: env.RESALE_REALIZATION_FACTOR,
+        similarFeedbackSkipThreshold: env.SIMILAR_FEEDBACK_SKIP_THRESHOLD,
+      },
+      this.feedbackRepository,
+      this.embeddingService,
     )
 
     this.runListingScrapingUseCase = new RunListingScrapingUseCase(

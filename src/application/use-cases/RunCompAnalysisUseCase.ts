@@ -3,6 +3,7 @@ import type { IAiAnalysisRepository } from '@/domain/repositories/IAiAnalysisRep
 import type { IListingImageRepository } from '@/domain/repositories/IListingImageRepository'
 import type { ICompService } from '@/domain/services/ICompService'
 import type { ILensBudgetRepository } from '@/domain/repositories/ILensBudgetRepository'
+import type { IFeedbackRepository } from '@/domain/repositories/IFeedbackRepository'
 import { scoreComps } from '@/domain/services/comp-scoring'
 import { hasReplicaSignal, hasKnownDesignerAttribution } from '@/domain/services/listing-signals'
 import { AiAnalysis } from '@/domain/entities/AiAnalysis'
@@ -19,6 +20,18 @@ export interface LensBudgetConfig {
    * revente". Defaults to 1 (no discount) when unset.
    */
   resaleFactor?: number
+  /**
+   * Cosine-similarity threshold (0-1) above which a candidate is treated as a
+   * near-duplicate of a piece the user already rejected, and skipped before
+   * spending a paid comp credit. High by design: only near-identical matches
+   * should short-circuit, to avoid dropping genuine deals. Defaults to 0.92.
+   */
+  similarFeedbackSkipThreshold?: number
+}
+
+/** Embeds short listing text to look up similar past feedback. */
+export interface ITextEmbedder {
+  embed(text: string): Promise<number[]>
 }
 
 function startOfDay(): Date { const d = new Date(); d.setHours(0, 0, 0, 0); return d }
@@ -32,6 +45,10 @@ export class RunCompAnalysisUseCase {
     private compService: ICompService,
     private budgetRepository: ILensBudgetRepository,
     private config: LensBudgetConfig,
+    // Optional: when both are wired, the candidate is checked against past
+    // feedback so pieces the user already rejected don't burn a comp credit again.
+    private feedbackRepository?: IFeedbackRepository,
+    private embedder?: ITextEmbedder,
   ) {}
 
   async execute(): Promise<{ processed: number; analyzed: number; ignored: number }> {
@@ -72,6 +89,27 @@ export class RunCompAnalysisUseCase {
         await this.listingRepository.update(listing)
         ignored++
         continue
+      }
+
+      // Learn from past feedback: if this piece is a near-duplicate of one the
+      // user already judged "pas intéressant", skip it before spending a (paid)
+      // comp credit. Best-effort — an embedding hiccup must never abort the funnel.
+      if (this.feedbackRepository && this.embedder) {
+        try {
+          const embedding = await this.embedder.embed(listingText)
+          const [closest] = await this.feedbackRepository.findSimilar(embedding, 1)
+          const threshold = this.config.similarFeedbackSkipThreshold ?? 0.92
+          if (closest && !closest.isGood && closest.similarity >= threshold) {
+            listing.markAsIgnored()
+            const why = closest.comment ? ` ("${closest.comment}")` : ''
+            listing.setIgnoreReason(`Similaire à une annonce déjà jugée sans intérêt${why}`)
+            await this.listingRepository.update(listing)
+            ignored++
+            continue
+          }
+        } catch (err) {
+          console.error(`Similar-feedback check failed for ${listing.id}:`, err)
+        }
       }
 
       const images = await this.imageRepository.findByListingId(listing.id)

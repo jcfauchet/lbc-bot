@@ -9,7 +9,8 @@ export interface SimilarFeedback {
   similarity: number
 }
 
-export interface NegativeFeedbackItem {
+/** A feedback item digested for the learning routine (vote-neutral). */
+export interface FeedbackDigestItem {
   listingTitle: string
   priceCents: number
   comment?: string
@@ -21,7 +22,10 @@ export interface IFeedbackRepository {
   updateEmbedding(id: string, embedding: number[]): Promise<void>
   updateComment(id: string, comment: string): Promise<void>
   findSimilar(embedding: number[], limit: number): Promise<SimilarFeedback[]>
-  findRecentNegative(limit: number): Promise<NegativeFeedbackItem[]>
+  /** Recent listings the user judged NOT worth it, newest first. */
+  findRecentNegative(limit: number): Promise<FeedbackDigestItem[]>
+  /** Recent listings the user judged worth it, newest first. */
+  findRecentPositive(limit: number): Promise<FeedbackDigestItem[]>
   findByListingId(listingId: string): Promise<ListingFeedback | null>
   findByListingIds(listingIds: string[]): Promise<Map<string, ListingFeedback>>
 }
