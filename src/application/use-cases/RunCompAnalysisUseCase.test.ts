@@ -155,6 +155,60 @@ describe('RunCompAnalysisUseCase', () => {
     expect(d.statuses['stale']).toBeUndefined()
   })
 
+  it('lets a fresh high-score listing spend the fast-track bonus after the daily budget is gone', async () => {
+    const gem = mk('gem', 9, 60) // created now => fresh
+    const ordinary = mk('ordinary', 8, 60)
+    const d = deps({ listings: [ordinary, gem], comps: { matches: [
+      { title: 'a', source: '1stdibs', link: 'https://1stdibs.com/a', isValueDomain: true, price: { value: 1000, currency: 'EUR' } },
+      { title: 'b', source: '1stdibs', link: 'https://1stdibs.com/b', isValueDomain: true, price: { value: 2000, currency: 'EUR' } },
+      { title: 'c', source: '1stdibs', link: 'https://1stdibs.com/c', isValueDomain: true, price: { value: 3000, currency: 'EUR' } },
+    ] } })
+    d.budgetRepository.countSince = vi.fn(async () => 8) // daily budget fully spent
+    const useCase = new RunCompAnalysisUseCase(
+      d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
+      { dailyBudget: 8, monthlyBudget: 250, resaleFactor: 1, fastTrackDailyExtra: 2, fastTrackMinScore: 9, fastTrackFreshHours: 24 },
+    )
+    const res = await useCase.execute()
+
+    // Only the fast-track gem gets a bonus credit; the ordinary listing waits.
+    expect(d.statuses['gem']).toBe(ListingStatus.ANALYZED)
+    expect(d.statuses['ordinary']).toBeUndefined()
+    expect(res.analyzed).toBe(1)
+  })
+
+  it('fast-track jumps the queue ahead of a higher-scored stale listing', async () => {
+    const staleTop = mk('staleTop', 10, 60, { createdAt: new Date(Date.now() - 72 * 3_600_000) })
+    const freshGem = mk('freshGem', 9, 60) // created now => fast-track
+    const d = deps({ listings: [staleTop, freshGem], comps: { matches: [
+      { title: 'a', source: '1stdibs', link: 'https://1stdibs.com/a', isValueDomain: true, price: { value: 1000, currency: 'EUR' } },
+      { title: 'b', source: '1stdibs', link: 'https://1stdibs.com/b', isValueDomain: true, price: { value: 2000, currency: 'EUR' } },
+      { title: 'c', source: '1stdibs', link: 'https://1stdibs.com/c', isValueDomain: true, price: { value: 3000, currency: 'EUR' } },
+    ] } })
+    d.budgetRepository.countSince = vi.fn(async () => 7) // 1 credit left
+    const useCase = new RunCompAnalysisUseCase(
+      d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
+      { dailyBudget: 8, monthlyBudget: 250, resaleFactor: 1, fastTrackDailyExtra: 0, fastTrackMinScore: 9, fastTrackFreshHours: 24 },
+    )
+    await useCase.execute()
+
+    expect(d.statuses['freshGem']).toBe(ListingStatus.ANALYZED)
+    expect(d.statuses['staleTop']).toBeUndefined()
+  })
+
+  it('never exceeds the monthly budget even for fast-track listings', async () => {
+    const gem = mk('gem', 9, 60)
+    const d = deps({ listings: [gem] })
+    d.budgetRepository.countSince = vi.fn(async () => 250) // monthly cap reached
+    const useCase = new RunCompAnalysisUseCase(
+      d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
+      { dailyBudget: 8, monthlyBudget: 250, resaleFactor: 1, fastTrackDailyExtra: 2 },
+    )
+    const res = await useCase.execute()
+
+    expect(d.compService.findComps).not.toHaveBeenCalled()
+    expect(res.processed).toBe(0)
+  })
+
   it('skips a removed listing without spending a comp credit', async () => {
     const d = deps({ listings: [mk('gone', 9)] })
     const availability = { isGone: vi.fn(async () => true) }

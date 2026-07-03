@@ -91,6 +91,10 @@ export class RunListingScrapingUseCase {
         const randomDelay = Math.floor(Math.random() * 10000) + 8000
         console.log(`⚠️ Error occurred, waiting ${randomDelay}ms before next search...`)
         await this.delay(randomDelay)
+      } finally {
+        // Stamp even on failure: an always-failing search must rotate to the
+        // back instead of hogging the head of the queue and starving the rest.
+        await this.searchRepository.markScraped(search.id)
       }
     }
 

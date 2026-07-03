@@ -7,13 +7,14 @@ datasource db {
 }
 
 model Search {
-  id        String   @id @default(cuid())
-  name      String
-  url       String
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  listings  LbcProductListing[]
+  id            String    @id @default(cuid())
+  name          String
+  url           String
+  isActive      Boolean   @default(true)
+  lastScrapedAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  listings      LbcProductListing[]
 
   @@map("searches")
 }

@@ -3,6 +3,8 @@ export interface SearchProps {
   name: string
   url: string
   isActive: boolean
+  /** When this search was last scraped; null when never scraped. */
+  lastScrapedAt?: Date | null
   createdAt: Date
   updatedAt: Date
 }
@@ -45,6 +47,10 @@ export class Search {
 
   get updatedAt(): Date {
     return this.props.updatedAt
+  }
+
+  get lastScrapedAt(): Date | null {
+    return this.props.lastScrapedAt ?? null
   }
 
   activate(): void {

@@ -24,7 +24,9 @@ export class PrismaSearchRepository implements ISearchRepository {
   async findActive(): Promise<Search[]> {
     const searches = await this.prisma.search.findMany({
       where: { isActive: true },
-      orderBy: { createdAt: 'desc' },
+      // Most-starved first: never-scraped searches, then oldest lastScrapedAt.
+      // A fixed order let runs that die midway starve the same tail forever.
+      orderBy: { lastScrapedAt: { sort: 'asc', nulls: 'first' } },
     })
     return searches.map((s) => this.toDomain(s))
   }
@@ -53,12 +55,20 @@ export class PrismaSearchRepository implements ISearchRepository {
     await this.prisma.search.delete({ where: { id } })
   }
 
+  async markScraped(id: string): Promise<void> {
+    await this.prisma.search.update({
+      where: { id },
+      data: { lastScrapedAt: new Date() },
+    })
+  }
+
   private toDomain(raw: any): Search {
     return Search.fromPersistence({
       id: raw.id,
       name: raw.name,
       url: raw.url,
       isActive: raw.isActive,
+      lastScrapedAt: raw.lastScrapedAt ?? null,
       createdAt: raw.createdAt,
       updatedAt: raw.updatedAt,
     })

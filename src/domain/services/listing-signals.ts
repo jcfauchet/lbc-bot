@@ -47,7 +47,7 @@ const KNOWN_MAKERS = [
   'pierre guariche', 'jacques adnet', 'gio ponti', 'mario sabot',
   'charles hollis jones', 'david lange', 'jacques hittier', 'henning kjaernulf',
   'michel dumas', 'gerald thurston', 'pierre cardin', 'maison jansen', 'jansen',
-  'bagues', 'kartell', 'vitra', 'knoll', 'cassina', 'artemide', 'flos',
+  'bagues', 'maison charles', 'kartell', 'vitra', 'knoll', 'cassina', 'artemide', 'flos',
   'roche bobois', 'ligne roset', 'fontana arte', 'b&b italia', 'poltrona frau',
   'thonet', 'fritz hansen', 'herman miller', 'airborne', 'steiner', 'disderot',
   'bieffeplast',

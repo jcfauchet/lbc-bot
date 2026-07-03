@@ -20,6 +20,7 @@
     "triage": "tsx src/cli/triage.ts",
     "analyze": "tsx src/cli/analyze.ts",
     "notify": "tsx src/cli/notify.ts",
+    "eval:triage": "tsx src/cli/eval-triage.ts",
     "funnel": "pnpm scrape && pnpm prefilter && pnpm triage && pnpm analyze",
     "test": "vitest --run",
     "test:ui": "vitest --ui"

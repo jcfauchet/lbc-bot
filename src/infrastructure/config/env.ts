@@ -43,6 +43,11 @@ const envSchema = z.object({
   // TRIAGED listings older than this are expired before comp: the deal is gone
   // and a comp credit spent on them is wasted.
   TRIAGED_MAX_AGE_DAYS: z.coerce.number().min(1).default(7),
+  // Fast-track lane: fresh high-score listings may spend this many credits
+  // beyond the daily budget (monthly budget still enforced) and jump the queue.
+  FAST_TRACK_DAILY_EXTRA: z.coerce.number().min(0).default(2),
+  FAST_TRACK_MIN_SCORE: z.coerce.number().min(0).max(10).default(9),
+  FAST_TRACK_FRESH_HOURS: z.coerce.number().min(1).default(24),
 })
 
 export type Env = z.infer<typeof envSchema>
