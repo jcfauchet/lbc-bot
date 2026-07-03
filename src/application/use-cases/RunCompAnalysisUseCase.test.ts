@@ -4,9 +4,9 @@ import { Listing } from '@/domain/entities/Listing'
 import { ListingStatus } from '@/domain/value-objects/ListingStatus'
 import { Money } from '@/domain/value-objects/Money'
 
-const mk = (id: string, score: number, euros = 80, opts: { title?: string; description?: string } = {}) => {
+const mk = (id: string, score: number, euros = 80, opts: { title?: string; description?: string; createdAt?: Date } = {}) => {
   const l = Listing.create({ lbcId: id, searchId: 's', url: 'u', title: opts.title ?? id, description: opts.description, price: Money.fromEuros(euros), status: ListingStatus.TRIAGED })
-  ;(l as any).props = { ...(l as any).props, id, triageScore: score }
+  ;(l as any).props = { ...(l as any).props, id, triageScore: score, ...(opts.createdAt ? { createdAt: opts.createdAt } : {}) }
   return l
 }
 
@@ -121,6 +121,72 @@ describe('RunCompAnalysisUseCase', () => {
     expect(d.statuses['named']).toBe(ListingStatus.IGNORED)
     expect(d.saved).toHaveLength(0)
     expect(res.ignored).toBe(1)
+  })
+
+  it('expires stale triaged listings before picking candidates', async () => {
+    const d = deps({ listings: [] })
+    d.listingRepository.ignoreTriagedOlderThan = vi.fn(async () => 42)
+    const useCase = new RunCompAnalysisUseCase(
+      d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
+      { dailyBudget: 8, monthlyBudget: 250, resaleFactor: 1, triagedMaxAgeDays: 7 },
+    )
+    const res = await useCase.execute()
+
+    expect(d.listingRepository.ignoreTriagedOlderThan).toHaveBeenCalledWith(7, expect.any(String))
+    expect(res.expired).toBe(42)
+  })
+
+  it('breaks score ties by freshness so credits go to listings whose deal is still alive', async () => {
+    const stale = mk('stale', 9, 80, { createdAt: new Date('2026-06-20T10:00:00Z') })
+    const fresh = mk('fresh', 9, 80, { createdAt: new Date('2026-07-03T10:00:00Z') })
+    const d = deps({ listings: [stale, fresh], comps: { matches: [
+      { title: 'a', source: '1stdibs', link: 'https://1stdibs.com/a', isValueDomain: true, price: { value: 1000, currency: 'EUR' } },
+      { title: 'b', source: '1stdibs', link: 'https://1stdibs.com/b', isValueDomain: true, price: { value: 2000, currency: 'EUR' } },
+      { title: 'c', source: '1stdibs', link: 'https://1stdibs.com/c', isValueDomain: true, price: { value: 3000, currency: 'EUR' } },
+    ] } })
+    d.budgetRepository.countSince = vi.fn(async () => 7) // 1 credit left
+    const useCase = new RunCompAnalysisUseCase(
+      d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
+      { dailyBudget: 8, monthlyBudget: 250, resaleFactor: 1 },
+    )
+    await useCase.execute()
+
+    expect(d.statuses['fresh']).toBe(ListingStatus.ANALYZED)
+    expect(d.statuses['stale']).toBeUndefined()
+  })
+
+  it('skips a removed listing without spending a comp credit', async () => {
+    const d = deps({ listings: [mk('gone', 9)] })
+    const availability = { isGone: vi.fn(async () => true) }
+    const useCase = new RunCompAnalysisUseCase(
+      d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
+      { dailyBudget: 8, monthlyBudget: 250, resaleFactor: 1 },
+      undefined, undefined, availability,
+    )
+    const res = await useCase.execute()
+
+    expect(d.compService.findComps).not.toHaveBeenCalled()
+    expect(d.budgetRepository.recordCall).not.toHaveBeenCalled()
+    expect(d.statuses['gone']).toBe(ListingStatus.IGNORED)
+    expect(res.ignored).toBe(1)
+  })
+
+  it('proceeds with comp analysis when the availability probe is inconclusive', async () => {
+    const d = deps({ listings: [mk('alive', 9)], comps: { matches: [
+      { title: 'a', source: '1stdibs', link: 'https://1stdibs.com/a', isValueDomain: true, price: { value: 1000, currency: 'EUR' } },
+      { title: 'b', source: '1stdibs', link: 'https://1stdibs.com/b', isValueDomain: true, price: { value: 2000, currency: 'EUR' } },
+      { title: 'c', source: '1stdibs', link: 'https://1stdibs.com/c', isValueDomain: true, price: { value: 3000, currency: 'EUR' } },
+    ] } })
+    const availability = { isGone: vi.fn(async () => false) }
+    const useCase = new RunCompAnalysisUseCase(
+      d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
+      { dailyBudget: 8, monthlyBudget: 250, resaleFactor: 1 },
+      undefined, undefined, availability,
+    )
+    const res = await useCase.execute()
+
+    expect(d.compService.findComps).toHaveBeenCalledOnce()
+    expect(res.analyzed).toBe(1)
   })
 
   it('skips a near-duplicate of a rejected listing before spending a comp credit', async () => {

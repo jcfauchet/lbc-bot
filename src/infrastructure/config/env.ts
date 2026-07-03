@@ -40,6 +40,9 @@ const envSchema = z.object({
   // Above this cosine similarity, a candidate is treated as a near-duplicate of a
   // piece the user already rejected and skipped before spending a comp credit.
   SIMILAR_FEEDBACK_SKIP_THRESHOLD: z.coerce.number().min(0).max(1).default(0.92),
+  // TRIAGED listings older than this are expired before comp: the deal is gone
+  // and a comp credit spent on them is wasted.
+  TRIAGED_MAX_AGE_DAYS: z.coerce.number().min(1).default(7),
 })
 
 export type Env = z.infer<typeof envSchema>

@@ -44,7 +44,10 @@ export class RunTriageUseCase {
       // for its reverse-image search: log, mark ignored, move on.
       let score: number
       try {
-        ;({ score } = await this.triageService.triage(imageUrl, listing.title, guidance))
+        ;({ score } = await this.triageService.triage(
+          { imageUrl, title: listing.title, priceEur: listing.price.getEuros() },
+          guidance,
+        ))
       } catch (err) {
         console.error(`Triage failed for ${listing.id}:`, err)
         listing.markAsIgnored()

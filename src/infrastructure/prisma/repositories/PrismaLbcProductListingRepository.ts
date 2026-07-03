@@ -107,6 +107,27 @@ export class PrismaLbcProductListingRepository implements IListingRepository {
     return result.count
   }
 
+  async ignoreTriagedOlderThan(days: number, reason: string): Promise<number> {
+    const cutoffDate = new Date()
+    cutoffDate.setDate(cutoffDate.getDate() - days)
+
+    // Single bulk UPDATE: the backlog can hold thousands of stale rows, so
+    // expiring them one by one would blow the serverless time budget.
+    const result = await this.prisma.lbcProductListing.updateMany({
+      where: {
+        createdAt: { lt: cutoffDate },
+        status: { equals: ListingStatus.TRIAGED },
+      },
+      data: {
+        status: ListingStatus.IGNORED,
+        ignoreReason: reason,
+        updatedAt: new Date(),
+      },
+    })
+
+    return result.count
+  }
+
   private toDomain(raw: any): Listing {
     return Listing.fromPersistence({
       id: raw.id,

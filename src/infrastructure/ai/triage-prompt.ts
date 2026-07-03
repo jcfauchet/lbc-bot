@@ -1,16 +1,28 @@
-import type { TriageResult } from '@/domain/services/ITriageService'
+import type { TriageInput, TriageResult } from '@/domain/services/ITriageService'
 
 export const TRIAGE_PROMPT = [
-  'You are triaging a second-hand listing photo for a vintage furniture & decor reseller.',
-  'Rate from 0 to 10 how worth-investigating this piece is: does it LOOK like a genuinely',
-  'vintage, designer, brass/bronze, mid-century or Hollywood-Regency decorative piece that',
-  'could have hidden resale value? High score = visually special/old/crafted with distinctive',
-  'form, materials or detailing. Low score = generic, modern, flat-pack, damaged-beyond-value.',
+  'You are triaging a second-hand listing for a vintage furniture & decor reseller who',
+  'flips undervalued pieces. You get one photo, the listing title and the asking price.',
+  'Rate from 0 to 10 the HIDDEN-MARGIN potential: how likely is this piece worth',
+  'substantially MORE than its asking price? Score high only when BOTH hold:',
+  '(a) it looks genuinely vintage, designer or finely crafted — brass/bronze, mid-century,',
+  'Hollywood-Regency, brutalist — with distinctive form, materials or detailing, AND',
+  '(b) the asking price looks LOW for what the piece appears to be.',
+  'A beautiful piece at a fair or high price has NO hidden margin: score it low.',
+  'A generic, modern, flat-pack or damaged-beyond-value piece scores low at any price.',
   'A glossy lacquered finish is NOT by itself a signal: plenty of cheap modern pieces are',
   'lacquered. Judge the age, materials and construction, not the finish alone.',
-  'Do NOT try to name a designer or maker. Judge only the visual "worth a closer look" signal.',
+  'Do NOT try to name a designer or maker.',
   'Reply with strict JSON: {"score": <0-10 integer>, "rationale": "<short>"}',
 ].join(' ')
+
+/**
+ * Renders the per-listing context appended after the prompt. Shared by every
+ * triage adapter so the price signal cannot silently drop out of one provider.
+ */
+export function renderListingContext(input: Pick<TriageInput, 'title' | 'priceEur'>): string {
+  return `Listing title: ${input.title}\nAsking price: ${input.priceEur}€`
+}
 
 /** Hard cap on injected guidance length to keep prompt token cost bounded. */
 const MAX_GUIDANCE_CHARS = 2000

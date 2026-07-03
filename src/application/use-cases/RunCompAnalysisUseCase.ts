@@ -4,6 +4,7 @@ import type { IListingImageRepository } from '@/domain/repositories/IListingImag
 import type { ICompService } from '@/domain/services/ICompService'
 import type { ILensBudgetRepository } from '@/domain/repositories/ILensBudgetRepository'
 import type { IFeedbackRepository } from '@/domain/repositories/IFeedbackRepository'
+import type { IListingAvailabilityService } from '@/domain/services/IListingAvailabilityService'
 import { scoreComps } from '@/domain/services/comp-scoring'
 import { hasReplicaSignal, hasKnownDesignerAttribution } from '@/domain/services/listing-signals'
 import { AiAnalysis } from '@/domain/entities/AiAnalysis'
@@ -27,6 +28,12 @@ export interface LensBudgetConfig {
    * should short-circuit, to avoid dropping genuine deals. Defaults to 0.92.
    */
   similarFeedbackSkipThreshold?: number
+  /**
+   * TRIAGED listings older than this are bulk-expired before picking comp
+   * candidates: vintage deals are gone within days, and 90% of the backlog was
+   * observed to be older than a week — pure comp-credit waste. Unset = no expiry.
+   */
+  triagedMaxAgeDays?: number
 }
 
 /** Embeds short listing text to look up similar past feedback. */
@@ -49,16 +56,32 @@ export class RunCompAnalysisUseCase {
     // feedback so pieces the user already rejected don't burn a comp credit again.
     private feedbackRepository?: IFeedbackRepository,
     private embedder?: ITextEmbedder,
+    // Optional: probes whether the listing is still online before spending a credit.
+    private availabilityService?: IListingAvailabilityService,
   ) {}
 
-  async execute(): Promise<{ processed: number; analyzed: number; ignored: number }> {
+  async execute(): Promise<{ processed: number; analyzed: number; ignored: number; expired: number }> {
+    // Drop stale candidates first so the (tiny) daily budget only ever goes to
+    // listings whose deal can still be bought.
+    let expired = 0
+    if (this.config.triagedMaxAgeDays !== undefined) {
+      expired = await this.listingRepository.ignoreTriagedOlderThan(
+        this.config.triagedMaxAgeDays,
+        `Annonce trop ancienne (> ${this.config.triagedMaxAgeDays}j), le deal est probablement parti`,
+      )
+    }
+
     const usedToday = await this.budgetRepository.countSince(startOfDay())
     const usedThisMonth = await this.budgetRepository.countSince(startOfMonth())
     let remaining = Math.min(this.config.dailyBudget - usedToday, this.config.monthlyBudget - usedThisMonth)
-    if (remaining <= 0) return { processed: 0, analyzed: 0, ignored: 0 }
+    if (remaining <= 0) return { processed: 0, analyzed: 0, ignored: 0, expired }
 
+    // Best score first; freshness breaks ties so a credit never goes to an old
+    // listing while an equally-scored fresh one (whose deal is still alive) waits.
     const candidates = (await this.listingRepository.findByStatus(ListingStatus.TRIAGED))
-      .sort((a, b) => (b.triageScore ?? 0) - (a.triageScore ?? 0))
+      .sort((a, b) =>
+        (b.triageScore ?? 0) - (a.triageScore ?? 0) ||
+        b.createdAt.getTime() - a.createdAt.getTime())
 
     let processed = 0
     let analyzed = 0
@@ -86,6 +109,17 @@ export class RunCompAnalysisUseCase {
       if (hasKnownDesignerAttribution(listingText)) {
         listing.markAsIgnored()
         listing.setIgnoreReason('Designer/éditeur déjà nommé par le vendeur (pas de marge cachée)')
+        await this.listingRepository.update(listing)
+        ignored++
+        continue
+      }
+
+      // A removed listing means the deal is already gone: don't spend a credit
+      // estimating a piece nobody can buy. The probe only trusts a definitive
+      // 404/410 — an anti-bot block or network error never skips the listing.
+      if (this.availabilityService && await this.availabilityService.isGone(listing.url)) {
+        listing.markAsIgnored()
+        listing.setIgnoreReason('Annonce supprimée de LeBonCoin (vendue ou retirée)')
         await this.listingRepository.update(listing)
         ignored++
         continue
@@ -166,6 +200,6 @@ export class RunCompAnalysisUseCase {
       analyzed++
     }
 
-    return { processed, analyzed, ignored }
+    return { processed, analyzed, ignored, expired }
   }
 }

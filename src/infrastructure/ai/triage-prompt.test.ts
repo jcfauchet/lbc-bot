@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { TRIAGE_PROMPT, buildTriagePrompt, parseTriageScore } from './triage-prompt'
+import { TRIAGE_PROMPT, buildTriagePrompt, parseTriageScore, renderListingContext } from './triage-prompt'
 
 describe('parseTriageScore', () => {
   it('extracts a 0-10 integer from a JSON-ish reply', () => {
@@ -18,6 +18,22 @@ describe('parseTriageScore', () => {
 describe('TRIAGE_PROMPT', () => {
   it('instructs NOT to name a designer', () => {
     expect(TRIAGE_PROMPT.toLowerCase()).toContain('do not')
+  })
+
+  it('scores hidden-margin potential against the asking price, not visual appeal alone', () => {
+    const lower = TRIAGE_PROMPT.toLowerCase()
+    expect(lower).toContain('hidden-margin')
+    expect(lower).toContain('asking price')
+    // A beautiful piece at a fair price must not score high.
+    expect(lower).toContain('no hidden margin')
+  })
+})
+
+describe('renderListingContext', () => {
+  it('renders title and asking price for the model', () => {
+    const out = renderListingContext({ title: 'Lampe champignon', priceEur: 45 })
+    expect(out).toContain('Lampe champignon')
+    expect(out).toContain('45€')
   })
 })
 

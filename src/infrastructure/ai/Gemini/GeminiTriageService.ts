@@ -1,6 +1,6 @@
 import { GoogleGenAI } from '@google/genai'
-import type { ITriageService, TriageResult } from '@/domain/services/ITriageService'
-import { buildTriagePrompt, parseTriageScore } from '../triage-prompt'
+import type { ITriageService, TriageInput, TriageResult } from '@/domain/services/ITriageService'
+import { buildTriagePrompt, parseTriageScore, renderListingContext } from '../triage-prompt'
 
 export class GeminiTriageService implements ITriageService {
   readonly providerName = 'gemini'
@@ -12,12 +12,12 @@ export class GeminiTriageService implements ITriageService {
     this.model = model
   }
 
-  async triage(imageUrl: string, title: string, guidance?: string | null): Promise<TriageResult> {
-    const imageBytes = Buffer.from(await (await fetch(imageUrl)).arrayBuffer()).toString('base64')
+  async triage(input: TriageInput, guidance?: string | null): Promise<TriageResult> {
+    const imageBytes = Buffer.from(await (await fetch(input.imageUrl)).arrayBuffer()).toString('base64')
     const response = await this.ai.models.generateContent({
       model: this.model,
       contents: [
-        { text: `${buildTriagePrompt(guidance)}\nListing title: ${title}` },
+        { text: `${buildTriagePrompt(guidance)}\n${renderListingContext(input)}` },
         { inlineData: { mimeType: 'image/jpeg', data: imageBytes } },
       ],
     })

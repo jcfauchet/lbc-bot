@@ -114,6 +114,9 @@ describe('RunTriageUseCase', () => {
     const useCase = new RunTriageUseCase(listingRepository, imageRepository, triageService, 5, 100, guidanceRepo('- avoid repros'))
     await useCase.execute()
 
-    expect(triageService.triage).toHaveBeenCalledWith('https://img/x.jpg', 't', '- avoid repros')
+    expect(triageService.triage).toHaveBeenCalledWith(
+      { imageUrl: 'https://img/x.jpg', title: 't', priceEur: 80 },
+      '- avoid repros',
+    )
   })
 })

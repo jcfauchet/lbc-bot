@@ -16,6 +16,7 @@ import { GeminiFeedbackLearningService } from '@/infrastructure/ai/Gemini/Gemini
 
 import { LeBonCoinListingScraper } from '@/infrastructure/scraping/listings/LeBonCoinListingScraper'
 import { LeBonCoinApiClient } from '@/infrastructure/api/LeBonCoinApiClient'
+import { LbcListingAvailabilityChecker } from '@/infrastructure/api/LbcListingAvailabilityChecker'
 import { IListingSource } from '@/domain/services/IListingSource'
 import { CloudinaryStorageService } from '@/infrastructure/storage/CloudinaryStorageService'
 import { IStorageService } from '@/infrastructure/storage/IStorageService'
@@ -151,9 +152,11 @@ export class Container {
         monthlyBudget: env.LENS_MONTHLY_BUDGET,
         resaleFactor: env.RESALE_REALIZATION_FACTOR,
         similarFeedbackSkipThreshold: env.SIMILAR_FEEDBACK_SKIP_THRESHOLD,
+        triagedMaxAgeDays: env.TRIAGED_MAX_AGE_DAYS,
       },
       this.feedbackRepository,
       this.embeddingService,
+      new LbcListingAvailabilityChecker(),
     )
 
     this.runListingScrapingUseCase = new RunListingScrapingUseCase(
