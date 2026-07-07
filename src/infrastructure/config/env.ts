@@ -30,11 +30,16 @@ const envSchema = z.object({
     .optional()
     .transform((v) => v ? v.split(',').map((s) => s.trim()).filter(Boolean) : []),
   SERPAPI_KEY: z.string().min(1).optional(),
-  LENS_DAILY_BUDGET: z.coerce.number().min(0).default(8),
+  // 6 standard + 2 fast-track = 8/day ≈ 240/month, fits the 250 SerpAPI plan
+  // (the account ran dry on 5 Jul 2026 at 8+2).
+  LENS_DAILY_BUDGET: z.coerce.number().min(0).default(6),
   LENS_MONTHLY_BUDGET: z.coerce.number().min(0).default(250),
   // Dealer asking prices (comps) -> realistic quick-resale value.
   RESALE_REALIZATION_FACTOR: z.coerce.number().min(0.1).max(1).default(0.6),
-  TRIAGE_MIN_SCORE: z.coerce.number().min(0).max(10).default(5),
+  // Offline eval (Jul 2026, 150 labelled listings): precision is flat (~33%)
+  // across thresholds 4-8, so the threshold is a volume knob, not a precision
+  // knob. 6 trims queue pressure while keeping 84% recall.
+  TRIAGE_MIN_SCORE: z.coerce.number().min(0).max(10).default(6),
   TRIAGE_MAX_PER_RUN: z.coerce.number().min(1).default(25),
   FEEDBACK_LEARNING_MAX_ITEMS: z.coerce.number().min(1).default(200),
   // Above this cosine similarity, a candidate is treated as a near-duplicate of a
@@ -46,7 +51,9 @@ const envSchema = z.object({
   // Fast-track lane: fresh high-score listings may spend this many credits
   // beyond the daily budget (monthly budget still enforced) and jump the queue.
   FAST_TRACK_DAILY_EXTRA: z.coerce.number().min(0).default(2),
-  FAST_TRACK_MIN_SCORE: z.coerce.number().min(0).max(10).default(9),
+  // The hidden-margin prompt almost never emits 9 (1/150 in the Jul 2026 eval),
+  // so a 9 gate would leave the fast-track lane permanently empty.
+  FAST_TRACK_MIN_SCORE: z.coerce.number().min(0).max(10).default(8),
   FAST_TRACK_FRESH_HOURS: z.coerce.number().min(1).default(24),
 })
 
