@@ -40,19 +40,21 @@ estimation approach; there is no Gemini comp provider. SerpAPI-Lens is the only 
 - `maxDuration` 300 → 800 on `analyze-and-notify` (and `scrape`, same logged 504).
   Caveat: effective only if the Vercel plan allows 800s; otherwise Vercel clamps.
 
-### 3. Professional-seller detection (best-effort)
-- Prisma migration: add nullable `sellerType String?` to `lbc_product_listings`.
-- `Listing` entity: optional `sellerType` prop + getter.
-- Scraper `scrapeDetails`: extract owner type from the detail page's embedded JSON
-  (`"pro"` / `"private"`); best-effort, `undefined` when unavailable (Datadome may
-  block). Persist it through the scraping use-case + repository.
-- `RunCompAnalysisUseCase`: skip (ignore) a listing when `sellerType === 'pro'`
-  before spending a comp credit. `undefined`/`private` never skips.
+### 3. Professional-seller detection — DROPPED (already covered)
+Investigation found `LeBonCoinApiClient.ts:229` already hard-excludes pros at
+ingestion (`ad.professional_ad || ad.owner.type === 'pro'`), shipped 6 Dec 2025 —
+before all the analysed feedback. A pro listing never reaches the DB via the
+primary (API) path, so a `sellerType` pipeline would be redundant. The residual
+operator "sold by a professional" complaints (~2-3 of 62 negatives) are semi-pros
+registered as *particulier* that the official flag cannot catch; detecting those
+needs heuristics (store name, seller listing volume, description cues), which is a
+separate, larger effort with marginal payoff. Deferred by decision on 2026-07-25.
 
 ## Non-goals
 - No hard cap on predicted margin (overfit to a biased sample).
 - No new comp provider.
 - Re-scoring the historical estimator offline (raw comps are not stored).
+- No semi-pro/dealer heuristic detection (see §3).
 
 ## Validation
 - `pnpm test` (unit + use-case).
