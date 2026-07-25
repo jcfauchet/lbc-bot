@@ -178,7 +178,10 @@ export class Container {
       this.mailer,
       env.NOTIFICATION_EMAIL_TO,
       env.NOTIFICATION_EMAIL_FROM ?? 'LBC Bot <bot@example.com>',
-      env.MIN_MARGIN_IN_EUR
+      env.MIN_MARGIN_IN_EUR,
+      0.8,
+      // Gate emails on a conservative (worst-case) margin, in cents.
+      env.MIN_CONSERVATIVE_MARGIN_IN_EUR * 100,
     )
 
     this.runCleanupUseCase = new RunCleanupUseCase(

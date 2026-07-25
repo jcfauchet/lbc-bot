@@ -32,10 +32,28 @@ describe('scoreComps', () => {
     expect(r.estimatedValueEur).toBe(1500)
   })
 
-  it('downgrades to to_verify when value comps disagree wildly despite count>=3', () => {
-    // Median 250 but a 5000€ outlier makes the spread enormous: the comps do
-    // not actually agree, so the estimate is not reliable.
+  it('drops the single highest comp when there are >=4, so a lone luxury comp cannot inflate the estimate', () => {
+    // A lone 5000€ dealer comp used to poison the median/range and manufacture a
+    // phantom margin. With >=4 comps the top one is trimmed, leaving a clean,
+    // agreeing estimate of ~200€.
     const r = scoreComps([m(100, true), m(200, true), m(300, true), m(5000, true)])
+    expect(r.pricedCompCount).toBe(3)
+    expect(r.estimatedValueEur).toBe(200)
+    expect(r.confidence).toBe('reliable')
+  })
+
+  it('still downgrades to to_verify when the comps disagree even after trimming the top one', () => {
+    // Two high comps: trimming one still leaves a wide spread, so the estimate
+    // is not trustworthy.
+    const r = scoreComps([m(100, true), m(200, true), m(3000, true), m(5000, true)])
+    expect(r.confidence).toBe('to_verify')
+  })
+
+  it('does not trim when there are fewer than 4 priced comps', () => {
+    // Only 3 comps: too few to safely drop one, so a lone outlier keeps the
+    // estimate in to_verify rather than silently reliable.
+    const r = scoreComps([m(100, true), m(200, true), m(5000, true)])
+    expect(r.pricedCompCount).toBe(3)
     expect(r.confidence).toBe('to_verify')
   })
 
