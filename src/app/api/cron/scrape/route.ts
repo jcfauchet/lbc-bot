@@ -3,7 +3,9 @@ import { container } from '@/infrastructure/di/container'
 import { withErrorHandling } from '@/infrastructure/logger/ErrorHandler'
 import { logInfo } from '@/infrastructure/logger/logger'
 
-export const maxDuration = 300 // Should be 800
+// Raised from 300s: the multi-search Playwright scrape was 504-ing on the cap.
+// Vercel clamps this to the plan ceiling at deploy time if 800 is not allowed.
+export const maxDuration = 800
 
 export async function GET(request: Request) {
   const authHeader = request.headers.get('authorization')

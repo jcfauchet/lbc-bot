@@ -18,7 +18,16 @@ const FX_TO_EUR: Record<string, number> = { EUR: 1, USD: 0.92, GBP: 1.17 }
  * considered to agree. Above this the priced comps disagree too much for the
  * estimate to be trusted, so confidence drops to `to_verify` even with 3+ comps.
  */
-const MAX_RELIABLE_IQR_RATIO = 1
+const MAX_RELIABLE_IQR_RATIO = 0.75
+
+/**
+ * With at least this many priced comps, the single most expensive one is dropped
+ * before scoring. A lone luxury dealer comp (a 1stdibs/Chairish outlier) used to
+ * inflate the median and manufacture a phantom margin — the dominant cause of the
+ * "хватит придумывать цифры / estimation trop vaste" feedback. Below this count
+ * there are too few comps to safely discard one.
+ */
+const MIN_COMPS_TO_TRIM_TOP = 4
 
 function toEur(value: number, currency: string): number {
   const rate = FX_TO_EUR[currency.toUpperCase()] ?? 1
@@ -41,10 +50,16 @@ function percentile(sorted: number[], p: number): number {
 }
 
 export function scoreComps(matches: CompMatch[]): CompScore {
-  const prices = matches
+  const allPrices = matches
     .filter((c) => c.isValueDomain && c.price)
     .map((c) => toEur(c.price!.value, c.price!.currency))
     .sort((a, b) => a - b)
+
+  // Trim the single most expensive comp once there are enough of them, so a lone
+  // luxury outlier can no longer poison the median and the interquartile band.
+  const prices = allPrices.length >= MIN_COMPS_TO_TRIM_TOP
+    ? allPrices.slice(0, -1)
+    : allPrices
 
   const count = prices.length
   if (count === 0) {

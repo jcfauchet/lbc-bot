@@ -2,7 +2,10 @@ import { NextResponse } from 'next/server'
 import { container } from '@/infrastructure/di/container'
 import { logError, logInfo } from '@/infrastructure/logger/logger'
 
-export const maxDuration = 300 // Should be 800
+// 800s is the Vercel Pro/Fluid ceiling; the funnel (prefilter→triage→comp→notify)
+// was hitting the old 300s cap and skipping the final notify stage. If the plan
+// does not allow 800, Vercel clamps this down at deploy time.
+export const maxDuration = 800
 
 /**
  * Runs one funnel stage in isolation: a stage that throws is logged but does not

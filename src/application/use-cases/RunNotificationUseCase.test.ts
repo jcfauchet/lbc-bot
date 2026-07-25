@@ -11,10 +11,10 @@ const listing = (id: string) => {
   return l
 }
 
-const analysis = (listingId: string, confidence: number) =>
+const analysis = (listingId: string, confidence: number, estMinEuros = 1000) =>
   AiAnalysis.create({
     listingId,
-    estimatedMinPrice: Money.fromEuros(1000),
+    estimatedMinPrice: Money.fromEuros(estMinEuros),
     estimatedMaxPrice: Money.fromEuros(1500),
     margin: Money.fromEuros(900),
     description: 'd',
@@ -54,6 +54,22 @@ describe('RunNotificationUseCase', () => {
     expect(res.sent).toBe(1)
     expect(d.savedNotifications).toHaveLength(1)
     expect(d.savedNotifications[0].listingId).toBe('reliable')
+  })
+
+  it('does not notify when the conservative margin (estMin - price) is below the floor', async () => {
+    // Median margin (900€) passes the coarse prefilter and confidence is high,
+    // but the worst-case resale (estMin 100€ − price 80€ = 20€) leaves no real
+    // margin, so the deal must not be emailed.
+    const d = deps([analysis('reliable', 0.9, 100)])
+    const useCase = new RunNotificationUseCase(
+      d.listingRepository, d.aiAnalysisRepository, d.notificationRepository, d.imageRepository,
+      d.mailer, ['to@x.fr'], 'from@x.fr', 60, 0.8, 6000,
+    )
+
+    const res = await useCase.execute()
+
+    expect(res.sent).toBe(0)
+    expect(d.mailer.send).not.toHaveBeenCalled()
   })
 
   it('sends nothing when every deal is below the confidence threshold', async () => {

@@ -18,6 +18,10 @@ const envSchema = z.object({
   CLOUDINARY_API_KEY: z.string().optional(),
   CLOUDINARY_API_SECRET: z.string().optional(),
   MIN_MARGIN_IN_EUR: z.coerce.number().min(50).default(100),
+  // Worst-case-still-profitable floor: emails require (estMin − price) ≥ this.
+  // Lower than MIN_MARGIN_IN_EUR because it is measured at the low end of the
+  // estimate band. 0 disables the gate.
+  MIN_CONSERVATIVE_MARGIN_IN_EUR: z.coerce.number().min(0).default(60),
   MIN_LISTING_PRICE_EUR: z.coerce.number().min(0).default(50),
   MAX_LISTING_PRICE_EUR: z.coerce.number().min(0).default(700),
   AI_PROVIDER: z.enum(['openai', 'gemini', 'random']).default('openai'),

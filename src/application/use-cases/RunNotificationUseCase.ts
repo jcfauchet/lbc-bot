@@ -21,7 +21,13 @@ export class RunNotificationUseCase {
     // Below this, the comps disagreed too much (e.g. one luxury outlier) for the
     // estimate to be trustworthy. Such deals are surfaced in the inbox but never
     // emailed, to avoid the "estimation trop large / trop élevée" feedback.
-    private minConfidence: number = 0.8
+    private minConfidence: number = 0.8,
+    // The email decision is gated on a CONSERVATIVE margin: the low end of the
+    // estimate band (estMin) minus the asking price — i.e. the margin that holds
+    // even in the worst realistic resale. The displayed `marginCents` stays
+    // median-based (informative), but a high median driven by a couple of
+    // optimistic comps no longer earns an email on its own. 0 disables the gate.
+    private minConservativeMarginCents: number = 0
   ) {}
 
   async execute(): Promise<{ sent: number; errors: number }> {
@@ -52,6 +58,16 @@ export class RunNotificationUseCase {
       )
 
       if (alreadyNotified.some((n) => n.status === 'sent')) {
+        continue
+      }
+
+      // Worst-case-still-profitable gate: even at the low end of the estimate
+      // band, the deal must clear the conservative-margin floor before it earns
+      // an email. This is what suppresses the phantom high margins produced by a
+      // lone optimistic comp.
+      const conservativeMarginCents =
+        analysis.estimatedMinPrice.getCents() - listing.price.getCents()
+      if (conservativeMarginCents < this.minConservativeMarginCents) {
         continue
       }
 
