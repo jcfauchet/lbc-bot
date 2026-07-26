@@ -14,6 +14,13 @@ export interface TriageInput {
    * the price to score margin potential, not just vintage appeal.
    */
   priceEur: number
+  /**
+   * The seller's free-text body. Feedback repeatedly asked the triager to "read
+   * the description too": it carries age/material/condition cues and replica
+   * tells ("dans le style de", "ressemble à") the photo alone cannot show. Used
+   * as corroborating signal, not as a source of truth on the piece's value.
+   */
+  description?: string
 }
 
 export interface ITriageService {
