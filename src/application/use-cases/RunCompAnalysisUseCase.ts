@@ -5,7 +5,7 @@ import type { ICompService } from '@/domain/services/ICompService'
 import type { ILensBudgetRepository } from '@/domain/repositories/ILensBudgetRepository'
 import type { IFeedbackRepository } from '@/domain/repositories/IFeedbackRepository'
 import type { IListingAvailabilityService } from '@/domain/services/IListingAvailabilityService'
-import { scoreComps } from '@/domain/services/comp-scoring'
+import { scoreComps, isMassMarketCommon } from '@/domain/services/comp-scoring'
 import { hasReplicaSignal, hasKnownDesignerAttribution } from '@/domain/services/listing-signals'
 import { AiAnalysis } from '@/domain/entities/AiAnalysis'
 import { Money } from '@/domain/value-objects/Money'
@@ -46,6 +46,14 @@ export interface LensBudgetConfig {
   fastTrackMinScore?: number
   /** Maximum listing age (hours) for the fast-track lane. Defaults to 24. */
   fastTrackFreshHours?: number
+  /**
+   * A listing whose reverse-image search returns at least this many mass-market
+   * retail matches (outnumbering value comps) is a common new product with no
+   * resale edge — dropped before it is estimated or notified. The Lens credit is
+   * already spent by then (the signal comes from its results), so this buys
+   * precision, not budget. 0/unset disables the check.
+   */
+  massMarketMinMatches?: number
 }
 
 /** Embeds short listing text to look up similar past feedback. */
@@ -192,6 +200,17 @@ export class RunCompAnalysisUseCase {
       } catch (err) {
         await this.budgetRepository.recordCall(listing.id, false)
         console.error(`Comp search failed for ${listing.id}:`, err)
+        continue
+      }
+
+      // The image matches many mass-market retail listings: the piece is a common
+      // new product ("trouvé neuf sur les marketplaces", "personne n'achète"), so
+      // there is no resale edge even if a stray value comp exists.
+      if (isMassMarketCommon(comps.matches, this.config.massMarketMinMatches ?? 0)) {
+        listing.markAsIgnored()
+        listing.setIgnoreReason('Objet trop commun (vendu neuf sur les marketplaces), pas de marge de revente')
+        await this.listingRepository.update(listing)
+        ignored++
         continue
       }
 

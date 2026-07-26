@@ -1,10 +1,14 @@
 import { describe, it, expect } from 'vitest'
-import { scoreComps } from './comp-scoring'
+import { scoreComps, isMassMarketCommon } from './comp-scoring'
 import type { CompMatch } from './ICompService'
 
 const m = (value: number | undefined, isValueDomain: boolean, currency = 'EUR'): CompMatch => ({
   title: 't', source: 's', link: 'l', isValueDomain,
   price: value === undefined ? undefined : { value, currency },
+})
+
+const match = (opts: Partial<CompMatch>): CompMatch => ({
+  title: 't', source: 's', link: 'l', isValueDomain: false, ...opts,
 })
 
 describe('scoreComps', () => {
@@ -61,5 +65,33 @@ describe('scoreComps', () => {
     const r = scoreComps([m(1000, true, 'USD'), m(1000, true, 'USD'), m(1000, true, 'USD')])
     // 1000 USD * 0.92 = 920
     expect(r.estimatedValueEur).toBe(920)
+  })
+})
+
+describe('isMassMarketCommon', () => {
+  it('flags a piece with enough mass-market matches outnumbering value comps', () => {
+    const matches = [
+      match({ isMassMarket: true }), match({ isMassMarket: true }),
+      match({ isMassMarket: true }), match({ isValueDomain: true }),
+    ]
+    expect(isMassMarketCommon(matches, 3)).toBe(true)
+  })
+
+  it('does not flag when value comps outnumber mass-market ones', () => {
+    const matches = [
+      match({ isMassMarket: true }), match({ isMassMarket: true }),
+      match({ isValueDomain: true }), match({ isValueDomain: true }),
+      match({ isValueDomain: true }),
+    ]
+    expect(isMassMarketCommon(matches, 2)).toBe(false)
+  })
+
+  it('does not flag below the minimum match count', () => {
+    expect(isMassMarketCommon([match({ isMassMarket: true }), match({ isMassMarket: true })], 3)).toBe(false)
+  })
+
+  it('is disabled when the threshold is 0', () => {
+    const matches = Array.from({ length: 5 }, () => match({ isMassMarket: true }))
+    expect(isMassMarketCommon(matches, 0)).toBe(false)
   })
 })

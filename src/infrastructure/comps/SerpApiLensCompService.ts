@@ -1,5 +1,6 @@
 import type { ICompService, CompResult, CompMatch } from '@/domain/services/ICompService'
 import { isValueDomain } from './value-domains'
+import { isMassMarketDomain } from './mass-market-domains'
 
 interface SerpVisualMatch {
   title?: string
@@ -36,6 +37,7 @@ export class SerpApiLensCompService implements ICompService {
         link,
         source,
         isValueDomain: isValueDomain(`${link} ${source}`),
+        isMassMarket: isMassMarketDomain(`${link} ${source}`),
         price: typeof value === 'number' ? { value, currency } : undefined,
       }
     })
