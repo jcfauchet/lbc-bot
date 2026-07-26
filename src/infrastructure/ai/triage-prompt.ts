@@ -2,7 +2,8 @@ import type { TriageInput, TriageResult } from '@/domain/services/ITriageService
 
 export const TRIAGE_PROMPT = [
   'You are triaging a second-hand listing for a vintage furniture & decor reseller who',
-  'flips undervalued pieces. You get one photo, the listing title and the asking price.',
+  'flips undervalued pieces. You get one photo, the listing title, the asking price and,',
+  "when available, the seller's description.",
   'Rate from 0 to 10 the HIDDEN-MARGIN potential: how likely is this piece worth',
   'substantially MORE than its asking price? Score high only when BOTH hold:',
   '(a) it looks genuinely vintage, designer or finely crafted — brass/bronze, mid-century,',
@@ -12,16 +13,31 @@ export const TRIAGE_PROMPT = [
   'A generic, modern, flat-pack or damaged-beyond-value piece scores low at any price.',
   'A glossy lacquered finish is NOT by itself a signal: plenty of cheap modern pieces are',
   'lacquered. Judge the age, materials and construction, not the finish alone.',
+  'Read the description for corroborating cues on age, materials, condition and for replica',
+  'tells like "dans le style de", "ressemble à", "type", "réplique", "récent" — a look-alike',
+  'or clearly modern piece scores low. But do NOT trust the seller\'s own valuation or hype:',
+  'judge the piece mainly from the photo; the description only sharpens that judgement.',
   'Do NOT try to name a designer or maker.',
   'Reply with strict JSON: {"score": <0-10 integer>, "rationale": "<short>"}',
 ].join(' ')
 
+/** Hard cap on the injected description to keep prompt token cost bounded. */
+const MAX_DESCRIPTION_CHARS = 600
+
 /**
  * Renders the per-listing context appended after the prompt. Shared by every
- * triage adapter so the price signal cannot silently drop out of one provider.
+ * triage adapter so the price and description signals cannot silently drop out
+ * of one provider. The description is truncated and omitted entirely when blank.
  */
-export function renderListingContext(input: Pick<TriageInput, 'title' | 'priceEur'>): string {
-  return `Listing title: ${input.title}\nAsking price: ${input.priceEur}€`
+export function renderListingContext(
+  input: Pick<TriageInput, 'title' | 'priceEur' | 'description'>,
+): string {
+  const lines = [`Listing title: ${input.title}`, `Asking price: ${input.priceEur}€`]
+  const description = input.description?.trim()
+  if (description) {
+    lines.push(`Seller description: ${description.slice(0, MAX_DESCRIPTION_CHARS)}`)
+  }
+  return lines.join('\n')
 }
 
 /** Hard cap on injected guidance length to keep prompt token cost bounded. */

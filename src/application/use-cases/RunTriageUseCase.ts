@@ -45,7 +45,12 @@ export class RunTriageUseCase {
       let score: number
       try {
         ;({ score } = await this.triageService.triage(
-          { imageUrl, title: listing.title, priceEur: listing.price.getEuros() },
+          {
+            imageUrl,
+            title: listing.title,
+            priceEur: listing.price.getEuros(),
+            description: listing.description,
+          },
           guidance,
         ))
       } catch (err) {

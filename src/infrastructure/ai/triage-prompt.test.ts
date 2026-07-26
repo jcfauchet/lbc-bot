@@ -27,6 +27,10 @@ describe('TRIAGE_PROMPT', () => {
     // A beautiful piece at a fair price must not score high.
     expect(lower).toContain('no hidden margin')
   })
+
+  it('tells the model to read the seller description', () => {
+    expect(TRIAGE_PROMPT.toLowerCase()).toContain('description')
+  })
 })
 
 describe('renderListingContext', () => {
@@ -34,6 +38,27 @@ describe('renderListingContext', () => {
     const out = renderListingContext({ title: 'Lampe champignon', priceEur: 45 })
     expect(out).toContain('Lampe champignon')
     expect(out).toContain('45€')
+  })
+
+  it('includes the seller description when provided', () => {
+    const out = renderListingContext({
+      title: 'Fauteuil', priceEur: 170,
+      description: 'Chaise qui ressemble à Michel Boyer, très bon état',
+    })
+    expect(out).toContain('ressemble à Michel Boyer')
+    expect(out.toLowerCase()).toContain('description')
+  })
+
+  it('omits the description line when the description is absent or blank', () => {
+    const none = renderListingContext({ title: 'Table', priceEur: 60 })
+    const blank = renderListingContext({ title: 'Table', priceEur: 60, description: '   ' })
+    expect(none.toLowerCase()).not.toContain('description')
+    expect(blank.toLowerCase()).not.toContain('description')
+  })
+
+  it('truncates a very long description to bound token cost', () => {
+    const out = renderListingContext({ title: 'Buffet', priceEur: 200, description: 'x'.repeat(5000) })
+    expect(out.length).toBeLessThan(1000)
   })
 })
 
