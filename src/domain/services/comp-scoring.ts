@@ -49,6 +49,24 @@ function percentile(sorted: number[], p: number): number {
   return Math.round(sorted[lo] + (idx - lo) * (sorted[hi] - sorted[lo]))
 }
 
+/**
+ * True when the reverse-image matches show the piece is a common, mass-produced
+ * product currently sold new: at least `minMassMarketMatches` matches come from
+ * retail/marketplace domains AND they outnumber the value/auction matches. Such
+ * a piece has no resale edge regardless of a stray value comp, so it should be
+ * dropped before it is estimated or notified.
+ */
+export function isMassMarketCommon(matches: CompMatch[], minMassMarketMatches: number): boolean {
+  if (minMassMarketMatches <= 0) return false
+  let massMarket = 0
+  let value = 0
+  for (const m of matches) {
+    if (m.isMassMarket) massMarket++
+    else if (m.isValueDomain) value++
+  }
+  return massMarket >= minMassMarketMatches && massMarket > value
+}
+
 export function scoreComps(matches: CompMatch[]): CompScore {
   const allPrices = matches
     .filter((c) => c.isValueDomain && c.price)

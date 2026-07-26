@@ -59,6 +59,10 @@ const envSchema = z.object({
   // so a 9 gate would leave the fast-track lane permanently empty.
   FAST_TRACK_MIN_SCORE: z.coerce.number().min(0).max(10).default(8),
   FAST_TRACK_FRESH_HOURS: z.coerce.number().min(1).default(24),
+  // A listing whose Lens search returns at least this many mass-market retail
+  // matches (outnumbering value comps) is dropped as a common new product. 0
+  // disables the check.
+  MASS_MARKET_MIN_MATCHES: z.coerce.number().min(0).default(4),
 })
 
 export type Env = z.infer<typeof envSchema>

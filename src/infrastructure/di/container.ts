@@ -156,6 +156,7 @@ export class Container {
         fastTrackDailyExtra: env.FAST_TRACK_DAILY_EXTRA,
         fastTrackMinScore: env.FAST_TRACK_MIN_SCORE,
         fastTrackFreshHours: env.FAST_TRACK_FRESH_HOURS,
+        massMarketMinMatches: env.MASS_MARKET_MIN_MATCHES,
       },
       this.feedbackRepository,
       this.embeddingService,
