@@ -21,7 +21,9 @@ export class GeminiSelectionRanker implements ISelectionRanker {
     for (const candidate of candidates) {
       let imageBytes: string
       try {
-        imageBytes = Buffer.from(await (await fetch(candidate.imageUrl)).arrayBuffer()).toString('base64')
+        const response = await fetch(candidate.imageUrl)
+        if (!response.ok) continue
+        imageBytes = Buffer.from(await response.arrayBuffer()).toString('base64')
       } catch {
         continue
       }
@@ -29,7 +31,7 @@ export class GeminiSelectionRanker implements ISelectionRanker {
       imageParts.push({ text: `Candidate ${usable.length}:` })
       imageParts.push({ inlineData: { mimeType: 'image/jpeg', data: imageBytes } })
     }
-    if (usable.length === 0) return []
+    if (usable.length === 0) throw new Error('All candidate images failed to fetch')
 
     const response = await this.ai.models.generateContent({
       model: this.model,
