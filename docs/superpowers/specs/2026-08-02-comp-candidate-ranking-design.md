@@ -144,7 +144,7 @@ The ranker must never jam the funnel — same principle as the per-stage isolati
 | Incident | Behaviour |
 |---|---|
 | Ranker throws (429, timeout, bad key) | Fall back to the deterministic order (score, then freshness) and spend the window entitlement. Selection quality is lost, flow is not. |
-| Malformed or unparseable JSON | `parseRanking` returns an empty list; same fallback. |
+| Malformed or unparseable JSON | `parseRanking` returns `null`, the adapter throws, same fallback. A *validly parsed* empty list must stay distinguishable from a parse failure: the first is deliberate abstention (spend nothing), the second is a broken call (spend via fallback). Collapsing both into `[]` would silently turn every parse failure into an abstention. |
 | Unknown or duplicate `listingId` returned | Silently ignored; only ids from the submitted shortlist are honoured. |
 | Fewer picks than the entitlement | Intended abstention: spend less, carry the rest over. |
 | Every `worthCredit` false | Spend nothing, full carry-over to the next window. |
