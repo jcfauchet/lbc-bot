@@ -906,7 +906,11 @@ that builds the shortlist. In `execute()`, after the candidate sort:
     // rows, so filtering it whole would mean hundreds of writes and embeddings per
     // run for a handful of credits.
     const shortlistSize = this.config.rankingShortlistSize ?? 20
-    const shortlist: typeof candidates = []
+    // The image URL is carried along: pass one already had to load it to check the
+    // listing has a photo at all, and both the ranking call and the comp search
+    // need it. Re-querying it twice more per listing would be three round-trips
+    // for one row.
+    const shortlist: Array<{ listing: Listing; imageUrl: string }> = []
     for (const listing of candidates) {
       if (shortlist.length >= shortlistSize) break
 
@@ -956,7 +960,8 @@ that builds the shortlist. In `execute()`, after the candidate sort:
       }
 
       const images = await this.imageRepository.findByListingId(listing.id)
-      if (!images[0]?.urlRemote) {
+      const imageUrl = images[0]?.urlRemote
+      if (!imageUrl) {
         listing.markAsIgnored()
         listing.setIgnoreReason('no image for comp search')
         await this.listingRepository.update(listing)
@@ -964,7 +969,7 @@ that builds the shortlist. In `execute()`, after the candidate sort:
         continue
       }
 
-      shortlist.push(listing)
+      shortlist.push({ listing, imageUrl })
     }
 ```
 
@@ -978,26 +983,24 @@ Add this private method to the class:
    * each other. Any failure falls back to the incoming deterministic order: losing
    * ranking quality is acceptable, stalling the funnel is not.
    */
-  private async pickInOrder(shortlist: Listing[]): Promise<Listing[]> {
+  private async pickInOrder(shortlist: ShortlistEntry[]): Promise<ShortlistEntry[]> {
     if (!this.ranker || shortlist.length === 0) return shortlist
 
-    const byId = new Map(shortlist.map((l) => [l.id, l]))
+    const byId = new Map(shortlist.map((entry) => [entry.listing.id, entry]))
     try {
       const guidance = (await this.guidanceRepository?.getLatest())?.content ?? null
-      const candidates: RankingCandidate[] = await Promise.all(
-        shortlist.map(async (listing) => ({
-          listingId: listing.id,
-          imageUrl: (await this.imageRepository.findByListingId(listing.id))[0]!.urlRemote,
-          title: listing.title,
-          priceEur: listing.price.getEuros(),
-          description: listing.description,
-        })),
-      )
+      const candidates: RankingCandidate[] = shortlist.map(({ listing, imageUrl }) => ({
+        listingId: listing.id,
+        imageUrl,
+        title: listing.title,
+        priceEur: listing.price.getEuros(),
+        description: listing.description,
+      }))
       const picks = await this.ranker.rank(candidates, guidance)
       return picks
-        .filter((p) => p.worthCredit)
-        .map((p) => byId.get(p.listingId))
-        .filter((l): l is Listing => l !== undefined)
+        .filter((pick) => pick.worthCredit)
+        .map((pick) => byId.get(pick.listingId))
+        .filter((entry): entry is ShortlistEntry => entry !== undefined)
     } catch (err) {
       console.error('Selection ranking failed, falling back to deterministic order:', err)
       return shortlist
@@ -1005,10 +1008,16 @@ Add this private method to the class:
   }
 ```
 
-Add the `Listing` type import at the top of the file:
+Add the `Listing` type import and the shortlist entry type at the top of the file:
 
 ```ts
 import type { Listing } from '@/domain/entities/Listing'
+
+/** A candidate that survived the free filters, with the image both later stages need. */
+interface ShortlistEntry {
+  listing: Listing
+  imageUrl: string
+}
 ```
 
 Then replace the remainder of `execute()` — the spend loop and the return — with:
@@ -1017,7 +1026,7 @@ Then replace the remainder of `execute()` — the spend loop and the return — 
     // Pass two: spend the window's credits on the ranker's picks, best first.
     const picks = await this.pickInOrder(shortlist)
 
-    for (const listing of picks) {
+    for (const { listing, imageUrl } of picks) {
       if (remaining <= 0) break
 
       // A removed listing means the deal is already gone: don't spend a credit
@@ -1031,9 +1040,6 @@ Then replace the remainder of `execute()` — the spend loop and the return — 
         ignored++
         continue
       }
-
-      const images = await this.imageRepository.findByListingId(listing.id)
-      const imageUrl = images[0]!.urlRemote
 
       remaining--
       processed++
