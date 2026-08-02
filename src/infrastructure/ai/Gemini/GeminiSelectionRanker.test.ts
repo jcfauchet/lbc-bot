@@ -74,10 +74,11 @@ describe('GeminiSelectionRanker', () => {
       { listingId: 'C', imageUrl: 'http://c.jpg', title: 'C', priceEur: 300 },
     ]
 
-    // A succeeds, B returns 404, C succeeds
+    // A succeeds, B returns 404 with distinguishable bytes, C succeeds
+    // Pre-fix: 404 bytes would still be encoded and B kept; post-fix: B dropped
     fetchMock
       .mockResolvedValueOnce({ ok: true, arrayBuffer: async () => new ArrayBuffer(10) })
-      .mockResolvedValueOnce({ ok: false })
+      .mockResolvedValueOnce({ ok: false, status: 404, arrayBuffer: async () => new ArrayBuffer(5) })
       .mockResolvedValueOnce({ ok: true, arrayBuffer: async () => new ArrayBuffer(10) })
 
     mockGenerateContent.mockResolvedValueOnce({
