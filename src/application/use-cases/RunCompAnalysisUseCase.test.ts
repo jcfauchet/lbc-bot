@@ -433,6 +433,19 @@ describe('RunCompAnalysisUseCase', () => {
     expect(d.statuses['replica']).toBe(ListingStatus.IGNORED)
   })
 
+  it('does not report unspent credits as deferred when no ranker is wired', async () => {
+    const d = deps({ listings: [mk('a', 9), mk('b', 9)] })
+    const useCase = new RunCompAnalysisUseCase(
+      d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
+      { dailyBudget: 8, monthlyBudget: 250, resaleFactor: 1 },
+    )
+    const res = await useCase.execute()
+
+    // Only 2 candidates existed for an 8-credit window: the shortfall is supply,
+    // not a ranker declining picks, and there is no ranker here to blame anyway.
+    expect(res.deferred).toBe(0)
+  })
+
   it('passes the learned guidance to the ranker', async () => {
     const d = deps({ listings: [mk('a', 9)] })
     const r = ranker([{ listingId: 'a', rank: 1, worthCredit: true }])

@@ -1,7 +1,7 @@
 import 'dotenv/config'
 import { z } from 'zod'
 
-const envSchema = z.object({
+export const envSchema = z.object({
   DATABASE_URL: z.string().url(),
   OPENAI_API_KEY: z.string().min(1).optional(),
   GOOGLE_GEMINI_API_KEY: z.string().min(1).optional(),
@@ -48,7 +48,9 @@ const envSchema = z.object({
   RANKING_SHORTLIST_SIZE: z.coerce.number().min(1).default(20),
   // Kill switch for the ranker call only: the windowed budget still applies and
   // candidates are served in the deterministic score-then-freshness order.
-  RANKING_ENABLED: z.coerce.boolean().default(true),
+  // Explicit enum, not z.coerce.boolean() — that coerces any non-empty string
+  // (including the literal "false") to true, silently defeating the switch.
+  RANKING_ENABLED: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
   // Dealer asking prices (comps) -> realistic quick-resale value.
   RESALE_REALIZATION_FACTOR: z.coerce.number().min(0.1).max(1).default(0.6),
   // Offline eval (Jul 2026, 150 labelled listings): precision is flat (~33%)

@@ -221,6 +221,11 @@ export class RunCompAnalysisUseCase {
       shortlist.push({ listing, imageUrl })
     }
 
+    // Captured before pass two spends any of it: the entitlement this window had
+    // coming in, used below to tell a supply shortfall apart from the ranker
+    // actually declining to spend a credit.
+    const entitlement = remaining
+
     // Pass two: spend the window's credits on the ranker's picks, best first.
     const picks = await this.pickInOrder(shortlist)
 
@@ -294,9 +299,14 @@ export class RunCompAnalysisUseCase {
       analyzed++
     }
 
-    // Credits the ranker declined to spend. Non-zero day after day means it is too
-    // severe; zero with an empty shortlist would be noise, hence the guard.
-    const deferred = shortlist.length > 0 ? Math.max(0, remaining) : 0
+    // Credits the ranker declined to spend — as opposed to credits left unspent
+    // because the shortlist simply didn't hold enough candidates (supply
+    // shortfall) or because picks were dropped by the availability probe further
+    // down the pipeline than the ranker's judgement. Non-zero day after day means
+    // the ranker itself is too severe; with no ranker wired there is no one to
+    // blame, hence the guard.
+    const supplyShortfall = Math.max(0, entitlement - shortlist.length)
+    const deferred = this.ranker ? Math.max(0, remaining - supplyShortfall) : 0
 
     return { processed, analyzed, ignored, expired, deferred }
   }
