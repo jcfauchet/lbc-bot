@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest'
-import { RunCompAnalysisUseCase } from './RunCompAnalysisUseCase'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { RunCompAnalysisUseCase, windowEntitlement } from './RunCompAnalysisUseCase'
 import { Listing } from '@/domain/entities/Listing'
 import { ListingStatus } from '@/domain/value-objects/ListingStatus'
 import { Money } from '@/domain/value-objects/Money'
@@ -155,58 +155,58 @@ describe('RunCompAnalysisUseCase', () => {
     expect(d.statuses['stale']).toBeUndefined()
   })
 
-  it('lets a fresh high-score listing spend the fast-track bonus after the daily budget is gone', async () => {
-    const gem = mk('gem', 9, 60) // created now => fresh
-    const ordinary = mk('ordinary', 8, 60)
-    const d = deps({ listings: [ordinary, gem], comps: { matches: [
-      { title: 'a', source: '1stdibs', link: 'https://1stdibs.com/a', isValueDomain: true, price: { value: 1000, currency: 'EUR' } },
-      { title: 'b', source: '1stdibs', link: 'https://1stdibs.com/b', isValueDomain: true, price: { value: 2000, currency: 'EUR' } },
-      { title: 'c', source: '1stdibs', link: 'https://1stdibs.com/c', isValueDomain: true, price: { value: 3000, currency: 'EUR' } },
-    ] } })
-    d.budgetRepository.countSince = vi.fn(async () => 8) // daily budget fully spent
-    const useCase = new RunCompAnalysisUseCase(
-      d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
-      { dailyBudget: 8, monthlyBudget: 250, resaleFactor: 1, fastTrackDailyExtra: 2, fastTrackMinScore: 9, fastTrackFreshHours: 24 },
-    )
-    const res = await useCase.execute()
-
-    // Only the fast-track gem gets a bonus credit; the ordinary listing waits.
-    expect(d.statuses['gem']).toBe(ListingStatus.ANALYZED)
-    expect(d.statuses['ordinary']).toBeUndefined()
-    expect(res.analyzed).toBe(1)
+  it('spends only the current window entitlement', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 7, 2, 1, 0, 0))
+    try {
+      const d = deps({ listings: [mk('a', 9), mk('b', 9), mk('c', 9)] })
+      const useCase = new RunCompAnalysisUseCase(
+        d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
+        { dailyBudget: 8, monthlyBudget: 250, resaleFactor: 1, windowsPerDay: 4 },
+      )
+      const res = await useCase.execute()
+      expect(d.compService.findComps).toHaveBeenCalledTimes(2)
+      expect(res.processed).toBe(2)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
-  it('fast-track jumps the queue ahead of a higher-scored stale listing', async () => {
-    const staleTop = mk('staleTop', 10, 60, { createdAt: new Date(Date.now() - 72 * 3_600_000) })
-    const freshGem = mk('freshGem', 9, 60) // created now => fast-track
-    const d = deps({ listings: [staleTop, freshGem], comps: { matches: [
-      { title: 'a', source: '1stdibs', link: 'https://1stdibs.com/a', isValueDomain: true, price: { value: 1000, currency: 'EUR' } },
-      { title: 'b', source: '1stdibs', link: 'https://1stdibs.com/b', isValueDomain: true, price: { value: 2000, currency: 'EUR' } },
-      { title: 'c', source: '1stdibs', link: 'https://1stdibs.com/c', isValueDomain: true, price: { value: 3000, currency: 'EUR' } },
-    ] } })
-    d.budgetRepository.countSince = vi.fn(async () => 7) // 1 credit left
-    const useCase = new RunCompAnalysisUseCase(
-      d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
-      { dailyBudget: 8, monthlyBudget: 250, resaleFactor: 1, fastTrackDailyExtra: 0, fastTrackMinScore: 9, fastTrackFreshHours: 24 },
-    )
-    await useCase.execute()
-
-    expect(d.statuses['freshGem']).toBe(ListingStatus.ANALYZED)
-    expect(d.statuses['staleTop']).toBeUndefined()
+  it('lets an unspent window carry over into the next one', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 7, 2, 7, 0, 0))
+    try {
+      const d = deps({ listings: [mk('a', 9), mk('b', 9), mk('c', 9), mk('d', 9), mk('e', 9)] })
+      const useCase = new RunCompAnalysisUseCase(
+        d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
+        { dailyBudget: 8, monthlyBudget: 250, resaleFactor: 1, windowsPerDay: 4 },
+      )
+      const res = await useCase.execute()
+      // Window 2 with nothing spent yet: 2 of its own + 2 carried over.
+      expect(res.processed).toBe(4)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
-  it('never exceeds the monthly budget even for fast-track listings', async () => {
-    const gem = mk('gem', 9, 60)
-    const d = deps({ listings: [gem] })
-    d.budgetRepository.countSince = vi.fn(async () => 250) // monthly cap reached
-    const useCase = new RunCompAnalysisUseCase(
-      d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
-      { dailyBudget: 8, monthlyBudget: 250, resaleFactor: 1, fastTrackDailyExtra: 2 },
-    )
-    const res = await useCase.execute()
-
-    expect(d.compService.findComps).not.toHaveBeenCalled()
-    expect(res.processed).toBe(0)
+  it('keeps the monthly budget above the window entitlement', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 7, 2, 13, 0, 0))
+    try {
+      const d = deps({ listings: [mk('a', 9), mk('b', 9), mk('c', 9)] })
+      // startOfMonth falls on the 1st, startOfDay on the 2nd: the mock tells the
+      // two calls apart by the day of month it is asked about.
+      d.budgetRepository.countSince = vi.fn(async (since: Date) => (since.getDate() === 1 ? 249 : 0))
+      const useCase = new RunCompAnalysisUseCase(
+        d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
+        { dailyBudget: 8, monthlyBudget: 250, resaleFactor: 1, windowsPerDay: 4 },
+      )
+      const res = await useCase.execute()
+      // Window 3 would allow 6, the monthly cap allows 1.
+      expect(res.processed).toBe(1)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('skips a removed listing without spending a comp credit', async () => {
@@ -315,5 +315,32 @@ describe('RunCompAnalysisUseCase', () => {
     await useCase.execute()
     expect(d.statuses['a']).toBe(ListingStatus.IGNORED)
     expect(d.saved).toHaveLength(0)
+  })
+})
+
+describe('windowEntitlement', () => {
+  const at = (hour: number) => new Date(2026, 7, 2, hour, 0, 0)
+
+  it('accrues one share of the daily budget per elapsed window', () => {
+    expect(windowEntitlement(8, 4, 0, at(1))).toBe(2)
+    expect(windowEntitlement(8, 4, 0, at(7))).toBe(4)
+    expect(windowEntitlement(8, 4, 0, at(13))).toBe(6)
+    expect(windowEntitlement(8, 4, 0, at(23))).toBe(8)
+  })
+
+  it('carries an unspent window over to the next one', () => {
+    // Nothing spent in window 1: window 2 offers both its own share and the
+    // deferred one.
+    expect(windowEntitlement(8, 4, 0, at(7))).toBe(4)
+    // Two already spent in window 1: window 2 offers only its own share.
+    expect(windowEntitlement(8, 4, 2, at(7))).toBe(2)
+  })
+
+  it('never goes negative when the day is already overspent', () => {
+    expect(windowEntitlement(8, 4, 5, at(1))).toBe(0)
+  })
+
+  it('reduces to the plain daily budget with a single window', () => {
+    expect(windowEntitlement(8, 1, 7, at(1))).toBe(1)
   })
 })

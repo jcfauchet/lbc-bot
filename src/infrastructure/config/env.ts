@@ -34,10 +34,14 @@ const envSchema = z.object({
     .optional()
     .transform((v) => v ? v.split(',').map((s) => s.trim()).filter(Boolean) : []),
   SERPAPI_KEY: z.string().min(1).optional(),
-  // 6 standard + 2 fast-track = 8/day ≈ 240/month, fits the 250 SerpAPI plan
-  // (the account ran dry on 5 Jul 2026 at 8+2).
-  LENS_DAILY_BUDGET: z.coerce.number().min(0).default(6),
+  // 8/day ≈ 240/month, fits the 250 SerpAPI plan (the account ran dry on
+  // 5 Jul 2026 at 8+2). Formerly 6 standard + 2 fast-track; the fast-track lane
+  // was folded in when windowed accrual made queue-jumping pointless.
+  LENS_DAILY_BUDGET: z.coerce.number().min(0).default(8),
   LENS_MONTHLY_BUDGET: z.coerce.number().min(0).default(250),
+  // The day's comp budget accrues one share per window rather than being fully
+  // available at midnight. 4 windows = 6h, so a fresh find waits 6h at worst.
+  LENS_WINDOWS_PER_DAY: z.coerce.number().min(1).default(4),
   // Dealer asking prices (comps) -> realistic quick-resale value.
   RESALE_REALIZATION_FACTOR: z.coerce.number().min(0.1).max(1).default(0.6),
   // Offline eval (Jul 2026, 150 labelled listings): precision is flat (~33%)
@@ -52,13 +56,6 @@ const envSchema = z.object({
   // TRIAGED listings older than this are expired before comp: the deal is gone
   // and a comp credit spent on them is wasted.
   TRIAGED_MAX_AGE_DAYS: z.coerce.number().min(1).default(7),
-  // Fast-track lane: fresh high-score listings may spend this many credits
-  // beyond the daily budget (monthly budget still enforced) and jump the queue.
-  FAST_TRACK_DAILY_EXTRA: z.coerce.number().min(0).default(2),
-  // The hidden-margin prompt almost never emits 9 (1/150 in the Jul 2026 eval),
-  // so a 9 gate would leave the fast-track lane permanently empty.
-  FAST_TRACK_MIN_SCORE: z.coerce.number().min(0).max(10).default(8),
-  FAST_TRACK_FRESH_HOURS: z.coerce.number().min(1).default(24),
   // A listing whose Lens search returns at least this many mass-market retail
   // matches (outnumbering value comps) is dropped as a common new product. 0
   // disables the check.

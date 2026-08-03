@@ -35,17 +35,13 @@ export interface LensBudgetConfig {
    */
   triagedMaxAgeDays?: number
   /**
-   * Fast-track lane: a fresh, high-scored listing is a live deal that must not
-   * wait for tomorrow's budget reset. Eligible listings jump the queue and may
-   * spend up to `fastTrackDailyExtra` credits beyond the daily budget (the
-   * monthly budget is always enforced). Extra of 0/unset disables the bonus;
-   * queue-jumping still applies.
+   * Number of equal windows the day is cut into. The daily budget accrues one
+   * share per window instead of being available in full at midnight: the comp
+   * stage runs every 15 minutes, so a whole-day budget was drained by the first
+   * runs after 00:00 on whatever happened to be queued, making "was there at
+   * 00:15" the real selection criterion. Defaults to 1 (whole-day budget).
    */
-  fastTrackDailyExtra?: number
-  /** Minimum triage score for the fast-track lane. Defaults to 9. */
-  fastTrackMinScore?: number
-  /** Maximum listing age (hours) for the fast-track lane. Defaults to 24. */
-  fastTrackFreshHours?: number
+  windowsPerDay?: number
   /**
    * A listing whose reverse-image search returns at least this many mass-market
    * retail matches (outnumbering value comps) is a common new product with no
@@ -61,8 +57,33 @@ export interface ITextEmbedder {
   embed(text: string): Promise<number[]>
 }
 
-function startOfDay(): Date { const d = new Date(); d.setHours(0, 0, 0, 0); return d }
-function startOfMonth(): Date { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1) }
+function startOfDay(now: Date = new Date()): Date {
+  const d = new Date(now)
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+function startOfMonth(now: Date = new Date()): Date {
+  return new Date(now.getFullYear(), now.getMonth(), 1)
+}
+
+/**
+ * Credits available in the window `now` falls into: the day's budget accrues one
+ * share per elapsed window, minus what the day already spent. Unspent windows
+ * therefore carry over on their own — an abstaining window leaves `usedToday`
+ * untouched, so the next window's accrual absorbs it — while a spending spree
+ * cannot borrow from windows that have not elapsed yet.
+ */
+export function windowEntitlement(
+  dailyBudget: number,
+  windowsPerDay: number,
+  usedToday: number,
+  now: Date = new Date(),
+): number {
+  const msPerWindow = 86_400_000 / windowsPerDay
+  const elapsed = Math.floor((now.getTime() - startOfDay(now).getTime()) / msPerWindow) + 1
+  const accrued = Math.floor((dailyBudget * elapsed) / windowsPerDay)
+  return Math.max(0, accrued - usedToday)
+}
 
 export class RunCompAnalysisUseCase {
   constructor(
@@ -93,25 +114,16 @@ export class RunCompAnalysisUseCase {
 
     const usedToday = await this.budgetRepository.countSince(startOfDay())
     const usedThisMonth = await this.budgetRepository.countSince(startOfMonth())
-    const fastTrackExtra = this.config.fastTrackDailyExtra ?? 0
-    // Standard candidates stop at the daily budget; fast-track ones may dig
-    // into the extra. The monthly budget caps both.
-    let remaining = Math.min(this.config.dailyBudget - usedToday, this.config.monthlyBudget - usedThisMonth)
-    let remainingWithBonus = Math.min(
-      this.config.dailyBudget + fastTrackExtra - usedToday,
+    let remaining = Math.min(
+      windowEntitlement(this.config.dailyBudget, this.config.windowsPerDay ?? 1, usedToday),
       this.config.monthlyBudget - usedThisMonth,
     )
-    if (remainingWithBonus <= 0) return { processed: 0, analyzed: 0, ignored: 0, expired }
+    if (remaining <= 0) return { processed: 0, analyzed: 0, ignored: 0, expired }
 
-    // Fast-track lane first (a fresh gem must not wait for tomorrow's budget),
-    // then best score first; freshness breaks ties so a credit never goes to an
-    // old listing while an equally-scored fresh one (still buyable) waits.
-    const isFastTrack = (l: { triageScore?: number; createdAt: Date }): boolean =>
-      (l.triageScore ?? 0) >= (this.config.fastTrackMinScore ?? 9) &&
-      Date.now() - l.createdAt.getTime() <= (this.config.fastTrackFreshHours ?? 24) * 3_600_000
+    // Best score first; freshness breaks ties so a credit never goes to an old
+    // listing while an equally-scored fresh one — still buyable — waits.
     const candidates = (await this.listingRepository.findByStatus(ListingStatus.TRIAGED))
       .sort((a, b) =>
-        Number(isFastTrack(b)) - Number(isFastTrack(a)) ||
         (b.triageScore ?? 0) - (a.triageScore ?? 0) ||
         b.createdAt.getTime() - a.createdAt.getTime())
 
@@ -120,9 +132,7 @@ export class RunCompAnalysisUseCase {
     let ignored = 0
 
     for (const listing of candidates) {
-      // Fast-track candidates are sorted first, so once the bonus budget is
-      // gone — or the standard budget for a non-fast-track listing — we stop.
-      if ((isFastTrack(listing) ? remainingWithBonus : remaining) <= 0) break
+      if (remaining <= 0) break
 
       // The seller describes this as a look-alike ("dans le style de", "réplique",
       // "ressemble à <designer>"). It is not the genuine piece, so estimating it
@@ -191,7 +201,6 @@ export class RunCompAnalysisUseCase {
       }
 
       remaining--
-      remainingWithBonus--
       processed++
       let comps
       try {
