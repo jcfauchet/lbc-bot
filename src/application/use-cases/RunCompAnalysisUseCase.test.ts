@@ -29,6 +29,14 @@ const deps = (overrides: any = {}) => {
   }
 }
 
+const ranker = (picks: any) => ({
+  providerName: 'gemini',
+  rank: vi.fn(async (_candidates: any[], _guidance?: any) => {
+    if (picks instanceof Error) throw picks
+    return picks
+  }),
+})
+
 describe('RunCompAnalysisUseCase', () => {
   it('analyzes the highest-scored listing and saves an AiAnalysis', async () => {
     const d = deps({
@@ -315,6 +323,128 @@ describe('RunCompAnalysisUseCase', () => {
     await useCase.execute()
     expect(d.statuses['a']).toBe(ListingStatus.IGNORED)
     expect(d.saved).toHaveLength(0)
+  })
+
+  it('spends credits on the ranker picks in rank order', async () => {
+    const d = deps({ listings: [mk('a', 9), mk('b', 9), mk('c', 9)] })
+    const r = ranker([
+      { listingId: 'c', rank: 1, worthCredit: true },
+      { listingId: 'a', rank: 2, worthCredit: true },
+    ])
+    const useCase = new RunCompAnalysisUseCase(
+      d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
+      { dailyBudget: 2, monthlyBudget: 250, resaleFactor: 1 },
+      undefined, undefined, undefined, r as any,
+    )
+    await useCase.execute()
+
+    expect(r.rank).toHaveBeenCalledTimes(1)
+    expect(d.budgetRepository.recordCall.mock.calls.map((c: any[]) => c[0])).toEqual(['c', 'a'])
+  })
+
+  it('skips a pick the ranker judged not worth a credit', async () => {
+    const d = deps({ listings: [mk('a', 9), mk('b', 9)] })
+    const r = ranker([
+      { listingId: 'a', rank: 1, worthCredit: false },
+      { listingId: 'b', rank: 2, worthCredit: true },
+    ])
+    const useCase = new RunCompAnalysisUseCase(
+      d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
+      { dailyBudget: 2, monthlyBudget: 250, resaleFactor: 1 },
+      undefined, undefined, undefined, r as any,
+    )
+    await useCase.execute()
+
+    expect(d.budgetRepository.recordCall.mock.calls.map((c: any[]) => c[0])).toEqual(['b'])
+  })
+
+  it('defers the whole window when the ranker abstains on everything', async () => {
+    const d = deps({ listings: [mk('a', 9), mk('b', 9)] })
+    const useCase = new RunCompAnalysisUseCase(
+      d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
+      { dailyBudget: 2, monthlyBudget: 250, resaleFactor: 1 },
+      undefined, undefined, undefined, ranker([]) as any,
+    )
+    const res = await useCase.execute()
+
+    expect(d.compService.findComps).not.toHaveBeenCalled()
+    expect(res.processed).toBe(0)
+    expect(res.deferred).toBe(2)
+  })
+
+  it('falls back to the deterministic order when the ranker throws', async () => {
+    const d = deps({ listings: [mk('stale', 9, 80, { createdAt: new Date(2020, 0, 1) }), mk('fresh', 9)] })
+    const useCase = new RunCompAnalysisUseCase(
+      d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
+      { dailyBudget: 1, monthlyBudget: 250, resaleFactor: 1 },
+      undefined, undefined, undefined, ranker(new Error('429')) as any,
+    )
+    const res = await useCase.execute()
+
+    // Equal scores, so freshness decides — and the credit is still spent.
+    expect(d.budgetRepository.recordCall.mock.calls.map((c: any[]) => c[0])).toEqual(['fresh'])
+    expect(res.deferred).toBe(0)
+  })
+
+  it('caps the shortlist submitted to the ranker', async () => {
+    const listings = Array.from({ length: 30 }, (_, i) => mk(`l${i}`, 9))
+    const d = deps({ listings })
+    const r = ranker([{ listingId: 'l0', rank: 1, worthCredit: true }])
+    const useCase = new RunCompAnalysisUseCase(
+      d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
+      { dailyBudget: 2, monthlyBudget: 250, resaleFactor: 1, rankingShortlistSize: 5 },
+      undefined, undefined, undefined, r as any,
+    )
+    await useCase.execute()
+
+    expect(r.rank.mock.calls[0][0]).toHaveLength(5)
+  })
+
+  it('probes availability only for the picks, not the whole shortlist', async () => {
+    const d = deps({ listings: [mk('a', 9), mk('b', 9), mk('c', 9)] })
+    const availabilityService = { isGone: vi.fn(async () => false) }
+    const r = ranker([{ listingId: 'b', rank: 1, worthCredit: true }])
+    const useCase = new RunCompAnalysisUseCase(
+      d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
+      { dailyBudget: 2, monthlyBudget: 250, resaleFactor: 1 },
+      undefined, undefined, availabilityService as any, r as any,
+    )
+    await useCase.execute()
+
+    expect(availabilityService.isGone).toHaveBeenCalledTimes(1)
+  })
+
+  it('never offers the ranker a listing the free filters reject', async () => {
+    const d = deps({
+      listings: [
+        mk('replica', 9, 500, { title: 'Table dans le style de Willy Rizzo' }),
+        mk('clean', 9),
+      ],
+    })
+    const r = ranker([{ listingId: 'clean', rank: 1, worthCredit: true }])
+    const useCase = new RunCompAnalysisUseCase(
+      d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
+      { dailyBudget: 2, monthlyBudget: 250, resaleFactor: 1 },
+      undefined, undefined, undefined, r as any,
+    )
+    await useCase.execute()
+
+    expect(r.rank.mock.calls[0][0].map((c: any) => c.listingId)).toEqual(['clean'])
+    expect(d.statuses['replica']).toBe(ListingStatus.IGNORED)
+  })
+
+  it('passes the learned guidance to the ranker', async () => {
+    const d = deps({ listings: [mk('a', 9)] })
+    const r = ranker([{ listingId: 'a', rank: 1, worthCredit: true }])
+    const guidanceRepository = { getLatest: vi.fn(async () => ({ content: 'prefer brass' })) }
+    const useCase = new RunCompAnalysisUseCase(
+      d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
+      { dailyBudget: 2, monthlyBudget: 250, resaleFactor: 1 },
+      undefined, undefined, undefined, r as any, guidanceRepository as any,
+    )
+    await useCase.execute()
+
+    expect(r.rank.mock.calls[0][1]).toBe('prefer brass')
   })
 })
 

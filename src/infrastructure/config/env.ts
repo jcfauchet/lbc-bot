@@ -42,6 +42,13 @@ const envSchema = z.object({
   // The day's comp budget accrues one share per window rather than being fully
   // available at midnight. 4 windows = 6h, so a fresh find waits 6h at worst.
   LENS_WINDOWS_PER_DAY: z.coerce.number().min(1).default(4),
+  // Candidates submitted to the comparative ranker per window. Absolute triage
+  // scoring saturates (967 of 1651 qualified listings scored exactly 9 over the
+  // two weeks to 2 Aug 2026), so the ranker, not the score, picks the winners.
+  RANKING_SHORTLIST_SIZE: z.coerce.number().min(1).default(20),
+  // Kill switch for the ranker call only: the windowed budget still applies and
+  // candidates are served in the deterministic score-then-freshness order.
+  RANKING_ENABLED: z.coerce.boolean().default(true),
   // Dealer asking prices (comps) -> realistic quick-resale value.
   RESALE_REALIZATION_FACTOR: z.coerce.number().min(0.1).max(1).default(0.6),
   // Offline eval (Jul 2026, 150 labelled listings): precision is flat (~33%)

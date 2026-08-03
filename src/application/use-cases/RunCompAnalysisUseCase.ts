@@ -5,11 +5,20 @@ import type { ICompService } from '@/domain/services/ICompService'
 import type { ILensBudgetRepository } from '@/domain/repositories/ILensBudgetRepository'
 import type { IFeedbackRepository } from '@/domain/repositories/IFeedbackRepository'
 import type { IListingAvailabilityService } from '@/domain/services/IListingAvailabilityService'
+import type { ISelectionRanker, RankingCandidate } from '@/domain/services/ISelectionRanker'
+import type { ITriageGuidanceRepository } from '@/domain/repositories/ITriageGuidanceRepository'
+import type { Listing } from '@/domain/entities/Listing'
 import { scoreComps, isMassMarketCommon } from '@/domain/services/comp-scoring'
 import { hasReplicaSignal, hasKnownDesignerAttribution } from '@/domain/services/listing-signals'
 import { AiAnalysis } from '@/domain/entities/AiAnalysis'
 import { Money } from '@/domain/value-objects/Money'
 import { ListingStatus } from '@/domain/value-objects/ListingStatus'
+
+/** A candidate that survived the free filters, with the image both later stages need. */
+interface ShortlistEntry {
+  listing: Listing
+  imageUrl: string
+}
 
 export interface LensBudgetConfig {
   dailyBudget: number
@@ -50,6 +59,11 @@ export interface LensBudgetConfig {
    * precision, not budget. 0/unset disables the check.
    */
   massMarketMinMatches?: number
+  /**
+   * How many candidates are submitted to the ranker. Caps both the model call and
+   * the free-filter pass that feeds it. Defaults to 20.
+   */
+  rankingShortlistSize?: number
 }
 
 /** Embeds short listing text to look up similar past feedback. */
@@ -99,9 +113,14 @@ export class RunCompAnalysisUseCase {
     private embedder?: ITextEmbedder,
     // Optional: probes whether the listing is still online before spending a credit.
     private availabilityService?: IListingAvailabilityService,
+    // Optional: orders the shortlist so the window's credits go to the safest bets
+    // rather than to whichever qualified listing sorted first. Unwired or failing,
+    // the deterministic score-then-freshness order stands.
+    private ranker?: ISelectionRanker,
+    private guidanceRepository?: ITriageGuidanceRepository,
   ) {}
 
-  async execute(): Promise<{ processed: number; analyzed: number; ignored: number; expired: number }> {
+  async execute(): Promise<{ processed: number; analyzed: number; ignored: number; expired: number; deferred: number }> {
     // Drop stale candidates first so the (tiny) daily budget only ever goes to
     // listings whose deal can still be bought.
     let expired = 0
@@ -118,7 +137,7 @@ export class RunCompAnalysisUseCase {
       windowEntitlement(this.config.dailyBudget, this.config.windowsPerDay ?? 1, usedToday),
       this.config.monthlyBudget - usedThisMonth,
     )
-    if (remaining <= 0) return { processed: 0, analyzed: 0, ignored: 0, expired }
+    if (remaining <= 0) return { processed: 0, analyzed: 0, ignored: 0, expired, deferred: 0 }
 
     // Best score first; freshness breaks ties so a credit never goes to an old
     // listing while an equally-scored fresh one — still buyable — waits.
@@ -131,14 +150,24 @@ export class RunCompAnalysisUseCase {
     let analyzed = 0
     let ignored = 0
 
+    // Pass one: walk the sorted candidates applying the filters that cost nothing,
+    // stopping as soon as the shortlist is full. The pool holds several hundred
+    // rows, so filtering it whole would mean hundreds of writes and embeddings per
+    // run for a handful of credits.
+    const shortlistSize = this.config.rankingShortlistSize ?? 20
+    // The image URL is carried along: pass one already had to load it to check the
+    // listing has a photo at all, and both the ranking call and the comp search
+    // need it. Re-querying it twice more per listing would be three round-trips
+    // for one row.
+    const shortlist: ShortlistEntry[] = []
     for (const listing of candidates) {
-      if (remaining <= 0) break
+      if (shortlist.length >= shortlistSize) break
+
+      const listingText = `${listing.title} ${listing.description ?? ''}`
 
       // The seller describes this as a look-alike ("dans le style de", "réplique",
       // "ressemble à <designer>"). It is not the genuine piece, so estimating it
-      // against comps of the real designer would be misleading. Drop it before
-      // spending a (paid) reverse-image-search credit.
-      const listingText = `${listing.title} ${listing.description ?? ''}`
+      // against comps of the real designer would be misleading.
       if (hasReplicaSignal(listingText)) {
         listing.markAsIgnored()
         listing.setIgnoreReason('Annonce décrite comme une imitation / "dans le style de"')
@@ -148,8 +177,8 @@ export class RunCompAnalysisUseCase {
       }
 
       // The seller already names a known designer/maker, so the price is aligned
-      // with the piece's value: no hidden margin. The strategy targets pieces
-      // whose value the seller did not recognise. Skip before spending a credit.
+      // with the piece's value: no hidden margin. The strategy targets pieces whose
+      // value the seller did not recognise.
       if (hasKnownDesignerAttribution(listingText)) {
         listing.markAsIgnored()
         listing.setIgnoreReason('Designer/éditeur déjà nommé par le vendeur (pas de marge cachée)')
@@ -158,20 +187,9 @@ export class RunCompAnalysisUseCase {
         continue
       }
 
-      // A removed listing means the deal is already gone: don't spend a credit
-      // estimating a piece nobody can buy. The probe only trusts a definitive
-      // 404/410 — an anti-bot block or network error never skips the listing.
-      if (this.availabilityService && await this.availabilityService.isGone(listing.url)) {
-        listing.markAsIgnored()
-        listing.setIgnoreReason('Annonce supprimée de LeBonCoin (vendue ou retirée)')
-        await this.listingRepository.update(listing)
-        ignored++
-        continue
-      }
-
-      // Learn from past feedback: if this piece is a near-duplicate of one the
-      // user already judged "pas intéressant", skip it before spending a (paid)
-      // comp credit. Best-effort — an embedding hiccup must never abort the funnel.
+      // Learn from past feedback: a near-duplicate of a piece already judged "pas
+      // intéressant" must not take a shortlist slot. Best-effort — an embedding
+      // hiccup must never abort the funnel.
       if (this.feedbackRepository && this.embedder) {
         try {
           const embedding = await this.embedder.embed(listingText)
@@ -195,6 +213,27 @@ export class RunCompAnalysisUseCase {
       if (!imageUrl) {
         listing.markAsIgnored()
         listing.setIgnoreReason('no image for comp search')
+        await this.listingRepository.update(listing)
+        ignored++
+        continue
+      }
+
+      shortlist.push({ listing, imageUrl })
+    }
+
+    // Pass two: spend the window's credits on the ranker's picks, best first.
+    const picks = await this.pickInOrder(shortlist)
+
+    for (const { listing, imageUrl } of picks) {
+      if (remaining <= 0) break
+
+      // A removed listing means the deal is already gone: don't spend a credit
+      // estimating a piece nobody can buy. The probe only trusts a definitive
+      // 404/410 — an anti-bot block or network error never skips the listing.
+      // Probed here, on picks only: it is one HTTP request per listing.
+      if (this.availabilityService && await this.availabilityService.isGone(listing.url)) {
+        listing.markAsIgnored()
+        listing.setIgnoreReason('Annonce supprimée de LeBonCoin (vendue ou retirée)')
         await this.listingRepository.update(listing)
         ignored++
         continue
@@ -255,6 +294,39 @@ export class RunCompAnalysisUseCase {
       analyzed++
     }
 
-    return { processed, analyzed, ignored, expired }
+    // Credits the ranker declined to spend. Non-zero day after day means it is too
+    // severe; zero with an empty shortlist would be noise, hence the guard.
+    const deferred = shortlist.length > 0 ? Math.max(0, remaining) : 0
+
+    return { processed, analyzed, ignored, expired, deferred }
+  }
+
+  /**
+   * Orders the shortlist by asking the ranker to compare the candidates against
+   * each other. Any failure falls back to the incoming deterministic order: losing
+   * ranking quality is acceptable, stalling the funnel is not.
+   */
+  private async pickInOrder(shortlist: ShortlistEntry[]): Promise<ShortlistEntry[]> {
+    if (!this.ranker || shortlist.length === 0) return shortlist
+
+    const byId = new Map(shortlist.map((entry) => [entry.listing.id, entry]))
+    try {
+      const guidance = (await this.guidanceRepository?.getLatest())?.content ?? null
+      const candidates: RankingCandidate[] = shortlist.map(({ listing, imageUrl }) => ({
+        listingId: listing.id,
+        imageUrl,
+        title: listing.title,
+        priceEur: listing.price.getEuros(),
+        description: listing.description,
+      }))
+      const picks = await this.ranker.rank(candidates, guidance)
+      return picks
+        .filter((pick) => pick.worthCredit)
+        .map((pick) => byId.get(pick.listingId))
+        .filter((entry): entry is ShortlistEntry => entry !== undefined)
+    } catch (err) {
+      console.error('Selection ranking failed, falling back to deterministic order:', err)
+      return shortlist
+    }
   }
 }

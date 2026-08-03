@@ -36,6 +36,7 @@ import { GetTriageBacklogUseCase } from '@/application/use-cases/GetTriageBacklo
 import { GetRecentNotifiedListingsUseCase } from '@/application/use-cases/GetRecentNotifiedListingsUseCase'
 import { SerpApiLensCompService } from '@/infrastructure/comps/SerpApiLensCompService'
 import { GeminiTriageService } from '@/infrastructure/ai/Gemini/GeminiTriageService'
+import { GeminiSelectionRanker } from '@/infrastructure/ai/Gemini/GeminiSelectionRanker'
 import { OpenAiTriageService } from '@/infrastructure/ai/OpenAi/OpenAiTriageService'
 import { FallbackTriageService } from '@/infrastructure/ai/FallbackTriageService'
 import { PrismaLensBudgetRepository } from '@/infrastructure/prisma/repositories/PrismaLensBudgetRepository'
@@ -155,10 +156,15 @@ export class Container {
         triagedMaxAgeDays: env.TRIAGED_MAX_AGE_DAYS,
         windowsPerDay: env.LENS_WINDOWS_PER_DAY,
         massMarketMinMatches: env.MASS_MARKET_MIN_MATCHES,
+        rankingShortlistSize: env.RANKING_SHORTLIST_SIZE,
       },
       this.feedbackRepository,
       this.embeddingService,
       new LbcListingAvailabilityChecker(),
+      env.RANKING_ENABLED && env.GOOGLE_GEMINI_API_KEY
+        ? new GeminiSelectionRanker(env.GOOGLE_GEMINI_API_KEY)
+        : undefined,
+      this.triageGuidanceRepository,
     )
 
     this.runListingScrapingUseCase = new RunListingScrapingUseCase(
