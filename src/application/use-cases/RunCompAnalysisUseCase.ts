@@ -389,10 +389,22 @@ export class RunCompAnalysisUseCase {
       )
       // The ranker was actually consulted for this window — including a full
       // abstention, which is the whole point of tracking this — so record it
-      // before this window is asked again. Not recorded on a thrown/caught
-      // ranking call below: a transient 429 must not burn the window's one shot.
+      // before this window is asked again. Own try/catch, deliberately outside
+      // the ranking try/catch below: a marker-write failure (DB pool timeout,
+      // the table not existing yet) has nothing to do with the ranking call
+      // that just succeeded, and must not be swallowed by the catch further
+      // down — that catch discards the ranker's verdict and falls back to
+      // spending on listings the ranker explicitly declined, which is exactly
+      // the precision regression this feature exists to prevent. Worst case
+      // of a marker-write failure: the window goes unmarked and ranks again
+      // on the next 15-minute tick — the pre-fix behaviour, and strictly
+      // better than discarding a valid verdict.
       if (this.rankingWindowRepository) {
-        await this.rankingWindowRepository.markRanked(windowKey)
+        try {
+          await this.rankingWindowRepository.markRanked(windowKey)
+        } catch (err) {
+          console.error(`Failed to record the ranking window marker for ${windowKey} (ranking itself succeeded):`, err)
+        }
       }
       // Ports must not be trusted to dedup themselves: a repeated listingId here
       // would otherwise spend two credits on the same listing.

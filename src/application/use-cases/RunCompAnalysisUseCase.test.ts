@@ -626,6 +626,28 @@ describe('RunCompAnalysisUseCase', () => {
     expect(rankingWindowRepository.wasRanked).not.toHaveBeenCalled()
     expect(rankingWindowRepository.markRanked).not.toHaveBeenCalled()
   })
+
+  it('still honours the ranker picks when only the marker write fails', async () => {
+    const d = deps({ listings: [mk('a', 9), mk('b', 9)] })
+    const r = ranker([
+      { listingId: 'a', rank: 1, worthCredit: true },
+      { listingId: 'b', rank: 2, worthCredit: false },
+    ])
+    const rankingWindowRepository = {
+      wasRanked: vi.fn(async () => false),
+      markRanked: vi.fn(async () => { throw new Error('connection pool timeout') }),
+    }
+    const useCase = new RunCompAnalysisUseCase(
+      d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
+      { dailyBudget: 2, monthlyBudget: 250, resaleFactor: 1 },
+      undefined, undefined, undefined, r as any, undefined, rankingWindowRepository as any,
+    )
+    await useCase.execute()
+
+    // The ranking call itself succeeded: a failed marker write must not discard
+    // its verdict and fall back to spending on the declined listing too.
+    expect(d.budgetRepository.recordCall.mock.calls.map((c: any[]) => c[0])).toEqual(['a'])
+  })
 })
 
 describe('windowEntitlement', () => {
