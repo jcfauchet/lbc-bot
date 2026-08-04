@@ -40,6 +40,7 @@ import { GeminiSelectionRanker } from '@/infrastructure/ai/Gemini/GeminiSelectio
 import { OpenAiTriageService } from '@/infrastructure/ai/OpenAi/OpenAiTriageService'
 import { FallbackTriageService } from '@/infrastructure/ai/FallbackTriageService'
 import { PrismaLensBudgetRepository } from '@/infrastructure/prisma/repositories/PrismaLensBudgetRepository'
+import { PrismaRankingWindowRepository } from '@/infrastructure/prisma/repositories/PrismaRankingWindowRepository'
 import { RunPreFilterUseCase } from '@/application/use-cases/RunPreFilterUseCase'
 import { RunTriageUseCase } from '@/application/use-cases/RunTriageUseCase'
 import { RunCompAnalysisUseCase } from '@/application/use-cases/RunCompAnalysisUseCase'
@@ -83,6 +84,7 @@ export class Container {
   public readonly compService: SerpApiLensCompService
   public readonly triageService: FallbackTriageService
   public readonly lensBudgetRepository: PrismaLensBudgetRepository
+  public readonly rankingWindowRepository: PrismaRankingWindowRepository
   public readonly runPreFilterUseCase: RunPreFilterUseCase
   public readonly runTriageUseCase: RunTriageUseCase
   public readonly runCompAnalysisUseCase: RunCompAnalysisUseCase
@@ -128,6 +130,7 @@ export class Container {
       new OpenAiTriageService(openAiApiKey),
     )
     this.lensBudgetRepository = new PrismaLensBudgetRepository(this.prisma)
+    this.rankingWindowRepository = new PrismaRankingWindowRepository(this.prisma)
 
     this.runPreFilterUseCase = new RunPreFilterUseCase(
       this.listingRepository,
@@ -165,6 +168,7 @@ export class Container {
         ? new GeminiSelectionRanker(env.GOOGLE_GEMINI_API_KEY)
         : undefined,
       this.triageGuidanceRepository,
+      this.rankingWindowRepository,
     )
 
     this.runListingScrapingUseCase = new RunListingScrapingUseCase(
