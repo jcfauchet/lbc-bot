@@ -348,6 +348,7 @@ git commit -m "feat(ranking): add selection ranker port and prompt module"
 
 **Files:**
 - Create: `src/infrastructure/ai/Gemini/GeminiSelectionRanker.ts`
+- Test: `src/infrastructure/ai/Gemini/GeminiSelectionRanker.test.ts`
 
 **Interfaces:**
 - Consumes: `ISelectionRanker`, `RankingCandidate`, `RankedPick` from Task 1;
@@ -356,9 +357,14 @@ git commit -m "feat(ranking): add selection ranker port and prompt module"
   `new GeminiSelectionRanker(apiKey: string, model?: string)` (model defaults to
   `'gemini-2.5-flash'`).
 
-No unit test: the class is a network shell around the pure module tested in Task 1,
-exactly like `GeminiTriageService`, which likewise has no test. Verification is the
-typecheck plus the existing suite.
+**Revised after the Task 2 review.** The first draft of this task waived a unit test
+by analogy with `GeminiTriageService`. The analogy does not hold: that service does
+one fetch and one parse, whereas this adapter carries real control flow — the loop
+that drops an unusable candidate and renumbers the survivors, where a desynchronised
+number makes a pick point at the wrong listing. It gets a test with `fetch` stubbed.
+The same review caught two defects in the draft code, both fixed below: an HTTP error
+response was not treated as an unreachable image, and a total fetch outage was
+reported as an abstention instead of a failure.
 
 - [ ] **Step 1: Write the adapter**
 
@@ -388,7 +394,12 @@ export class GeminiSelectionRanker implements ISelectionRanker {
     for (const candidate of candidates) {
       let imageBytes: string
       try {
-        imageBytes = Buffer.from(await (await fetch(candidate.imageUrl)).arrayBuffer()).toString('base64')
+        // fetch() resolves for a 404/410, so an unreachable photo has to be caught
+        // on the status too: without it the error page's bytes travel to the model
+        // labelled image/jpeg instead of the candidate being dropped.
+        const response = await fetch(candidate.imageUrl)
+        if (!response.ok) continue
+        imageBytes = Buffer.from(await response.arrayBuffer()).toString('base64')
       } catch {
         continue
       }
@@ -396,7 +407,10 @@ export class GeminiSelectionRanker implements ISelectionRanker {
       imageParts.push({ text: `Candidate ${usable.length}:` })
       imageParts.push({ inlineData: { mimeType: 'image/jpeg', data: imageBytes } })
     }
-    if (usable.length === 0) return []
+    // Losing every image is a broken call, not a considered rejection: returning []
+    // here would read as an abstention and spend nothing, when the right answer is
+    // to let the caller fall back to its deterministic order.
+    if (usable.length === 0) throw new Error('No candidate image could be fetched for ranking')
 
     const response = await this.ai.models.generateContent({
       model: this.model,
@@ -415,15 +429,30 @@ export class GeminiSelectionRanker implements ISelectionRanker {
 }
 ```
 
-- [ ] **Step 2: Verify it typechecks and nothing regressed**
+- [ ] **Step 2: Write the adapter test**
+
+Create `src/infrastructure/ai/Gemini/GeminiSelectionRanker.test.ts`, stubbing
+`globalThis.fetch` and the SDK's `generateContent` so no network call and no API key
+are involved. Cover:
+
+- a candidate whose image returns HTTP 404 is dropped, the survivors are still
+  ranked, and the numbering stays aligned — with candidates A, B, C where B 404s, a
+  reply picking `candidate 2` must resolve to C, not B
+- a candidate whose image fetch rejects outright is dropped the same way
+- every image failing throws rather than returning `[]`
+- an unparseable reply throws
+- a validly-parsed empty pick list returns `[]` without throwing
+
+- [ ] **Step 3: Verify it typechecks and nothing regressed**
 
 Run: `pnpm exec tsc --noEmit && pnpm test`
-Expected: no type errors; the whole suite passes unchanged.
+Expected: no type errors; the suite passes apart from the two pre-existing
+network-dependent LeBonCoin scraper failures.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add src/infrastructure/ai/Gemini/GeminiSelectionRanker.ts
+git add src/infrastructure/ai/Gemini/GeminiSelectionRanker.ts src/infrastructure/ai/Gemini/GeminiSelectionRanker.test.ts
 git commit -m "feat(ranking): add Gemini selection ranker adapter"
 ```
 
@@ -700,7 +729,11 @@ git commit -m "feat(comp): accrue the comp budget per window instead of at midni
   `getLatest(): Promise<TriageGuidance | null>`.
 - Produces:
   - `LensBudgetConfig` gains `rankingShortlistSize?: number`.
-  - `execute()` returns `{ processed, analyzed, ignored, expired, deferred }`.
+  - `execute()` returns `{ processed, analyzed, ignored, expired, deferred }`, where
+    `deferred` counts only credits the ranker itself declined — never a short
+    shortlist, never a run with no ranker wired. The field is operator-facing: it
+    reaches the cron JSON response and the `logInfo` payload, and its whole purpose
+    is to answer "is the ranker too strict?".
   - Two new optional trailing constructor parameters: `ranker?: ISelectionRanker`,
     `guidanceRepository?: ITriageGuidanceRepository`.
 
@@ -1024,6 +1057,7 @@ Then replace the remainder of `execute()` — the spend loop and the return — 
 
 ```ts
     // Pass two: spend the window's credits on the ranker's picks, best first.
+    const entitlement = remaining
     const picks = await this.pickInOrder(shortlist)
 
     for (const { listing, imageUrl } of picks) {
@@ -1047,9 +1081,13 @@ Then replace the remainder of `execute()` — the spend loop and the return — 
       // scoreComps, AiAnalysis.create, save, markAsAnalyzed...
     }
 
-    // Credits the ranker declined to spend. Non-zero day after day means it is too
-    // severe; zero with an empty shortlist would be noise, hence the guard.
-    const deferred = shortlist.length > 0 ? Math.max(0, remaining) : 0
+    // Credits the ranker declined to spend, and only those: non-zero day after day
+    // means it is too severe. Credits left over because the shortlist was shorter
+    // than the entitlement are supply, not severity, and a run with no ranker wired
+    // has nobody to blame — both would otherwise report a ranker that was never
+    // consulted. `entitlement` is `remaining` captured before pass two.
+    const supplyShortfall = Math.max(0, entitlement - shortlist.length)
+    const deferred = this.ranker ? Math.max(0, remaining - supplyShortfall) : 0
 
     return { processed, analyzed, ignored, expired, deferred }
 ```
@@ -1072,7 +1110,10 @@ In `src/infrastructure/config/env.ts`, next to `LENS_WINDOWS_PER_DAY`:
   RANKING_SHORTLIST_SIZE: z.coerce.number().min(1).default(20),
   // Kill switch for the ranker call only: the windowed budget still applies and
   // candidates are served in the deterministic score-then-freshness order.
-  RANKING_ENABLED: z.coerce.boolean().default(true),
+  // Parsed explicitly rather than with z.coerce.boolean(), which is Boolean(input)
+  // and therefore turns the string "false" into true — a kill switch that cannot
+  // be switched off.
+  RANKING_ENABLED: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
 ```
 
 In `src/infrastructure/di/container.ts`, add to the config object:
