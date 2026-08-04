@@ -7,6 +7,7 @@ import type { IFeedbackRepository } from '@/domain/repositories/IFeedbackReposit
 import type { IListingAvailabilityService } from '@/domain/services/IListingAvailabilityService'
 import type { ISelectionRanker, RankingCandidate } from '@/domain/services/ISelectionRanker'
 import type { ITriageGuidanceRepository } from '@/domain/repositories/ITriageGuidanceRepository'
+import type { IRankingWindowRepository } from '@/domain/repositories/IRankingWindowRepository'
 import type { Listing } from '@/domain/entities/Listing'
 import { scoreComps, isMassMarketCommon } from '@/domain/services/comp-scoring'
 import { hasReplicaSignal, hasKnownDesignerAttribution } from '@/domain/services/listing-signals'
@@ -87,16 +88,37 @@ function startOfMonth(now: Date = new Date()): Date {
  * untouched, so the next window's accrual absorbs it — while a spending spree
  * cannot borrow from windows that have not elapsed yet.
  */
+/** 0-based index of the window `now` falls into, counted from the start of its day. */
+function windowIndex(windowsPerDay: number, now: Date): number {
+  const msPerWindow = 86_400_000 / windowsPerDay
+  return Math.floor((now.getTime() - startOfDay(now).getTime()) / msPerWindow)
+}
+
 export function windowEntitlement(
   dailyBudget: number,
   windowsPerDay: number,
   usedToday: number,
   now: Date = new Date(),
 ): number {
-  const msPerWindow = 86_400_000 / windowsPerDay
-  const elapsed = Math.floor((now.getTime() - startOfDay(now).getTime()) / msPerWindow) + 1
-  const accrued = Math.floor((dailyBudget * elapsed) / windowsPerDay)
+  const elapsed = windowIndex(windowsPerDay, now) + 1
+  // Clamped to dailyBudget: guards a non-integer windowsPerDay (e.g. 1.5) and a
+  // DST fall-back day, where a 25-hour local day can push elapsed past
+  // windowsPerDay, both of which would otherwise accrue more than the day allows.
+  const accrued = Math.min(Math.floor((dailyBudget * elapsed) / windowsPerDay), dailyBudget)
   return Math.max(0, accrued - usedToday)
+}
+
+/**
+ * Stable identity of the window `now` falls into, as the ISO timestamp of the
+ * window's start: stable within the window, distinct across windows and across
+ * days. Shares `windowIndex` with `windowEntitlement` rather than re-deriving the
+ * window boundary independently, so the two can never disagree about which
+ * window "now" belongs to.
+ */
+export function currentWindowKey(windowsPerDay: number, now: Date = new Date()): string {
+  const msPerWindow = 86_400_000 / windowsPerDay
+  const index = windowIndex(windowsPerDay, now)
+  return new Date(startOfDay(now).getTime() + index * msPerWindow).toISOString()
 }
 
 export class RunCompAnalysisUseCase {
@@ -118,6 +140,11 @@ export class RunCompAnalysisUseCase {
     // the deterministic score-then-freshness order stands.
     private ranker?: ISelectionRanker,
     private guidanceRepository?: ITriageGuidanceRepository,
+    // Optional: marks that the ranker was already consulted for the current
+    // window, so a later run in the same 15-minute-cadenced window skips the
+    // ranking stage entirely instead of repeating it for a near-certainly
+    // identical verdict. Unwired, every run ranks again — today's behaviour.
+    private rankingWindowRepository?: IRankingWindowRepository,
   ) {}
 
   async execute(): Promise<{ processed: number; analyzed: number; ignored: number; expired: number; deferred: number }> {
@@ -131,13 +158,29 @@ export class RunCompAnalysisUseCase {
       )
     }
 
+    const now = new Date()
+    const windowsPerDay = this.config.windowsPerDay ?? 1
     const usedToday = await this.budgetRepository.countSince(startOfDay())
     const usedThisMonth = await this.budgetRepository.countSince(startOfMonth())
     let remaining = Math.min(
-      windowEntitlement(this.config.dailyBudget, this.config.windowsPerDay ?? 1, usedToday),
+      windowEntitlement(this.config.dailyBudget, windowsPerDay, usedToday, now),
       this.config.monthlyBudget - usedThisMonth,
     )
     if (remaining <= 0) return { processed: 0, analyzed: 0, ignored: 0, expired, deferred: 0 }
+
+    // The ranker already ran for this window: `analyze-and-notify` fires every 15
+    // minutes, and abstention (or picking fewer than the entitlement) is normal
+    // operation, not an edge case — re-running pass one and the vision call for a
+    // near-certainly identical verdict would waste both. Skip straight to the next
+    // window's first run instead.
+    const windowKey = currentWindowKey(windowsPerDay, now)
+    if (
+      this.ranker &&
+      this.rankingWindowRepository &&
+      await this.rankingWindowRepository.wasRanked(windowKey)
+    ) {
+      return { processed: 0, analyzed: 0, ignored: 0, expired, deferred: 0 }
+    }
 
     // Best score first; freshness breaks ties so a credit never goes to an old
     // listing while an equally-scored fresh one — still buyable — waits.
@@ -227,7 +270,14 @@ export class RunCompAnalysisUseCase {
     const entitlement = remaining
 
     // Pass two: spend the window's credits on the ranker's picks, best first.
-    const picks = await this.pickInOrder(shortlist)
+    const picks = await this.pickInOrder(shortlist, windowKey)
+
+    // Picks the availability probe drops before a credit is even spent — tracked
+    // separately from `remaining` so the deferred metric below can tell this apart
+    // from the ranker declining to spend (finding 2), without capping `remaining`
+    // on a drop: that would stop the loop from trying the picks ranked below the
+    // dropped one, under-spending the window even when good candidates remain.
+    let probeDropped = 0
 
     for (const { listing, imageUrl } of picks) {
       if (remaining <= 0) break
@@ -241,6 +291,7 @@ export class RunCompAnalysisUseCase {
         listing.setIgnoreReason('Annonce supprimée de LeBonCoin (vendue ou retirée)')
         await this.listingRepository.update(listing)
         ignored++
+        probeDropped++
         continue
       }
 
@@ -302,11 +353,11 @@ export class RunCompAnalysisUseCase {
     // Credits the ranker declined to spend — as opposed to credits left unspent
     // because the shortlist simply didn't hold enough candidates (supply
     // shortfall) or because picks were dropped by the availability probe further
-    // down the pipeline than the ranker's judgement. Non-zero day after day means
-    // the ranker itself is too severe; with no ranker wired there is no one to
-    // blame, hence the guard.
+    // down the pipeline than the ranker's judgement (probeDropped). Non-zero day
+    // after day means the ranker itself is too severe; with no ranker wired there
+    // is no one to blame, hence the guard.
     const supplyShortfall = Math.max(0, entitlement - shortlist.length)
-    const deferred = this.ranker ? Math.max(0, remaining - supplyShortfall) : 0
+    const deferred = this.ranker ? Math.max(0, remaining - supplyShortfall - probeDropped) : 0
 
     return { processed, analyzed, ignored, expired, deferred }
   }
@@ -316,7 +367,7 @@ export class RunCompAnalysisUseCase {
    * each other. Any failure falls back to the incoming deterministic order: losing
    * ranking quality is acceptable, stalling the funnel is not.
    */
-  private async pickInOrder(shortlist: ShortlistEntry[]): Promise<ShortlistEntry[]> {
+  private async pickInOrder(shortlist: ShortlistEntry[], windowKey: string): Promise<ShortlistEntry[]> {
     if (!this.ranker || shortlist.length === 0) return shortlist
 
     const byId = new Map(shortlist.map((entry) => [entry.listing.id, entry]))
@@ -330,8 +381,24 @@ export class RunCompAnalysisUseCase {
         description: listing.description,
       }))
       const picks = await this.ranker.rank(candidates, guidance)
+      // The only trace of why the window's credits went where they did: without
+      // this, a precision regression can never be traced back to a ranking call.
+      console.log(
+        'Selection ranking picks:',
+        picks.map((pick) => ({ listingId: pick.listingId, rank: pick.rank, worthCredit: pick.worthCredit, reason: pick.reason })),
+      )
+      // The ranker was actually consulted for this window — including a full
+      // abstention, which is the whole point of tracking this — so record it
+      // before this window is asked again. Not recorded on a thrown/caught
+      // ranking call below: a transient 429 must not burn the window's one shot.
+      if (this.rankingWindowRepository) {
+        await this.rankingWindowRepository.markRanked(windowKey)
+      }
+      // Ports must not be trusted to dedup themselves: a repeated listingId here
+      // would otherwise spend two credits on the same listing.
+      const seen = new Set<string>()
       return picks
-        .filter((pick) => pick.worthCredit)
+        .filter((pick) => pick.worthCredit && !seen.has(pick.listingId) && seen.add(pick.listingId))
         .map((pick) => byId.get(pick.listingId))
         .filter((entry): entry is ShortlistEntry => entry !== undefined)
     } catch (err) {

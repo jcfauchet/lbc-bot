@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { RunCompAnalysisUseCase, windowEntitlement } from './RunCompAnalysisUseCase'
+import { RunCompAnalysisUseCase, windowEntitlement, currentWindowKey } from './RunCompAnalysisUseCase'
 import { Listing } from '@/domain/entities/Listing'
 import { ListingStatus } from '@/domain/value-objects/ListingStatus'
 import { Money } from '@/domain/value-objects/Money'
@@ -433,6 +433,53 @@ describe('RunCompAnalysisUseCase', () => {
     expect(d.statuses['replica']).toBe(ListingStatus.IGNORED)
   })
 
+  it('does not blame the ranker for credits lost to the availability probe, not the ranker declining them', async () => {
+    const d = deps({ listings: [mk('a', 9), mk('b', 9)] })
+    const availabilityService = { isGone: vi.fn(async () => true) }
+    const r = ranker([
+      { listingId: 'a', rank: 1, worthCredit: true },
+      { listingId: 'b', rank: 2, worthCredit: true },
+    ])
+    const useCase = new RunCompAnalysisUseCase(
+      d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
+      { dailyBudget: 2, monthlyBudget: 250, resaleFactor: 1 },
+      undefined, undefined, availabilityService as any, r as any,
+    )
+    const res = await useCase.execute()
+
+    expect(d.compService.findComps).not.toHaveBeenCalled()
+    // Both picks sold out from under the ranker: the window's 2 credits were never
+    // actually offered a chance, so this must not read as ranker severity.
+    expect(res.deferred).toBe(0)
+    expect(res.ignored).toBe(2)
+    expect(d.statuses['a']).toBe(ListingStatus.IGNORED)
+    expect(d.statuses['b']).toBe(ListingStatus.IGNORED)
+  })
+
+  it('reports zero deferred when the ranker wired picks are all successfully spent', async () => {
+    const d = deps({
+      listings: [mk('a', 9), mk('b', 9)],
+      comps: { matches: [
+        { title: 'a', source: '1stdibs', link: 'https://1stdibs.com/a', isValueDomain: true, price: { value: 1000, currency: 'EUR' } },
+        { title: 'b', source: '1stdibs', link: 'https://1stdibs.com/b', isValueDomain: true, price: { value: 2000, currency: 'EUR' } },
+        { title: 'c', source: '1stdibs', link: 'https://1stdibs.com/c', isValueDomain: true, price: { value: 3000, currency: 'EUR' } },
+      ] },
+    })
+    const r = ranker([
+      { listingId: 'a', rank: 1, worthCredit: true },
+      { listingId: 'b', rank: 2, worthCredit: true },
+    ])
+    const useCase = new RunCompAnalysisUseCase(
+      d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
+      { dailyBudget: 8, monthlyBudget: 250, resaleFactor: 1 },
+      undefined, undefined, undefined, r as any,
+    )
+    const res = await useCase.execute()
+
+    expect(res.processed).toBe(2)
+    expect(res.deferred).toBe(0)
+  })
+
   it('does not report unspent credits as deferred when no ranker is wired', async () => {
     const d = deps({ listings: [mk('a', 9), mk('b', 9)] })
     const useCase = new RunCompAnalysisUseCase(
@@ -444,6 +491,49 @@ describe('RunCompAnalysisUseCase', () => {
     // Only 2 candidates existed for an 8-credit window: the shortfall is supply,
     // not a ranker declining picks, and there is no ranker here to blame anyway.
     expect(res.deferred).toBe(0)
+  })
+
+  it('logs the listing id, rank and reason of every ranking pick for a successful call', async () => {
+    const d = deps({ listings: [mk('a', 9), mk('b', 9)] })
+    const r = ranker([
+      { listingId: 'a', rank: 1, worthCredit: true, reason: 'strong patina, likely genuine' },
+      { listingId: 'b', rank: 2, worthCredit: false, reason: 'looks mass-market' },
+    ])
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const useCase = new RunCompAnalysisUseCase(
+      d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
+      { dailyBudget: 2, monthlyBudget: 250, resaleFactor: 1 },
+      undefined, undefined, undefined, r as any,
+    )
+    try {
+      await useCase.execute()
+
+      const logged = JSON.stringify(logSpy.mock.calls)
+      expect(logged).toContain('a')
+      expect(logged).toContain('1')
+      expect(logged).toContain('strong patina, likely genuine')
+      expect(logged).toContain('b')
+      expect(logged).toContain('2')
+      expect(logged).toContain('looks mass-market')
+    } finally {
+      logSpy.mockRestore()
+    }
+  })
+
+  it('drops a duplicate listingId returned by the ranker so it does not spend two credits', async () => {
+    const d = deps({ listings: [mk('a', 9), mk('b', 9)] })
+    const r = ranker([
+      { listingId: 'a', rank: 1, worthCredit: true },
+      { listingId: 'a', rank: 2, worthCredit: true },
+    ])
+    const useCase = new RunCompAnalysisUseCase(
+      d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
+      { dailyBudget: 2, monthlyBudget: 250, resaleFactor: 1 },
+      undefined, undefined, undefined, r as any,
+    )
+    await useCase.execute()
+
+    expect(d.budgetRepository.recordCall.mock.calls.map((c: any[]) => c[0])).toEqual(['a'])
   })
 
   it('passes the learned guidance to the ranker', async () => {
@@ -458,6 +548,83 @@ describe('RunCompAnalysisUseCase', () => {
     await useCase.execute()
 
     expect(r.rank.mock.calls[0][1]).toBe('prefer brass')
+  })
+
+  it('skips the ranking stage entirely when the window already ran', async () => {
+    const d = deps({ listings: [mk('a', 9)] })
+    const r = ranker([{ listingId: 'a', rank: 1, worthCredit: true }])
+    const rankingWindowRepository = {
+      wasRanked: vi.fn(async () => true),
+      markRanked: vi.fn(async () => {}),
+    }
+    const useCase = new RunCompAnalysisUseCase(
+      d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
+      { dailyBudget: 2, monthlyBudget: 250, resaleFactor: 1 },
+      undefined, undefined, undefined, r as any, undefined, rankingWindowRepository as any,
+    )
+    const res = await useCase.execute()
+
+    // No pass one, no ranker call — the window's one attempt was already spent.
+    expect(d.listingRepository.findByStatus).not.toHaveBeenCalled()
+    expect(r.rank).not.toHaveBeenCalled()
+    expect(res).toEqual({ processed: 0, analyzed: 0, ignored: 0, expired: 0, deferred: 0 })
+  })
+
+  it('marks the window as ranked after consulting the ranker, including a full abstention', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 7, 2, 1, 0, 0))
+    try {
+      const d = deps({ listings: [mk('a', 9)] })
+      const r = ranker([]) // total abstention — still a real consultation
+      const rankingWindowRepository = {
+        wasRanked: vi.fn(async () => false),
+        markRanked: vi.fn(async () => {}),
+      }
+      const useCase = new RunCompAnalysisUseCase(
+        d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
+        { dailyBudget: 8, monthlyBudget: 250, resaleFactor: 1, windowsPerDay: 4 },
+        undefined, undefined, undefined, r as any, undefined, rankingWindowRepository as any,
+      )
+      await useCase.execute()
+
+      const expectedKey = currentWindowKey(4, new Date(2026, 7, 2, 1, 0, 0))
+      expect(rankingWindowRepository.markRanked).toHaveBeenCalledWith(expectedKey)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('does not mark the window when the ranker throws and falls back', async () => {
+    const d = deps({ listings: [mk('a', 9)] })
+    const rankingWindowRepository = {
+      wasRanked: vi.fn(async () => false),
+      markRanked: vi.fn(async () => {}),
+    }
+    const useCase = new RunCompAnalysisUseCase(
+      d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
+      { dailyBudget: 2, monthlyBudget: 250, resaleFactor: 1 },
+      undefined, undefined, undefined, ranker(new Error('429')) as any, undefined, rankingWindowRepository as any,
+    )
+    await useCase.execute()
+
+    expect(rankingWindowRepository.markRanked).not.toHaveBeenCalled()
+  })
+
+  it('never checks or marks the window when no ranker is wired, even with the repository present', async () => {
+    const d = deps({ listings: [mk('a', 9)] })
+    const rankingWindowRepository = {
+      wasRanked: vi.fn(async () => false),
+      markRanked: vi.fn(async () => {}),
+    }
+    const useCase = new RunCompAnalysisUseCase(
+      d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
+      { dailyBudget: 8, monthlyBudget: 250, resaleFactor: 1 },
+      undefined, undefined, undefined, undefined, undefined, rankingWindowRepository as any,
+    )
+    await useCase.execute()
+
+    expect(rankingWindowRepository.wasRanked).not.toHaveBeenCalled()
+    expect(rankingWindowRepository.markRanked).not.toHaveBeenCalled()
   })
 })
 
@@ -485,5 +652,11 @@ describe('windowEntitlement', () => {
 
   it('reduces to the plain daily budget with a single window', () => {
     expect(windowEntitlement(8, 1, 7, at(1))).toBe(1)
+  })
+
+  it('clamps accrued entitlement to the daily budget (fractional windowsPerDay, DST-like overshoot)', () => {
+    // windowsPerDay=1.5 at 20:00 -> elapsed=2, accrued=floor(8*2/1.5)=10, which must
+    // not exceed the 8-credit daily budget.
+    expect(windowEntitlement(8, 1.5, 0, at(20))).toBe(8)
   })
 })
