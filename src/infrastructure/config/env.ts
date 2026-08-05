@@ -28,7 +28,10 @@ export const envSchema = z.object({
   SEARCH_TERM_MIN_CONFIDENCE: z.coerce.number().min(0).max(1).default(0.8),
   APP_URL: z.string().url().default('http://localhost:3000'),
   LBC_DATADOME_COOKIE: z.string().optional(),
-  PROXY_ENABLED: z.coerce.boolean().default(false),
+  // Same trap as RANKING_ENABLED below, and it bit here for real: z.coerce.boolean()
+  // turns any non-empty string — including the literal "false" — into true, so this
+  // switch could only ever be turned off by deleting the variable. Explicit enum.
+  PROXY_ENABLED: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
   PROXY_LIST: z
     .string()
     .optional()
