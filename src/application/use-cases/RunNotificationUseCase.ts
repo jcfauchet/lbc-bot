@@ -32,6 +32,12 @@ export class RunNotificationUseCase {
     // even in the worst realistic resale. The displayed `marginCents` stays
     // median-based (informative), but a high median driven by a couple of
     // optimistic comps no longer earns an email on its own. 0 disables the gate.
+    //
+    // KEEP THIS AT 0. Measured over the 240 human judgements: the conservative
+    // margin is *higher* on bad finds (468 EUR mean) than on good ones (271 EUR),
+    // so raising the floor preferentially keeps the bad ones. Thresholds from 0 to
+    // 75 EUR change nothing at all; at 150 EUR precision collapses to 12.9%, below
+    // the 22.5% base rate. It looks like a safety improvement and is the opposite.
     private minConservativeMarginCents: number = 0,
     // An estimate band wider than this max/min ratio is noise, not an estimate.
     // Backtest over 240 human judgements: good finds average a 1.71x band, bad
