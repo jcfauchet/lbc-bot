@@ -4,12 +4,6 @@ import { ScrapedListing } from '../scraping/types'
 import { IListingSource } from '@/domain/services/IListingSource'
 import { DataDomeBypass } from './DataDomeBypass'
 import { ProxyManager } from '../proxy/ProxyManager'
-import { HttpsProxyAgent } from 'https-proxy-agent'
-import { HttpProxyAgent } from 'http-proxy-agent'
-
-interface RequestInitWithAgent extends RequestInit {
-  agent?: any
-}
 
 interface LeBonCoinApiResponse {
   ads: Array<{
@@ -104,6 +98,7 @@ export class LeBonCoinApiClient implements IListingSource {
   
   private readonly HARDCODED_COOKIE = env.LBC_DATADOME_COOKIE ?? ''
   private useHardcodedCookie: boolean = false
+  private proxyWarningEmitted: boolean = false
 
   constructor() {
     this.bypass = new DataDomeBypass()
@@ -144,7 +139,7 @@ export class LeBonCoinApiClient implements IListingSource {
           ? this.HARDCODED_COOKIE 
           : this.cookies || this.HARDCODED_COOKIE
 
-        const fetchOptions: RequestInitWithAgent = {
+        const fetchOptions: RequestInit = {
           method: 'POST',
           headers: {
             ...apiHeaders,
@@ -153,37 +148,32 @@ export class LeBonCoinApiClient implements IListingSource {
           body: JSON.stringify(payload),
         }
 
-        if (this.proxyManager && this.proxyManager.hasProxies()) {
-          const proxy = this.proxyManager.getNextProxy()
-          if (proxy) {
-            const proxyUrl = this.proxyManager.getProxyUrl(proxy)
-            const proxyIndex = (this.proxyManager as any).proxies.indexOf(proxy)
-            
-            console.log(`🔄 [LeBonCoin API] Using proxy ${proxyIndex + 1}/${this.proxyManager.getProxyCount()}: ${proxy.host}:${proxy.port}`)
-            
-            if (this.SEARCH_ENDPOINT.startsWith('https://')) {
-              fetchOptions.agent = new HttpsProxyAgent(proxyUrl) as any
-            } else {
-              fetchOptions.agent = new HttpProxyAgent(proxyUrl) as any
-            }
-          }
+        // This client CANNOT route through a proxy as written, and used to claim
+        // it did. `agent` belongs to node-fetch; Node's native fetch expects
+        // `dispatcher` and silently ignores unknown options — verified by pointing
+        // an HttpsProxyAgent at a closed port and watching the request return 200.
+        // Every request made here has always gone out direct.
+        //
+        // Not silently patched: honouring the proxy would send traffic to whatever
+        // PROXY_LIST holds, and a wrong list breaks the only path that works today.
+        // Making it real needs `undici` (absent from the dependencies) and
+        // `fetchOptions.dispatcher = new ProxyAgent(proxyUrl)`.
+        if (this.proxyManager && this.proxyManager.hasProxies() && !this.proxyWarningEmitted) {
+          this.proxyWarningEmitted = true
+          console.warn(
+            '⚠️ [LeBonCoin API] PROXY_ENABLED is on but this client sends every request ' +
+              'DIRECT: native fetch ignores the `agent` option. Set PROXY_ENABLED=false to ' +
+              'stop the Playwright fallback dialling the same list, or wire `dispatcher` ' +
+              'with undici and supply real proxies.'
+          )
         }
 
         const response = await fetch(this.SEARCH_ENDPOINT, fetchOptions)
 
         if (!response.ok) {
-          if (this.proxyManager && this.proxyManager.hasProxies() && fetchOptions.agent) {
-            const currentProxy = (this.proxyManager as any).proxies.find((p: any) => {
-              const agent = fetchOptions.agent as any
-              return agent?.proxy?.href?.includes(p.host) || 
-                     agent?.proxy?.hostname === p.host
-            })
-            if (currentProxy) {
-              const proxyIndex = (this.proxyManager as any).proxies.indexOf(currentProxy)
-              this.proxyManager.recordProxyFailure(proxyIndex)
-            }
-          }
-          
+          // Proxy health used to be recorded here from `fetchOptions.agent`. The
+          // agent was never honoured, so this scored the health of proxies no
+          // request had gone through. Removed rather than left to mislead.
           if (response.status === 403 || response.status === 429) {
             const errorText = await response.text().catch(() => '')
             if (errorText.includes('datadome') || errorText.includes('DataDome') || response.status === 403) {
@@ -197,18 +187,6 @@ export class LeBonCoinApiClient implements IListingSource {
           throw new Error(`API request failed with status ${response.status}`)
         }
 
-        if (this.proxyManager && this.proxyManager.hasProxies() && fetchOptions.agent) {
-          const currentProxy = (this.proxyManager as any).proxies.find((p: any) => {
-            const agent = fetchOptions.agent as any
-            return agent?.proxy?.href?.includes(p.host) || 
-                   agent?.proxy?.hostname === p.host
-          })
-          if (currentProxy) {
-            const proxyIndex = (this.proxyManager as any).proxies.indexOf(currentProxy)
-            this.proxyManager.recordProxySuccess(proxyIndex)
-          }
-        }
-        
         if (this.useHardcodedCookie) {
           this.useHardcodedCookie = false
           console.log('✅ Hardcoded cookie worked, switching back to dynamic cookies')
@@ -281,17 +259,12 @@ export class LeBonCoinApiClient implements IListingSource {
     const browserUserAgent = this.bypass.getRandomBrowserUserAgent()
     const browserHeaders = this.bypass.generateBrowserHeaders(browserUserAgent)
 
-    const fetchOptions: RequestInitWithAgent = {
+    const fetchOptions: RequestInit = {
       headers: browserHeaders,
     }
 
-    if (this.proxyManager && this.proxyManager.hasProxies()) {
-      const proxy = this.proxyManager.getNextProxy()
-      if (proxy) {
-        const proxyUrl = this.proxyManager.getProxyUrl(proxy)
-        fetchOptions.agent = new HttpsProxyAgent(proxyUrl) as any
-      }
-    }
+    // Same as in search(): `agent` is a node-fetch option that native fetch drops
+    // on the floor, so the session cookie has always been fetched direct too.
 
     const response = await fetch('https://www.leboncoin.fr/', fetchOptions)
 
