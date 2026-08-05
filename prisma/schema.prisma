@@ -161,3 +161,11 @@ model TriageGuidance {
   @@index([createdAt])
   @@map("triage_guidance")
 }
+
+model RankingWindow {
+  id        String   @id @default(cuid())
+  windowKey String   @unique
+  createdAt DateTime @default(now())
+
+  @@map("ranking_windows")
+}

@@ -36,9 +36,11 @@ import { GetTriageBacklogUseCase } from '@/application/use-cases/GetTriageBacklo
 import { GetRecentNotifiedListingsUseCase } from '@/application/use-cases/GetRecentNotifiedListingsUseCase'
 import { SerpApiLensCompService } from '@/infrastructure/comps/SerpApiLensCompService'
 import { GeminiTriageService } from '@/infrastructure/ai/Gemini/GeminiTriageService'
+import { GeminiSelectionRanker } from '@/infrastructure/ai/Gemini/GeminiSelectionRanker'
 import { OpenAiTriageService } from '@/infrastructure/ai/OpenAi/OpenAiTriageService'
 import { FallbackTriageService } from '@/infrastructure/ai/FallbackTriageService'
 import { PrismaLensBudgetRepository } from '@/infrastructure/prisma/repositories/PrismaLensBudgetRepository'
+import { PrismaRankingWindowRepository } from '@/infrastructure/prisma/repositories/PrismaRankingWindowRepository'
 import { RunPreFilterUseCase } from '@/application/use-cases/RunPreFilterUseCase'
 import { RunTriageUseCase } from '@/application/use-cases/RunTriageUseCase'
 import { RunCompAnalysisUseCase } from '@/application/use-cases/RunCompAnalysisUseCase'
@@ -82,6 +84,7 @@ export class Container {
   public readonly compService: SerpApiLensCompService
   public readonly triageService: FallbackTriageService
   public readonly lensBudgetRepository: PrismaLensBudgetRepository
+  public readonly rankingWindowRepository: PrismaRankingWindowRepository
   public readonly runPreFilterUseCase: RunPreFilterUseCase
   public readonly runTriageUseCase: RunTriageUseCase
   public readonly runCompAnalysisUseCase: RunCompAnalysisUseCase
@@ -127,6 +130,7 @@ export class Container {
       new OpenAiTriageService(openAiApiKey),
     )
     this.lensBudgetRepository = new PrismaLensBudgetRepository(this.prisma)
+    this.rankingWindowRepository = new PrismaRankingWindowRepository(this.prisma)
 
     this.runPreFilterUseCase = new RunPreFilterUseCase(
       this.listingRepository,
@@ -153,14 +157,18 @@ export class Container {
         resaleFactor: env.RESALE_REALIZATION_FACTOR,
         similarFeedbackSkipThreshold: env.SIMILAR_FEEDBACK_SKIP_THRESHOLD,
         triagedMaxAgeDays: env.TRIAGED_MAX_AGE_DAYS,
-        fastTrackDailyExtra: env.FAST_TRACK_DAILY_EXTRA,
-        fastTrackMinScore: env.FAST_TRACK_MIN_SCORE,
-        fastTrackFreshHours: env.FAST_TRACK_FRESH_HOURS,
+        windowsPerDay: env.LENS_WINDOWS_PER_DAY,
         massMarketMinMatches: env.MASS_MARKET_MIN_MATCHES,
+        rankingShortlistSize: env.RANKING_SHORTLIST_SIZE,
       },
       this.feedbackRepository,
       this.embeddingService,
       new LbcListingAvailabilityChecker(),
+      env.RANKING_ENABLED && env.GOOGLE_GEMINI_API_KEY
+        ? new GeminiSelectionRanker(env.GOOGLE_GEMINI_API_KEY)
+        : undefined,
+      this.triageGuidanceRepository,
+      this.rankingWindowRepository,
     )
 
     this.runListingScrapingUseCase = new RunListingScrapingUseCase(
