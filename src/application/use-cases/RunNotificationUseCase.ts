@@ -7,6 +7,11 @@ import { EmailTemplates } from '@/infrastructure/mail/EmailTemplates'
 import { Notification, NotificationChannel } from '@/domain/entities/Notification'
 import { Listing } from '@/domain/entities/Listing'
 import { AiAnalysis } from '@/domain/entities/AiAnalysis'
+import {
+  computeDealScore,
+  isEstimateTrustworthy,
+  DEFAULT_MAX_RANGE_RATIO,
+} from '@/domain/services/DealScoring'
 
 export class RunNotificationUseCase {
   constructor(
@@ -27,7 +32,11 @@ export class RunNotificationUseCase {
     // even in the worst realistic resale. The displayed `marginCents` stays
     // median-based (informative), but a high median driven by a couple of
     // optimistic comps no longer earns an email on its own. 0 disables the gate.
-    private minConservativeMarginCents: number = 0
+    private minConservativeMarginCents: number = 0,
+    // An estimate band wider than this max/min ratio is noise, not an estimate.
+    // Backtest over 240 human judgements: good finds average a 1.71x band, bad
+    // finds 4.39x. See src/domain/services/DealScoring.ts.
+    private maxRangeRatio: number = DEFAULT_MAX_RANGE_RATIO
   ) {}
 
   async execute(): Promise<{ sent: number; errors: number }> {
@@ -61,13 +70,23 @@ export class RunNotificationUseCase {
         continue
       }
 
-      // Worst-case-still-profitable gate: even at the low end of the estimate
-      // band, the deal must clear the conservative-margin floor before it earns
-      // an email. This is what suppresses the phantom high margins produced by a
-      // lone optimistic comp.
-      const conservativeMarginCents =
-        analysis.estimatedMinPrice.getCents() - listing.price.getCents()
-      if (conservativeMarginCents < this.minConservativeMarginCents) {
+      // Trust gate. Two conditions, both grounded in the backtest:
+      //  - the estimate band must be tight enough to mean something;
+      //  - the deal must still clear the floor at the low end of that band.
+      // Together they suppress the phantom margins produced by a lone optimistic
+      // comp — the "d'où sors-tu ces prix" class of false positive.
+      const estimate = {
+        priceCents: listing.price.getCents(),
+        estMinCents: analysis.estimatedMinPrice.getCents(),
+        estMaxCents: analysis.estimatedMaxPrice.getCents(),
+        bestMatchSource: analysis.bestMatchSource,
+      }
+      if (
+        !isEstimateTrustworthy(estimate, {
+          maxRangeRatio: this.maxRangeRatio,
+          minConservativeMarginCents: this.minConservativeMarginCents,
+        })
+      ) {
         continue
       }
 
@@ -83,10 +102,25 @@ export class RunNotificationUseCase {
       return { sent: 0, errors: 0 }
     }
 
+    // Ranking is NOT by estimated margin. Backtested over the 240 human
+    // judgements in base, that ordering scored AUC 0.298 where 0.5 is a coin
+    // flip — it is inverted, because the biggest margins come from the biggest
+    // hallucinations. We rank on evidence quality instead: band tightness, comp
+    // provenance, and plausibility of the estimate against the asking price.
     listingsWithAnalysis.sort(
       (a, b) =>
-        b.analysis.margin.getCents() -
-        a.analysis.margin.getCents()
+        computeDealScore({
+          priceCents: b.listing.price.getCents(),
+          estMinCents: b.analysis.estimatedMinPrice.getCents(),
+          estMaxCents: b.analysis.estimatedMaxPrice.getCents(),
+          bestMatchSource: b.analysis.bestMatchSource,
+        }) -
+        computeDealScore({
+          priceCents: a.listing.price.getCents(),
+          estMinCents: a.analysis.estimatedMinPrice.getCents(),
+          estMaxCents: a.analysis.estimatedMaxPrice.getCents(),
+          bestMatchSource: a.analysis.bestMatchSource,
+        })
     )
 
     let sent = 0

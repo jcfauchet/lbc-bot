@@ -11,15 +11,22 @@ const listing = (id: string) => {
   return l
 }
 
-const analysis = (listingId: string, confidence: number, estMinEuros = 1000) =>
+const analysis = (
+  listingId: string,
+  confidence: number,
+  estMinEuros = 1000,
+  estMaxEuros = 1500,
+  bestMatchSource: string | undefined = 'Selency'
+) =>
   AiAnalysis.create({
     listingId,
     estimatedMinPrice: Money.fromEuros(estMinEuros),
-    estimatedMaxPrice: Money.fromEuros(1500),
+    estimatedMaxPrice: Money.fromEuros(estMaxEuros),
     margin: Money.fromEuros(900),
     description: 'd',
     confidence,
     provider: 'serpapi',
+    bestMatchSource,
   })
 
 const deps = (analyses: AiAnalysis[]) => {
@@ -60,7 +67,9 @@ describe('RunNotificationUseCase', () => {
     // Median margin (900€) passes the coarse prefilter and confidence is high,
     // but the worst-case resale (estMin 100€ − price 80€ = 20€) leaves no real
     // margin, so the deal must not be emailed.
-    const d = deps([analysis('reliable', 0.9, 100)])
+    // Band kept tight (100→140, ratio 1.4) so this test still isolates the
+    // conservative-margin gate rather than being caught by the range gate.
+    const d = deps([analysis('reliable', 0.9, 100, 140)])
     const useCase = new RunNotificationUseCase(
       d.listingRepository, d.aiAnalysisRepository, d.notificationRepository, d.imageRepository,
       d.mailer, ['to@x.fr'], 'from@x.fr', 60, 0.8, 6000,
@@ -70,6 +79,39 @@ describe('RunNotificationUseCase', () => {
 
     expect(res.sent).toBe(0)
     expect(d.mailer.send).not.toHaveBeenCalled()
+  })
+
+  it('does not notify an estimate whose band is too wide to mean anything', async () => {
+    // The real "1 108€ – 18 623€" case: a lone optimistic comp blows the band
+    // open. Median margin and confidence both pass; the band must still block it.
+    const d = deps([analysis('reliable', 0.9, 1108, 18623)])
+    const useCase = new RunNotificationUseCase(
+      d.listingRepository, d.aiAnalysisRepository, d.notificationRepository, d.imageRepository,
+      d.mailer, ['to@x.fr'], 'from@x.fr', 60,
+    )
+
+    const res = await useCase.execute()
+
+    expect(res.sent).toBe(0)
+    expect(d.mailer.send).not.toHaveBeenCalled()
+  })
+
+  it('ranks the resale-backed comp above the luxury-backed one', async () => {
+    // Both are trustworthy and would be emailed; only the ordering differs.
+    // Ranking must no longer follow the estimated margin.
+    const d = deps([
+      analysis('shaky', 0.9, 1000, 1500, 'https://www.1stdibs.com/furniture/x'),
+      analysis('reliable', 0.9, 1000, 1500, 'Selency'),
+    ])
+    const useCase = new RunNotificationUseCase(
+      d.listingRepository, d.aiAnalysisRepository, d.notificationRepository, d.imageRepository,
+      d.mailer, ['to@x.fr'], 'from@x.fr', 60,
+    )
+
+    const res = await useCase.execute()
+
+    expect(res.sent).toBe(2)
+    expect(d.savedNotifications[0].listingId).toBe('reliable')
   })
 
   it('sends nothing when every deal is below the confidence threshold', async () => {
