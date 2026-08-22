@@ -124,50 +124,6 @@ async function main() {
 
   console.log('✅ Search seed completed!')
   console.log(`Created ${createdSearches}, updated ${updatedSearches}`)
-
-  console.log('🌱 Starting Category seed...')
-  
-  let createdCategories = 0
-
-  const CATEGORIES = [
-    'table_basse',
-    'table_repas',
-    'chaise',
-    'fauteuil',
-    'canapé',
-    'table',
-    'enfilade',
-    'commode',
-    'bibliothèque',
-    'buffet',
-    'bureau',
-    'lampe_de_table',
-    'lampe',
-    'lampadaire',
-    'suspension',
-    'applique',
-    'miroir',
-    'objet_déco',
-    'plateau',
-    'étagère',
-    'guéridon',
-    'pouf',
-    'étagère',
-    'table de chevet'
-  ]
-
-  for (let i = 0; i < CATEGORIES.length; i++) {
-    const value = CATEGORIES[i]
-    await prisma.category.upsert({
-      where: { value },
-      update: { order: i, isActive: true },
-      create: { value, order: i },
-    })
-    createdCategories++
-  }
-
-  console.log(`✅ Category seed completed!`)
-  console.log(`  - Categories: ${createdCategories}`)
 }
 
 main()

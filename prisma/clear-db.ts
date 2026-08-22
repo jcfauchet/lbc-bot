@@ -24,7 +24,6 @@ async function main() {
   console.log('🗑️  Clearing all database data...')
 
  
-  await clearTable(prisma.listingLabel, 'ListingLabel')
   await clearTable(prisma.notification, 'Notification')
   await clearTable(prisma.aiAnalysis, 'AiAnalysis')
   await clearTable(prisma.listingImage, 'ListingImage')

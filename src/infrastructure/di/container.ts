@@ -7,8 +7,6 @@ import { PrismaSearchRepository } from '@/infrastructure/prisma/repositories/Pri
 import { PrismaAiAnalysisRepository } from '@/infrastructure/prisma/repositories/PrismaAiAnalysisRepository'
 import { PrismaLbcProductListingImageRepository } from '@/infrastructure/prisma/repositories/PrismaLbcProductListingImageRepository'
 import { PrismaNotificationRepository } from '@/infrastructure/prisma/repositories/PrismaNotificationRepository'
-import { PrismaLbcProductListingLabelRepository } from '@/infrastructure/prisma/repositories/PrismaLbcProductListingLabelRepository'
-import { PrismaTaxonomyRepository } from '@/infrastructure/prisma/repositories/PrismaTaxonomyRepository'
 import { PrismaFeedbackRepository } from '@/infrastructure/prisma/repositories/PrismaFeedbackRepository'
 import { PrismaTriageGuidanceRepository } from '@/infrastructure/prisma/repositories/PrismaTriageGuidanceRepository'
 import { EmbeddingService } from '@/infrastructure/ai/EmbeddingService'
@@ -56,8 +54,6 @@ export class Container {
   public readonly aiAnalysisRepository: PrismaAiAnalysisRepository
   public readonly listingImageRepository: PrismaLbcProductListingImageRepository
   public readonly notificationRepository: PrismaNotificationRepository
-  public readonly listingLabelRepository: PrismaLbcProductListingLabelRepository
-  public readonly taxonomyRepository: PrismaTaxonomyRepository
   public readonly feedbackRepository: PrismaFeedbackRepository
   public readonly triageGuidanceRepository: PrismaTriageGuidanceRepository
   public readonly embeddingService: EmbeddingService
@@ -103,8 +99,6 @@ export class Container {
     this.aiAnalysisRepository = new PrismaAiAnalysisRepository(this.prisma)
     this.listingImageRepository = new PrismaLbcProductListingImageRepository(this.prisma)
     this.notificationRepository = new PrismaNotificationRepository(this.prisma)
-    this.listingLabelRepository = new PrismaLbcProductListingLabelRepository(this.prisma)
-    this.taxonomyRepository = new PrismaTaxonomyRepository(this.prisma)
     this.feedbackRepository = new PrismaFeedbackRepository(this.prisma)
     this.triageGuidanceRepository = new PrismaTriageGuidanceRepository(this.prisma)
     this.embeddingService = new EmbeddingService(openAiApiKey)

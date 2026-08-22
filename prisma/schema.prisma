@@ -40,7 +40,6 @@ model LbcProductListing {
   images      ListingImage[]
   aiAnalysis  AiAnalysis?
   notifications Notification[]
-  labels      ListingLabel[]
   feedbacks   ListingFeedback[]
 
   @@index([searchId])
@@ -101,21 +100,6 @@ model Notification {
   @@map("notifications")
 }
 
-model ListingLabel {
-  id        String   @id @default(cuid())
-  listingId String
-  label     String
-  comment   String?  @db.Text
-  createdAt DateTime @default(now())
-  
-  listing   LbcProductListing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
-
-  @@index([listingId])
-  @@map("listing_labels")
-}
-
-
-
 model ListingFeedback {
   id            String   @id @default(cuid())
   listingId     String
@@ -128,17 +112,6 @@ model ListingFeedback {
 
   @@index([listingId])
   @@map("listing_feedbacks")
-}
-
-model Category {
-  id        String   @id @default(cuid())
-  value     String   @unique
-  order     Int      @default(0)
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@map("categories")
 }
 
 model LensCall {
