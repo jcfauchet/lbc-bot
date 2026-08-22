@@ -16,6 +16,10 @@ export class RunListingScrapingUseCase {
     private imageRepository: IListingImageRepository,
     private listingSourceApi: IListingSource,
     private listingSourceScraper: IListingSource,
+    // How many searches one run may attempt. See SCRAPE_MAX_SEARCHES_PER_RUN:
+    // DataDome refuses the tenth request of a session, so a run that tries all
+    // thirteen spends its last three searches being blocked.
+    private maxSearchesPerRun: number = 6,
     // Wall-clock budget for one run, checked before starting each search.
     // The route allows 800s. A fully DataDome-throttled search costs at most
     // ~145s now that the HTTP calls are bounded (three attempts, each capped
@@ -46,7 +50,10 @@ export class RunListingScrapingUseCase {
     newListings: number
     updatedListings: number
   }> {
-    const searches = await this.searchRepository.findActive()
+    const activeSearches = await this.searchRepository.findActive()
+    // findActive orders by lastScrapedAt, so the slice is always the most
+    // starved searches; the rest come first next run.
+    const searches = activeSearches.slice(0, this.maxSearchesPerRun)
     const startedAt = Date.now()
 
     let newListings = 0
@@ -132,9 +139,9 @@ export class RunListingScrapingUseCase {
     }
 
     return {
-      totalSearches: searches.length,
+      totalSearches: activeSearches.length,
       searchesScraped,
-      searchesDeferred: searches.length - searchesScraped,
+      searchesDeferred: activeSearches.length - searchesScraped,
       newListings,
       updatedListings,
     }

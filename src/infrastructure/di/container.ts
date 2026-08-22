@@ -176,7 +176,8 @@ export class Container {
       this.listingRepository,
       this.listingImageRepository,
       this.listingSourceApi,
-      this.listingSourceScraper
+      this.listingSourceScraper,
+      env.SCRAPE_MAX_SEARCHES_PER_RUN
     )
 
     this.runNotificationUseCase = new RunNotificationUseCase(

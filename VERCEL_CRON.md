@@ -11,7 +11,7 @@ Les crons sont définis dans `vercel.json` :
   "crons": [
     {
       "path": "/api/cron/scrape",
-      "schedule": "0 */2 * * *"
+      "schedule": "0 * * * *"
     },
     {
       "path": "/api/cron/analyze-and-notify",
@@ -33,7 +33,7 @@ Les crons sont définis dans `vercel.json` :
 
 | Tâche | Route | Fréquence | Description |
 |-------|-------|-----------|-------------|
-| **Scraping** | `/api/cron/scrape` | Toutes les 2 h | Scrape les annonces Le Bon Coin |
+| **Scraping** | `/api/cron/scrape` | Toutes les heures | Scrape les `SCRAPE_MAX_SEARCHES_PER_RUN` recherches les moins récemment scrapées |
 | **Analyse And Notify** | `/api/cron/analyze-and-notify` | Toutes les 15 minutes | Préfiltre, trie, estime la valeur et envoie les notifications |
 | **Cleanup** | `/api/cron/cleanup` | Dimanche à minuit | Supprime les annonces ignorées de plus de 14 jours |
 | **Learn Feedback** | `/api/cron/learn-feedback` | Tous les jours à 3 h | Distille le feedback en règles de triage |

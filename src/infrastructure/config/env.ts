@@ -61,6 +61,15 @@ export const envSchema = z.object({
   // knob. 6 trims queue pressure while keeping 84% recall.
   TRIAGE_MIN_SCORE: z.coerce.number().min(0).max(10).default(6),
   TRIAGE_MAX_PER_RUN: z.coerce.number().min(1).default(25),
+  // DataDome's block is positional, not temporal. Measured on the runs of
+  // 22 Aug 2026: the 12:00 and 20:00 runs both sailed through nine searches at
+  // ~20s each, then took a 403 on the tenth and burned ~165s per search in
+  // retries -- on different searches each time, so it is the tenth request of
+  // the session that is refused, not any particular query. Six per run keeps a
+  // margin under that, and the cron runs hourly instead of every two hours so
+  // the rotation still covers all of them. Fewer requests per session, same
+  // request rate, and no retry storms.
+  SCRAPE_MAX_SEARCHES_PER_RUN: z.coerce.number().min(1).default(6),
   FEEDBACK_LEARNING_MAX_ITEMS: z.coerce.number().min(1).default(200),
   // Above this cosine similarity, a candidate is treated as a near-duplicate of a
   // piece the user already rejected and skipped before spending a comp credit.

@@ -51,13 +51,18 @@ const deps = (scraped: ScrapedListing[], knownLbcIds: string[] = [], searchCount
 
 // The use case sleeps 5-13s between searches to stay under DataDome's radar.
 // Fake timers keep the suite instant without weakening what is asserted.
-const run = async (d: ReturnType<typeof deps>, maxRunMillis?: number) => {
+const run = async (
+  d: ReturnType<typeof deps>,
+  maxRunMillis?: number,
+  maxSearchesPerRun = 100
+) => {
   const useCase = new RunListingScrapingUseCase(
     d.searchRepository,
     d.listingRepository,
     d.imageRepository,
     d.listingSourceApi,
     d.listingSourceScraper,
+    maxSearchesPerRun,
     maxRunMillis
   )
   const executing = useCase.execute()
@@ -132,6 +137,30 @@ describe('RunListingScrapingUseCase', () => {
 
     expect(result.searchesScraped).toBe(3)
     expect(result.searchesDeferred).toBe(0)
+  })
+
+  it('attempts at most maxSearchesPerRun and defers the rest', async () => {
+    // DataDome refuses the tenth request of a session, so a run that tries
+    // every search spends its tail being blocked instead of scraping.
+    const d = deps([], [], 13)
+
+    const result = await run(d, 600_000, 6)
+
+    expect(result.searchesScraped).toBe(6)
+    expect(result.totalSearches).toBe(13)
+    expect(result.searchesDeferred).toBe(7)
+    expect(d.listingSourceApi.search).toHaveBeenCalledTimes(6)
+  })
+
+  it('takes the least recently scraped searches first', async () => {
+    // findActive already orders by lastScrapedAt, so the slice must preserve
+    // that order for the rotation to stay fair across runs.
+    const d = deps([], [], 13)
+
+    await run(d, 600_000, 3)
+
+    expect(d.searchRepository.markScraped.mock.calls.map((c: any[]) => c[0]))
+      .toEqual(['search-1', 'search-2', 'search-3'])
   })
 
   it('marks the search scraped even when the source throws', async () => {
