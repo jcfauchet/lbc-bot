@@ -14,12 +14,16 @@ Les crons sont définis dans `vercel.json` :
       "schedule": "0 */2 * * *"
     },
     {
-      "path": "/api/cron/analyze",
-      "schedule": "15 */1 * * *"
+      "path": "/api/cron/analyze-and-notify",
+      "schedule": "*/15 * * * *"
     },
     {
-      "path": "/api/cron/notify",
-      "schedule": "0 9 * * *"
+      "path": "/api/cron/cleanup",
+      "schedule": "0 0 * * 0"
+    },
+    {
+      "path": "/api/cron/learn-feedback",
+      "schedule": "0 3 * * *"
     }
   ]
 }
@@ -29,8 +33,10 @@ Les crons sont définis dans `vercel.json` :
 
 | Tâche | Route | Fréquence | Description |
 |-------|-------|-----------|-------------|
-| **Scraping** | `/api/cron/scrape` | Toutes les h | Scrape les annonces Le Bon Coin |
-| **Analyse And Notify** | `/api/cron/analyze-and-notify` | Toutes les 10 minutes | Analyse avec l'IA et calcule les scores et envoie les notifications |
+| **Scraping** | `/api/cron/scrape` | Toutes les 2 h | Scrape les annonces Le Bon Coin |
+| **Analyse And Notify** | `/api/cron/analyze-and-notify` | Toutes les 15 minutes | Préfiltre, trie, estime la valeur et envoie les notifications |
+| **Cleanup** | `/api/cron/cleanup` | Dimanche à minuit | Supprime les annonces ignorées de plus de 14 jours |
+| **Learn Feedback** | `/api/cron/learn-feedback` | Tous les jours à 3 h | Distille le feedback en règles de triage |
 
 ## 🔒 Sécurité
 
@@ -93,10 +99,7 @@ pnpm dev
 curl -X GET http://localhost:3000/api/cron/scrape \
   -H "Authorization: Bearer your-secret-key"
 
-curl -X GET http://localhost:3000/api/cron/analyze \
-  -H "Authorization: Bearer your-secret-key"
-
-curl -X GET http://localhost:3000/api/cron/notify \
+curl -X GET http://localhost:3000/api/cron/analyze-and-notify \
   -H "Authorization: Bearer your-secret-key"
 ```
 

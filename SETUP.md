@@ -191,8 +191,9 @@ Si vous n'utilisez pas Vercel, vous pouvez :
 2. Utiliser un service externe pour les crons (cron-job.org, EasyCron, etc.)
 3. Configurer les crons pour appeler :
    - `https://your-domain.com/api/cron/scrape`
-   - `https://your-domain.com/api/cron/analyze`
-   - `https://your-domain.com/api/cron/notify`
+   - `https://your-domain.com/api/cron/analyze-and-notify`
+   - `https://your-domain.com/api/cron/cleanup`
+   - `https://your-domain.com/api/cron/learn-feedback`
 4. Ajouter le header `Authorization: Bearer ${CRON_SECRET}`
 
 ## ❓ Questions fréquentes
