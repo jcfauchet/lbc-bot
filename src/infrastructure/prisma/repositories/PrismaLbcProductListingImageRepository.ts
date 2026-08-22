@@ -16,6 +16,18 @@ export class PrismaLbcProductListingImageRepository implements IListingImageRepo
     return this.toDomain(created)
   }
 
+  async saveMany(images: ListingImage[]): Promise<void> {
+    if (images.length === 0) return
+
+    await this.prisma.listingImage.createMany({
+      data: images.map((image) => ({
+        listingId: image.listingId,
+        urlRemote: image.urlRemote,
+        pathLocal: image.pathLocal,
+      })),
+    })
+  }
+
   async findById(id: string): Promise<ListingImage | null> {
     const image = await this.prisma.listingImage.findUnique({ where: { id } })
     return image ? this.toDomain(image) : null

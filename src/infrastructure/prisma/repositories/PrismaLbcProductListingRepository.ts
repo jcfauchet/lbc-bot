@@ -2,7 +2,7 @@ import { PrismaClient } from '@prisma/client'
 import { IListingRepository } from '@/domain/repositories/IListingRepository'
 import { Listing } from '@/domain/entities/Listing'
 import { ListingStatus } from '@/domain/value-objects/ListingStatus'
-import { Money } from '@/domain/value-objects/Money'
+import { toListingDomain } from '@/infrastructure/prisma/mappers/listingMapper'
 
 export class PrismaLbcProductListingRepository implements IListingRepository {
   constructor(private prisma: PrismaClient) {}
@@ -23,17 +23,50 @@ export class PrismaLbcProductListingRepository implements IListingRepository {
     }
 
     const created = await this.prisma.lbcProductListing.create({ data })
-    return this.toDomain(created)
+    return toListingDomain(created)
+  }
+
+  async saveMany(listings: Listing[]): Promise<Listing[]> {
+    if (listings.length === 0) return []
+
+    const created = await this.prisma.lbcProductListing.createManyAndReturn({
+      data: listings.map((listing) => ({
+        lbcId: listing.lbcId,
+        searchId: listing.searchId,
+        url: listing.url,
+        title: listing.title,
+        description: listing.description,
+        priceCents: listing.price.getCents(),
+        city: listing.city,
+        region: listing.region,
+        publishedAt: listing.publishedAt,
+        status: listing.status,
+        triageScore: listing.triageScore,
+      })),
+    })
+
+    return created.map(toListingDomain)
   }
 
   async findById(id: string): Promise<Listing | null> {
     const listing = await this.prisma.lbcProductListing.findUnique({ where: { id } })
-    return listing ? this.toDomain(listing) : null
+    return listing ? toListingDomain(listing) : null
   }
 
   async findByLbcId(lbcId: string): Promise<Listing | null> {
     const listing = await this.prisma.lbcProductListing.findUnique({ where: { lbcId } })
-    return listing ? this.toDomain(listing) : null
+    return listing ? toListingDomain(listing) : null
+  }
+
+  async findExistingLbcIds(lbcIds: string[]): Promise<Set<string>> {
+    if (lbcIds.length === 0) return new Set()
+
+    const rows = await this.prisma.lbcProductListing.findMany({
+      where: { lbcId: { in: lbcIds } },
+      select: { lbcId: true },
+    })
+
+    return new Set(rows.map((row) => row.lbcId))
   }
 
   async findBySearchId(searchId: string): Promise<Listing[]> {
@@ -41,7 +74,7 @@ export class PrismaLbcProductListingRepository implements IListingRepository {
       where: { searchId },
       orderBy: { createdAt: 'desc' },
     })
-    return listings.map((l) => this.toDomain(l))
+    return listings.map((l) => toListingDomain(l))
   }
 
   async findByStatus(status: ListingStatus): Promise<Listing[]> {
@@ -49,7 +82,7 @@ export class PrismaLbcProductListingRepository implements IListingRepository {
       where: { status },
       orderBy: { createdAt: 'desc' },
     })
-    return listings.map((l) => this.toDomain(l))
+    return listings.map((l) => toListingDomain(l))
   }
 
   async findWithoutAiAnalysis(): Promise<Listing[]> {
@@ -62,14 +95,14 @@ export class PrismaLbcProductListingRepository implements IListingRepository {
       },
       orderBy: { createdAt: 'desc' },
     })
-    return listings.map((l) => this.toDomain(l))
+    return listings.map((l) => toListingDomain(l))
   }
 
   async findAll(): Promise<Listing[]> {
     const listings = await this.prisma.lbcProductListing.findMany({
       orderBy: { createdAt: 'desc' },
     })
-    return listings.map((l) => this.toDomain(l))
+    return listings.map((l) => toListingDomain(l))
   }
 
   async update(listing: Listing): Promise<Listing> {
@@ -82,7 +115,7 @@ export class PrismaLbcProductListingRepository implements IListingRepository {
         updatedAt: new Date(),
       },
     })
-    return this.toDomain(updated)
+    return toListingDomain(updated)
   }
 
   async delete(id: string): Promise<void> {
@@ -126,26 +159,6 @@ export class PrismaLbcProductListingRepository implements IListingRepository {
     })
 
     return result.count
-  }
-
-  private toDomain(raw: any): Listing {
-    return Listing.fromPersistence({
-      id: raw.id,
-      lbcId: raw.lbcId,
-      searchId: raw.searchId,
-      url: raw.url,
-      title: raw.title,
-      description: raw.description ?? undefined,
-      price: Money.fromCents(raw.priceCents),
-      city: raw.city,
-      region: raw.region,
-      publishedAt: raw.publishedAt,
-      status: raw.status as ListingStatus,
-      ignoreReason: raw.ignoreReason,
-      triageScore: raw.triageScore ?? undefined,
-      createdAt: raw.createdAt,
-      updatedAt: raw.updatedAt,
-    })
   }
 }
 

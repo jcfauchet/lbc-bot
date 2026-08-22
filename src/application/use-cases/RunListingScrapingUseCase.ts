@@ -46,42 +46,53 @@ export class RunListingScrapingUseCase {
         console.log(`Scraping search: ${search.name}`)
         const scrapedListings = await this.getListings(search)
 
-        for (const scraped of scrapedListings) {
-          const existing = await this.listingRepository.findByLbcId(
-            scraped.lbcId
-          )
+        // The same ad can be returned twice on a page; a batch insert would
+        // trip the lbcId unique constraint and lose the whole page.
+        const uniqueScraped = [
+          ...new Map(scrapedListings.map((s) => [s.lbcId, s])).values(),
+        ]
 
-          if (existing) {
-            updatedListings++
-            continue
-          }
+        // One lookup for the page instead of one per ad. This loop used to be
+        // the bulk of the cron's wall time: ~35 sequential round trips per
+        // search, and the run was being killed before its last search.
+        const knownLbcIds = await this.listingRepository.findExistingLbcIds(
+          uniqueScraped.map((s) => s.lbcId)
+        )
+        const fresh = uniqueScraped.filter((s) => !knownLbcIds.has(s.lbcId))
+        updatedListings += uniqueScraped.length - fresh.length
 
-          const listing = Listing.create({
-            lbcId: scraped.lbcId,
-            searchId: search.id,
-            url: scraped.url,
-            title: scraped.title,
-            description: scraped.description,
-            price: Money.fromCents(scraped.priceCents),
-            city: scraped.city,
-            region: scraped.region,
-            publishedAt: scraped.publishedAt,
-            status: ListingStatus.NEW,
-          })
-
-          const savedListing = await this.listingRepository.save(listing)
-
-          for (const imageUrl of scraped.imageUrls) {
-            const image = ListingImage.create({
-              listingId: savedListing.id,
-              urlRemote: imageUrl,
+        const saved = await this.listingRepository.saveMany(
+          fresh.map((scraped) =>
+            Listing.create({
+              lbcId: scraped.lbcId,
+              searchId: search.id,
+              url: scraped.url,
+              title: scraped.title,
+              description: scraped.description,
+              price: Money.fromCents(scraped.priceCents),
+              city: scraped.city,
+              region: scraped.region,
+              publishedAt: scraped.publishedAt,
+              status: ListingStatus.NEW,
             })
-            await this.imageRepository.save(image)
-          }
+          )
+        )
 
-          newListings++
-          console.log(`New listing saved: ${savedListing.title}`)
-        }
+        const imageUrlsByLbcId = new Map(
+          fresh.map((scraped) => [scraped.lbcId, scraped.imageUrls])
+        )
+        await this.imageRepository.saveMany(
+          saved.flatMap((listing) =>
+            (imageUrlsByLbcId.get(listing.lbcId) ?? []).map((urlRemote) =>
+              ListingImage.create({ listingId: listing.id, urlRemote })
+            )
+          )
+        )
+
+        newListings += saved.length
+        console.log(
+          `${search.name}: ${saved.length} new, ${uniqueScraped.length - fresh.length} already known`
+        )
 
         const randomDelay = Math.floor(Math.random() * 8000) + 5000
         console.log(`Waiting ${randomDelay}ms before next search to avoid DataDome blocking...`)
@@ -92,8 +103,6 @@ export class RunListingScrapingUseCase {
         console.log(`⚠️ Error occurred, waiting ${randomDelay}ms before next search...`)
         await this.delay(randomDelay)
       } finally {
-        // Stamp even on failure: an always-failing search must rotate to the
-        // back instead of hogging the head of the queue and starving the rest.
         await this.searchRepository.markScraped(search.id)
       }
     }

@@ -3,8 +3,16 @@ import { ListingStatus } from '../value-objects/ListingStatus'
 
 export interface IListingRepository {
   save(listing: Listing): Promise<Listing>
+  /**
+   * Inserts a batch and returns the persisted listings, ids included, in the
+   * order they were given. A scrape run inserts a whole search page at once;
+   * one round trip per listing is what pushed the cron past its time budget.
+   */
+  saveMany(listings: Listing[]): Promise<Listing[]>
   findById(id: string): Promise<Listing | null>
   findByLbcId(lbcId: string): Promise<Listing | null>
+  /** The subset of `lbcIds` already stored, for de-duplicating a scrape page. */
+  findExistingLbcIds(lbcIds: string[]): Promise<Set<string>>
   findBySearchId(searchId: string): Promise<Listing[]>
   findByStatus(status: ListingStatus): Promise<Listing[]>
   findWithoutAiAnalysis(): Promise<Listing[]>
