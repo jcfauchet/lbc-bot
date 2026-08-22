@@ -1,7 +1,12 @@
 import { PrismaClient } from '@prisma/client'
-import { IAiAnalysisRepository } from '@/domain/repositories/IAiAnalysisRepository'
+import {
+  IAiAnalysisRepository,
+  NotifiableDeal,
+} from '@/domain/repositories/IAiAnalysisRepository'
 import { AiAnalysis } from '@/domain/entities/AiAnalysis'
+import { NotificationStatus } from '@/domain/entities/Notification'
 import { Money } from '@/domain/value-objects/Money'
+import { toListingDomain } from '@/infrastructure/prisma/mappers/listingMapper'
 
 export class PrismaAiAnalysisRepository implements IAiAnalysisRepository {
   constructor(private prisma: PrismaClient) {}
@@ -42,6 +47,32 @@ export class PrismaAiAnalysisRepository implements IAiAnalysisRepository {
       orderBy: { marginCents: 'desc' },
     })
     return analyses.map((a) => this.toDomain(a))
+  }
+
+  async findNotifiableByMinMargin(minMargin: number): Promise<NotifiableDeal[]> {
+    const rows = await this.prisma.aiAnalysis.findMany({
+      where: {
+        marginCents: { gte: minMargin * 100 },
+        listing: {
+          notifications: { none: { status: NotificationStatus.SENT } },
+        },
+      },
+      orderBy: { marginCents: 'desc' },
+      include: {
+        listing: {
+          include: {
+            // Only the thumbnail the digest renders is needed.
+            images: { orderBy: { createdAt: 'asc' }, take: 1 },
+          },
+        },
+      },
+    })
+
+    return rows.map((row) => ({
+      analysis: this.toDomain(row),
+      listing: toListingDomain(row.listing),
+      imageUrl: row.listing.images[0]?.urlRemote,
+    }))
   }
 
   async findAll(): Promise<AiAnalysis[]> {

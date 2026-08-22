@@ -1,12 +1,12 @@
 import { IListingRepository } from '@/domain/repositories/IListingRepository'
-import { IAiAnalysisRepository } from '@/domain/repositories/IAiAnalysisRepository'
+import {
+  IAiAnalysisRepository,
+  NotifiableDeal,
+} from '@/domain/repositories/IAiAnalysisRepository'
 import { INotificationRepository } from '@/domain/repositories/INotificationRepository'
-import { IListingImageRepository } from '@/domain/repositories/IListingImageRepository'
 import { IMailer } from '@/infrastructure/mail/IMailer'
 import { EmailTemplates } from '@/infrastructure/mail/EmailTemplates'
 import { Notification, NotificationChannel } from '@/domain/entities/Notification'
-import { Listing } from '@/domain/entities/Listing'
-import { AiAnalysis } from '@/domain/entities/AiAnalysis'
 import {
   computeDealScore,
   isEstimateTrustworthy,
@@ -18,7 +18,6 @@ export class RunNotificationUseCase {
     private listingRepository: IListingRepository,
     private aiAnalysisRepository: IAiAnalysisRepository,
     private notificationRepository: INotificationRepository,
-    private imageRepository: IListingImageRepository,
     private mailer: IMailer,
     private recipientEmails: string[],
     private fromEmail: string,
@@ -46,73 +45,46 @@ export class RunNotificationUseCase {
   ) {}
 
   async execute(): Promise<{ sent: number; errors: number }> {
-    const allAnalyses = await this.aiAnalysisRepository.findByMinMargin(
+    // One query returns exactly what the digest needs: analyses above the
+    // margin floor, never notified, with their listing and thumbnail attached.
+    const deals = await this.aiAnalysisRepository.findNotifiableByMinMargin(
       this.minMargin
     )
-    const goodAnalyses = allAnalyses.filter(
-      (a) => a.confidence === undefined || a.confidence >= this.minConfidence
+
+    const listingsWithAnalysis: NotifiableDeal[] = deals.filter(
+      ({ listing, analysis }) => {
+        if (
+          analysis.confidence !== undefined &&
+          analysis.confidence < this.minConfidence
+        ) {
+          return false
+        }
+
+        // Trust gate. Two conditions, both grounded in the backtest:
+        //  - the estimate band must be tight enough to mean something;
+        //  - the deal must still clear the floor at the low end of that band.
+        // Together they suppress the phantom margins produced by a lone
+        // optimistic comp — the "d'où sors-tu ces prix" class of false positive.
+        return isEstimateTrustworthy(
+          {
+            priceCents: listing.price.getCents(),
+            estMinCents: analysis.estimatedMinPrice.getCents(),
+            estMaxCents: analysis.estimatedMaxPrice.getCents(),
+            bestMatchSource: analysis.bestMatchSource,
+          },
+          {
+            maxRangeRatio: this.maxRangeRatio,
+            minConservativeMarginCents: this.minConservativeMarginCents,
+          }
+        )
+      }
     )
 
-    if (goodAnalyses.length === 0) {
-      console.log('No good deals found')
-      return { sent: 0, errors: 0 }
-    }
-
-    const listingsWithAnalysis: Array<{
-      listing: Listing
-      analysis: AiAnalysis
-      imageUrl?: string
-    }> = []
-
-    for (const analysis of goodAnalyses) {
-      const listing = await this.listingRepository.findById(analysis.listingId)
-      if (!listing) continue
-
-      const alreadyNotified = await this.notificationRepository.findByListingId(
-        listing.id
-      )
-
-      if (alreadyNotified.some((n) => n.status === 'sent')) {
-        continue
-      }
-
-      // Trust gate. Two conditions, both grounded in the backtest:
-      //  - the estimate band must be tight enough to mean something;
-      //  - the deal must still clear the floor at the low end of that band.
-      // Together they suppress the phantom margins produced by a lone optimistic
-      // comp — the "d'où sors-tu ces prix" class of false positive.
-      const estimate = {
-        priceCents: listing.price.getCents(),
-        estMinCents: analysis.estimatedMinPrice.getCents(),
-        estMaxCents: analysis.estimatedMaxPrice.getCents(),
-        bestMatchSource: analysis.bestMatchSource,
-      }
-      if (
-        !isEstimateTrustworthy(estimate, {
-          maxRangeRatio: this.maxRangeRatio,
-          minConservativeMarginCents: this.minConservativeMarginCents,
-        })
-      ) {
-        continue
-      }
-
-      const images = await this.imageRepository.findByListingId(listing.id)
-      const firstImage = images[0]
-      const imageUrl = firstImage?.urlRemote
-
-      listingsWithAnalysis.push({ listing, analysis, imageUrl })
-    }
-
     if (listingsWithAnalysis.length === 0) {
-      console.log('All good deals already notified')
+      console.log('No good deals to notify')
       return { sent: 0, errors: 0 }
     }
 
-    // Ranking is NOT by estimated margin. Backtested over the 240 human
-    // judgements in base, that ordering scored AUC 0.298 where 0.5 is a coin
-    // flip — it is inverted, because the biggest margins come from the biggest
-    // hallucinations. We rank on evidence quality instead: band tightness, comp
-    // provenance, and plausibility of the estimate against the asking price.
     listingsWithAnalysis.sort(
       (a, b) =>
         computeDealScore({

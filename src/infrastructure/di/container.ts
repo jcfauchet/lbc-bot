@@ -183,7 +183,6 @@ export class Container {
       this.listingRepository,
       this.aiAnalysisRepository,
       this.notificationRepository,
-      this.listingImageRepository,
       this.mailer,
       env.NOTIFICATION_EMAIL_TO,
       env.NOTIFICATION_EMAIL_FROM ?? 'LBC Bot <bot@example.com>',

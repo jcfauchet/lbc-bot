@@ -32,18 +32,20 @@ const analysis = (
 const deps = (analyses: AiAnalysis[]) => {
   const listings: Record<string, Listing> = { reliable: listing('reliable'), shaky: listing('shaky') }
   const savedNotifications: any[] = []
+  // The repository joins listing + thumbnail and drops the already-notified
+  // deals in SQL, so the fake returns whole deals rather than bare analyses.
+  const deals = analyses.map((analysis) => ({
+    analysis,
+    listing: listings[analysis.listingId],
+    imageUrl: 'https://img/x.jpg',
+  }))
   return {
     savedNotifications,
-    aiAnalysisRepository: { findByMinMargin: vi.fn(async () => analyses) } as any,
-    listingRepository: {
-      findById: vi.fn(async (id: string) => listings[id] ?? null),
-      update: vi.fn(async (l: Listing) => l),
-    } as any,
+    aiAnalysisRepository: { findNotifiableByMinMargin: vi.fn(async () => deals) } as any,
+    listingRepository: { update: vi.fn(async (l: Listing) => l) } as any,
     notificationRepository: {
-      findByListingId: vi.fn(async () => []),
       save: vi.fn(async (n: any) => { savedNotifications.push(n); return n }),
     } as any,
-    imageRepository: { findByListingId: vi.fn(async () => [{ urlRemote: 'https://img/x.jpg' }]) } as any,
     mailer: { send: vi.fn(async () => {}) } as any,
   }
 }
@@ -52,7 +54,7 @@ describe('RunNotificationUseCase', () => {
   it('does not notify analyses whose comps disagree (confidence below threshold)', async () => {
     const d = deps([analysis('reliable', 0.9), analysis('shaky', 0.6)])
     const useCase = new RunNotificationUseCase(
-      d.listingRepository, d.aiAnalysisRepository, d.notificationRepository, d.imageRepository,
+      d.listingRepository, d.aiAnalysisRepository, d.notificationRepository,
       d.mailer, ['to@x.fr'], 'from@x.fr', 60,
     )
 
@@ -71,7 +73,7 @@ describe('RunNotificationUseCase', () => {
     // conservative-margin gate rather than being caught by the range gate.
     const d = deps([analysis('reliable', 0.9, 100, 140)])
     const useCase = new RunNotificationUseCase(
-      d.listingRepository, d.aiAnalysisRepository, d.notificationRepository, d.imageRepository,
+      d.listingRepository, d.aiAnalysisRepository, d.notificationRepository,
       d.mailer, ['to@x.fr'], 'from@x.fr', 60, 0.8, 6000,
     )
 
@@ -86,7 +88,7 @@ describe('RunNotificationUseCase', () => {
     // open. Median margin and confidence both pass; the band must still block it.
     const d = deps([analysis('reliable', 0.9, 1108, 18623)])
     const useCase = new RunNotificationUseCase(
-      d.listingRepository, d.aiAnalysisRepository, d.notificationRepository, d.imageRepository,
+      d.listingRepository, d.aiAnalysisRepository, d.notificationRepository,
       d.mailer, ['to@x.fr'], 'from@x.fr', 60,
     )
 
@@ -104,7 +106,7 @@ describe('RunNotificationUseCase', () => {
       analysis('reliable', 0.9, 1000, 1500, 'Selency'),
     ])
     const useCase = new RunNotificationUseCase(
-      d.listingRepository, d.aiAnalysisRepository, d.notificationRepository, d.imageRepository,
+      d.listingRepository, d.aiAnalysisRepository, d.notificationRepository,
       d.mailer, ['to@x.fr'], 'from@x.fr', 60,
     )
 
@@ -117,7 +119,7 @@ describe('RunNotificationUseCase', () => {
   it('sends nothing when every deal is below the confidence threshold', async () => {
     const d = deps([analysis('shaky', 0.6)])
     const useCase = new RunNotificationUseCase(
-      d.listingRepository, d.aiAnalysisRepository, d.notificationRepository, d.imageRepository,
+      d.listingRepository, d.aiAnalysisRepository, d.notificationRepository,
       d.mailer, ['to@x.fr'], 'from@x.fr', 60,
     )
 
