@@ -1,4 +1,11 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": ["cdg1"],
+  "functions": {
+    "src/app/api/cron/scrape/route.ts": {
+      "regions": ["iad1"]
+    }
+  },
   "crons": [
     {
       "path": "/api/cron/scrape",
