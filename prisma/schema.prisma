@@ -44,9 +44,11 @@ model LbcProductListing {
   feedbacks   ListingFeedback[]
 
   @@index([searchId])
-  @@index([lbcId])
-  @@index([status])
-  @@index([publishedAt])
+  // Every analyze-and-notify tick expires the stale TRIAGED backlog with a
+  // `status = ... AND createdAt < ...` update. On `status` alone that walks all
+  // ~1.2k triaged rows to return none; the composite answers it as a range scan
+  // and still serves the plain `status` lookups as its prefix.
+  @@index([status, createdAt])
   @@map("lbc_product_listings")
 }
 
@@ -80,7 +82,6 @@ model AiAnalysis {
   listing        LbcProductListing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
 
   @@index([marginCents])
-  @@index([bestMatchSource])
   @@map("ai_analyses")
 }
 
@@ -110,7 +111,6 @@ model ListingLabel {
   listing   LbcProductListing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
 
   @@index([listingId])
-  @@index([label])
   @@map("listing_labels")
 }
 
