@@ -11,12 +11,18 @@ const ad = (lbcId: string, imageUrls: string[] = []): ScrapedListing => ({
   imageUrls,
 })
 
-const deps = (scraped: ScrapedListing[], knownLbcIds: string[] = []) => {
+const deps = (scraped: ScrapedListing[], knownLbcIds: string[] = [], searchCount = 1) => {
   const savedImages: Array<{ listingId: string; urlRemote: string }> = []
   return {
     savedImages,
     searchRepository: {
-      findActive: vi.fn(async () => [{ id: 'search-1', name: 'Art deco', url: 'u' } as any]),
+      findActive: vi.fn(async () =>
+        Array.from({ length: searchCount }, (_, i) => ({
+          id: `search-${i + 1}`,
+          name: `search-${i + 1}`,
+          url: 'u',
+        })) as any
+      ),
       markScraped: vi.fn(async () => {}),
     } as any,
     listingRepository: {
@@ -45,13 +51,14 @@ const deps = (scraped: ScrapedListing[], knownLbcIds: string[] = []) => {
 
 // The use case sleeps 5-13s between searches to stay under DataDome's radar.
 // Fake timers keep the suite instant without weakening what is asserted.
-const run = async (d: ReturnType<typeof deps>) => {
+const run = async (d: ReturnType<typeof deps>, maxRunMillis?: number) => {
   const useCase = new RunListingScrapingUseCase(
     d.searchRepository,
     d.listingRepository,
     d.imageRepository,
     d.listingSourceApi,
-    d.listingSourceScraper
+    d.listingSourceScraper,
+    maxRunMillis
   )
   const executing = useCase.execute()
   await vi.runAllTimersAsync()
@@ -104,6 +111,27 @@ describe('RunListingScrapingUseCase', () => {
       { listingId: 'id-a', urlRemote: 'a2.jpg' },
       { listingId: 'id-b', urlRemote: 'b1.jpg' },
     ])
+  })
+
+  it('defers the remaining searches once the run budget is spent', async () => {
+    // Without this the function was killed at the serverless ceiling: a 504,
+    // and the search it died on never got its lastScrapedAt stamped.
+    const d = deps([], [], 3)
+
+    const result = await run(d, 1)
+
+    expect(result.searchesScraped).toBe(1)
+    expect(result.searchesDeferred).toBe(2)
+    expect(d.searchRepository.markScraped).toHaveBeenCalledTimes(1)
+  })
+
+  it('scrapes every search when the budget is generous', async () => {
+    const d = deps([], [], 3)
+
+    const result = await run(d, 600_000)
+
+    expect(result.searchesScraped).toBe(3)
+    expect(result.searchesDeferred).toBe(0)
   })
 
   it('marks the search scraped even when the source throws', async () => {

@@ -9,9 +9,12 @@ async function main() {
     const result = await container.runListingScrapingUseCase.execute()
     
     console.log('\n✅ Scraping completed!')
-    console.log(`   Searches processed: ${result.totalSearches}`)
+    console.log(`   Searches processed: ${result.searchesScraped}/${result.totalSearches}`)
     console.log(`   New listings: ${result.newListings}`)
     console.log(`   Updated listings: ${result.updatedListings}`)
+    if (result.searchesDeferred > 0) {
+      console.log(`   Deferred to next run: ${result.searchesDeferred}`)
+    }
   } catch (error) {
     console.error('❌ Scraping failed:', error)
     process.exit(1)

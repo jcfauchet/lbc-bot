@@ -92,6 +92,13 @@ interface SearchPayload {
 export class LeBonCoinApiClient implements IListingSource {
   private readonly API_BASE_URL = 'https://api.leboncoin.fr'
   private readonly SEARCH_ENDPOINT = `${this.API_BASE_URL}/finder/search`
+
+  // Neither fetch below was bounded, and DataDome does not always refuse
+  // outright -- it can simply let the connection hang. Unbounded, a single
+  // blocked search burned ~165s of the cron's wall clock across
+  // retryWithBackoff's three attempts, which is how the scrape run kept being
+  // killed at its ceiling. A healthy call answers in well under a second.
+  private readonly REQUEST_TIMEOUT_MS = 15_000
   private cookies: string = ''
   private readonly bypass: DataDomeBypass
   private readonly proxyManager: ProxyManager | null
@@ -146,6 +153,7 @@ export class LeBonCoinApiClient implements IListingSource {
             'Cookie': cookieHeader,
           },
           body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(this.REQUEST_TIMEOUT_MS),
         }
 
         // This client CANNOT route through a proxy as written, and used to claim
@@ -261,6 +269,7 @@ export class LeBonCoinApiClient implements IListingSource {
 
     const fetchOptions: RequestInit = {
       headers: browserHeaders,
+      signal: AbortSignal.timeout(this.REQUEST_TIMEOUT_MS),
     }
 
     // Same as in search(): `agent` is a node-fetch option that native fetch drops

@@ -15,7 +15,15 @@ export class RunListingScrapingUseCase {
     private listingRepository: IListingRepository,
     private imageRepository: IListingImageRepository,
     private listingSourceApi: IListingSource,
-    private listingSourceScraper: IListingSource
+    private listingSourceScraper: IListingSource,
+    // Wall-clock budget for one run, checked before starting each search.
+    // The route allows 800s. A fully DataDome-throttled search costs at most
+    // ~145s now that the HTTP calls are bounded (three attempts, each capped
+    // at two 15s requests, plus the 5s and 11s backoffs), so starting one at
+    // 599s still lands under the ceiling with room to write the response.
+    // Without this the function was just killed: a 504, and the search it died
+    // on never got its lastScrapedAt stamped.
+    private maxRunMillis: number = 600_000
   ) {}
 
   private async getListings(search: Search): Promise<ScrapedListing[]> {
@@ -33,15 +41,30 @@ export class RunListingScrapingUseCase {
 
   async execute(): Promise<{
     totalSearches: number
+    searchesScraped: number
+    searchesDeferred: number
     newListings: number
     updatedListings: number
   }> {
     const searches = await this.searchRepository.findActive()
+    const startedAt = Date.now()
 
     let newListings = 0
     let updatedListings = 0
+    let searchesScraped = 0
 
     for (const search of searches) {
+      const elapsed = Date.now() - startedAt
+      if (elapsed > this.maxRunMillis) {
+        // Leaving the rest for the next run costs nothing: findActive orders by
+        // lastScrapedAt, so whatever is skipped here is picked first next time.
+        console.log(
+          `Run budget spent after ${Math.round(elapsed / 1000)}s — ` +
+            `${searches.length - searchesScraped} search(es) deferred to the next run`
+        )
+        break
+      }
+
       try {
         console.log(`Scraping search: ${search.name}`)
         const scrapedListings = await this.getListings(search)
@@ -103,12 +126,15 @@ export class RunListingScrapingUseCase {
         console.log(`⚠️ Error occurred, waiting ${randomDelay}ms before next search...`)
         await this.delay(randomDelay)
       } finally {
+        searchesScraped++
         await this.searchRepository.markScraped(search.id)
       }
     }
 
     return {
       totalSearches: searches.length,
+      searchesScraped,
+      searchesDeferred: searches.length - searchesScraped,
       newListings,
       updatedListings,
     }
