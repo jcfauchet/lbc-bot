@@ -1,7 +1,7 @@
 import { ISearchRepository } from '@/domain/repositories/ISearchRepository'
 import { IListingRepository } from '@/domain/repositories/IListingRepository'
 import { IListingImageRepository } from '@/domain/repositories/IListingImageRepository'
-import { IListingSource } from '@/domain/services/IListingSource'
+import { IListingSource, DataDomeBlockedError } from '@/domain/services/IListingSource'
 import { Listing } from '@/domain/entities/Listing'
 import { ListingImage } from '@/domain/entities/ListingImage'
 import { Money } from '@/domain/value-objects/Money'
@@ -36,6 +36,14 @@ export class RunListingScrapingUseCase {
       return scrapedListingsByApi
     } catch (error) {
       console.error(`Error getting listings for search: ${search.name}`, error)
+
+      if (error instanceof DataDomeBlockedError) {
+        // The browser fallback hits the same refusal, and costs a chromium
+        // launch plus a screenshot upload to discover it. Measured on the 04:00
+        // run of 23 Aug 2026: ~60s and one wasted Cloudinary upload per search.
+        console.log('--> Refused by DataDome; not retrying through the browser')
+        throw error
+      }
 
       console.log('--> Trying to scrape with scraper...')
       const scrapedListingsByScraper = await this.listingSourceScraper.search(search.url, search.name)

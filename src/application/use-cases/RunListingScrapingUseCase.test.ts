@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { RunListingScrapingUseCase } from './RunListingScrapingUseCase'
 import { Listing } from '@/domain/entities/Listing'
 import { ScrapedListing } from '@/infrastructure/scraping/types'
+import { DataDomeBlockedError } from '@/domain/services/IListingSource'
 
 const ad = (lbcId: string, imageUrls: string[] = []): ScrapedListing => ({
   lbcId,
@@ -161,6 +162,32 @@ describe('RunListingScrapingUseCase', () => {
 
     expect(d.searchRepository.markScraped.mock.calls.map((c: any[]) => c[0]))
       .toEqual(['search-1', 'search-2', 'search-3'])
+  })
+
+  it('does not fall back to the browser when DataDome refused the API', async () => {
+    // The scraper walks into the same refusal, after a chromium launch and a
+    // screenshot upload.
+    const d = deps([])
+    d.listingSourceApi.search = vi.fn(async () => {
+      throw new DataDomeBlockedError()
+    })
+
+    const result = await run(d)
+
+    expect(d.listingSourceScraper.search).not.toHaveBeenCalled()
+    expect(d.searchRepository.markScraped).toHaveBeenCalledWith('search-1')
+    expect(result.newListings).toBe(0)
+  })
+
+  it('still falls back to the browser for any other API failure', async () => {
+    const d = deps([])
+    d.listingSourceApi.search = vi.fn(async () => {
+      throw new Error('socket hang up')
+    })
+
+    await run(d)
+
+    expect(d.listingSourceScraper.search).toHaveBeenCalledTimes(1)
   })
 
   it('marks the search scraped even when the source throws', async () => {

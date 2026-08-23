@@ -1,7 +1,7 @@
 import { CATEGORIES_TO_EXCLUDE_FROM_LBC } from '../config/constants'
 import { env } from '../config/env'
 import { ScrapedListing } from '../scraping/types'
-import { IListingSource } from '@/domain/services/IListingSource'
+import { IListingSource, DataDomeBlockedError } from '@/domain/services/IListingSource'
 import { DataDomeBypass } from './DataDomeBypass'
 import { ProxyManager } from '../proxy/ProxyManager'
 
@@ -89,6 +89,19 @@ interface SearchPayload {
   sort_order: string
 }
 
+/**
+ * LBC_DATADOME_COOKIE has been supplied both ways: as `datadome=<value>` and as
+ * the bare value. Sent bare it becomes a `Cookie:` header with no cookie name,
+ * which the server discards -- so the whole hardcoded-cookie fallback silently
+ * did nothing, expired or not. Normalise rather than trust the operator to
+ * remember the prefix.
+ */
+export function normalizeCookieHeader(raw: string | undefined): string {
+  const value = raw?.trim() ?? ''
+  if (!value) return ''
+  return /^[A-Za-z0-9_-]+=/.test(value) ? value : `datadome=${value}`
+}
+
 export class LeBonCoinApiClient implements IListingSource {
   private readonly API_BASE_URL = 'https://api.leboncoin.fr'
   private readonly SEARCH_ENDPOINT = `${this.API_BASE_URL}/finder/search`
@@ -103,7 +116,7 @@ export class LeBonCoinApiClient implements IListingSource {
   private readonly bypass: DataDomeBypass
   private readonly proxyManager: ProxyManager | null
   
-  private readonly HARDCODED_COOKIE = env.LBC_DATADOME_COOKIE ?? ''
+  private readonly HARDCODED_COOKIE = normalizeCookieHeader(env.LBC_DATADOME_COOKIE)
   private useHardcodedCookie: boolean = false
   private proxyWarningEmitted: boolean = false
 
@@ -115,6 +128,13 @@ export class LeBonCoinApiClient implements IListingSource {
   }
 
   async search(searchUrl: string, searchName?: string): Promise<ScrapedListing[]> {
+    // Scope the fallback to this search. The flag is instance state on a
+    // container singleton, and nothing reset it except a successful request --
+    // so one 403 switched every later search of the run onto the hardcoded
+    // cookie before it had even tried a fresh session, and they failed in a
+    // row. Observed on the 04:00 run of 23 Aug 2026: three searches lost that way.
+    this.useHardcodedCookie = false
+
     const randomDelay = this.bypass.getRandomDelayBeforeRequest()
     console.log(`⏳ Waiting ${randomDelay}ms before API request to avoid DataDome blocking...`)
     await this.bypass.delay(randomDelay)
@@ -189,7 +209,7 @@ export class LeBonCoinApiClient implements IListingSource {
                 console.log('🔄 Switching to hardcoded cookie fallback...')
                 this.useHardcodedCookie = true
               }
-              throw new Error('Access blocked by Datadome. The API request was rejected.')
+              throw new DataDomeBlockedError()
             }
           }
           throw new Error(`API request failed with status ${response.status}`)
