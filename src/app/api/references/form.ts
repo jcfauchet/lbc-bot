@@ -1,6 +1,7 @@
 export const MAX_IMAGES = 5
 /** Vercel caps request bodies at 4.5 MB; keep headroom for the multipart envelope. */
 export const MAX_TOTAL_UPLOAD_BYTES = 4_000_000
+export const TOO_HEAVY_MESSAGE = 'Photos trop lourdes : envoie-en moins ou des captures plus petites.'
 
 export function parseMaxPriceCents(raw: string): number | null | 'invalid' {
   const compact = raw.replace(/[\s  €]/g, '').replace(',', '.')
@@ -26,7 +27,7 @@ export function parseReferenceForm(input: FormInput): FormResult {
     return { ok: false, status: 400, error: 'Seules les photos sont acceptées.' }
   }
   if (input.images.reduce((sum, i) => sum + i.size, 0) > MAX_TOTAL_UPLOAD_BYTES) {
-    return { ok: false, status: 413, error: 'Photos trop lourdes : envoie-en moins ou des captures plus petites.' }
+    return { ok: false, status: 413, error: TOO_HEAVY_MESSAGE }
   }
 
   const maxPriceCents = parseMaxPriceCents(typeof input.maxPrice === 'string' ? input.maxPrice : '')

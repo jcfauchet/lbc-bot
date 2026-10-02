@@ -3,6 +3,7 @@
 import { useSearchParams } from 'next/navigation'
 import { Suspense, useCallback, useEffect, useState } from 'react'
 import { resizeImage } from './resize-image'
+import { isUploadTooHeavy, TOO_HEAVY_MESSAGE, uploadErrorMessage } from './upload-error'
 
 type Reference = {
   id: string; name: string; note: string | null; maxPriceCents: number | null; isActive: boolean
@@ -34,10 +35,12 @@ function ReferencesContent() {
     try {
       const body = new FormData()
       body.set('name', name); body.set('maxPrice', maxPrice); body.set('note', note)
-      for (const [i, file] of files.entries()) body.append('images', await resizeImage(file), `photo-${i}.jpg`)
+      const blobs = await Promise.all(files.map(resizeImage))
+      if (isUploadTooHeavy(blobs)) { setError(TOO_HEAVY_MESSAGE); return }
+      blobs.forEach((blob, i) => body.append('images', blob, `photo-${i}.jpg`))
       const res = await fetch(`/api/references?k=${encodeURIComponent(key)}`, { method: 'POST', body })
       const json = await res.json().catch(() => ({}))
-      if (!res.ok) { setError(json.error ?? 'Erreur, réessaie.'); return }
+      if (!res.ok) { setError(uploadErrorMessage(res.status, json)); return }
       setMessage('Référence ajoutée. Je regarde les annonces des 7 derniers jours dans le quart d’heure, puis chaque nouvelle annonce : tu reçois un mail dès que l’une lui ressemble.')
       setFiles([]); setName(''); setMaxPrice(''); setNote('')
       await load()
