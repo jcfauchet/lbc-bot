@@ -1,6 +1,7 @@
 import { Listing } from '@/domain/entities/Listing'
 import { AiAnalysis } from '@/domain/entities/AiAnalysis'
 import { env } from '@/infrastructure/config/env'
+import type { PendingAlert } from '@/domain/repositories/IReferenceRepository'
 
 export class EmailTemplates {
   static goodDealsDigest(
@@ -104,5 +105,43 @@ export class EmailTemplates {
 </body>
 </html>
     `
+  }
+
+  static referenceMatch(alert: PendingAlert): { subject: string; html: string } {
+    const price = `${(alert.priceCents / 100).toFixed(0)} €`
+    const photo = (url: string | null, caption: string) => url
+      ? `<td style="width: 50%; padding: 6px; vertical-align: top; text-align: center;">
+           <img src="${url}" alt="${caption}" style="width: 100%; max-width: 280px; border-radius: 8px; border: 1px solid #ddd;" />
+           <div style="font-size: 12px; color: #666; margin-top: 4px;">${caption}</div>
+         </td>`
+      : ''
+    const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 640px; margin: 0 auto; padding: 20px;">
+  <h1 style="font-size: 22px; margin: 0 0 6px 0;">🎯 Ça ressemble à ta référence</h1>
+  <p style="margin: 0 0 16px 0; color: #666;">${alert.referenceName}</p>
+  <table style="width: 100%; border-collapse: collapse;"><tr>
+    ${photo(alert.listingImageUrl, 'Annonce')}
+    ${photo(alert.referenceImageUrl, 'Ta référence')}
+  </tr></table>
+  <h2 style="font-size: 18px; margin: 16px 0 4px 0;">
+    <a href="${alert.listingUrl}" style="color: #0066cc; text-decoration: none;">${alert.listingTitle}</a>
+  </h2>
+  <p style="margin: 0; font-size: 22px; font-weight: bold; color: #ff6b00;">${price}</p>
+  ${alert.city ? `<p style="margin: 2px 0; color: #666;">${alert.city}</p>` : ''}
+  ${alert.reason ? `<p style="margin: 10px 0; color: #333;"><strong>Pourquoi :</strong> ${alert.reason}</p>` : ''}
+  <p style="margin: 16px 0;">
+    <a href="${alert.listingUrl}" style="display: inline-block; background: #ff6b00; color: white; text-decoration: none; font-weight: bold; padding: 12px 22px; border-radius: 8px;">Voir l'annonce</a>
+  </p>
+  <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #eee; font-size: 13px; color: #999;">
+    C'est bien la même pièce ?
+    <a href="${env.APP_URL}/feedback?id=${alert.listingId}&vote=good" style="margin-left: 8px; color: #22c55e; text-decoration: none; font-weight: bold;">👍 Oui</a>
+    <a href="${env.APP_URL}/feedback?id=${alert.listingId}&vote=bad" style="margin-left: 8px; color: #ef4444; text-decoration: none; font-weight: bold;">👎 Non</a>
+  </div>
+</body>
+</html>`
+    return { subject: `🎯 Ressemble à ta référence : ${alert.referenceName}`, html }
   }
 }
