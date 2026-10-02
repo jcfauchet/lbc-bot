@@ -155,6 +155,7 @@ model PhotoReference {
   maxPriceCents Int?
   note          String?          @db.Text
   isActive      Boolean          @default(true)
+  backfilledAt  DateTime?
   createdAt     DateTime         @default(now())
   images        ReferenceImage[]
   matches       ReferenceMatch[]

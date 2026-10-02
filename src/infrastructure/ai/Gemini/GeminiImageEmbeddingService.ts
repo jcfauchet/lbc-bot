@@ -1,4 +1,5 @@
 import type { IImageEmbeddingService } from '@/domain/services/IImageEmbeddingService'
+import { fetchImage, IMAGE_FETCH_TIMEOUT_MS } from '../fetch-image'
 
 export const IMAGE_EMBEDDING_DIMENSIONS = 768
 
@@ -14,15 +15,13 @@ export class GeminiImageEmbeddingService implements IImageEmbeddingService {
   ) {}
 
   async embedImage(imageUrl: string): Promise<number[]> {
-    const image = await fetch(imageUrl)
-    if (!image.ok) throw new Error(`Image download failed (${image.status}) for ${imageUrl}`)
-    const mimeType = image.headers.get('content-type')?.split(';')[0] || 'image/jpeg'
-    const data = Buffer.from(await image.arrayBuffer()).toString('base64')
+    const { mimeType, data } = await fetchImage(imageUrl)
 
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:embedContent`,
       {
         method: 'POST',
+        signal: AbortSignal.timeout(IMAGE_FETCH_TIMEOUT_MS),
         headers: { 'content-type': 'application/json', 'x-goog-api-key': this.apiKey },
         body: JSON.stringify({
           content: { parts: [{ inline_data: { mime_type: mimeType, data } }] },

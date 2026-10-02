@@ -1,12 +1,10 @@
 import { GoogleGenAI } from '@google/genai'
 import type { IReferenceMatchVerifier, ReferenceMatchInput, ReferenceVerdict } from '@/domain/services/IReferenceMatchVerifier'
 import { buildReferenceMatchPrompt, parseReferenceVerdict } from '../reference-match-prompt'
+import { fetchImage } from '../fetch-image'
 
 async function toInlinePart(url: string) {
-  const response = await fetch(url)
-  if (!response.ok) throw new Error(`Image download failed (${response.status}) for ${url}`)
-  const mimeType = response.headers.get('content-type')?.split(';')[0] || 'image/jpeg'
-  return { inlineData: { mimeType, data: Buffer.from(await response.arrayBuffer()).toString('base64') } }
+  return { inlineData: await fetchImage(url) }
 }
 
 export class GeminiReferenceMatchVerifier implements IReferenceMatchVerifier {

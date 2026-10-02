@@ -38,10 +38,7 @@ function ReferencesContent() {
       const res = await fetch(`/api/references?k=${encodeURIComponent(key)}`, { method: 'POST', body })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) { setError(json.error ?? 'Erreur, réessaie.'); return }
-      const found = json.backfill?.confirmed ?? 0
-      setMessage(found > 0
-        ? `Référence ajoutée. ${found} annonce${found > 1 ? 's' : ''} des 7 derniers jours lui ressemble${found > 1 ? 'nt' : ''} : regarde tes mails !`
-        : 'Référence ajoutée. Je te préviens dès qu’une annonce lui ressemble.')
+      setMessage('Référence ajoutée. Je regarde les annonces des 7 derniers jours dans le quart d’heure, puis chaque nouvelle annonce : tu reçois un mail dès que l’une lui ressemble.')
       setFiles([]); setName(''); setMaxPrice(''); setNote('')
       await load()
     } finally {

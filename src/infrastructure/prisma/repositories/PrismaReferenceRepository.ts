@@ -62,10 +62,11 @@ export class PrismaReferenceRepository implements IReferenceRepository {
     `
   }
 
-  async findListingsToCheck(limit: number): Promise<ListingToCheck[]> {
+  async findListingsToCheck(limit: number, maxAgeDays: number): Promise<ListingToCheck[]> {
     const listings = await this.prisma.$queryRaw<Array<{ id: string; title: string; priceCents: number }>>`
       SELECT p."id", p."title", p."priceCents" FROM "lbc_product_listings" p
       WHERE p."referenceCheckedAt" IS NULL
+        AND p."createdAt" >= NOW() - make_interval(days => ${maxAgeDays})
         AND NOT EXISTS (SELECT 1 FROM "listing_feedbacks" f WHERE f."listingId" = p."id" AND f."isGood" = false)
       ORDER BY p."createdAt" DESC LIMIT ${limit}
     `
@@ -78,7 +79,7 @@ export class PrismaReferenceRepository implements IReferenceRepository {
     `
   }
 
-  async findCandidates(listingId: string, minSimilarity: number): Promise<ReferenceCandidate[]> {
+  async findCandidates(listingId: string, minSimilarity: number, limit: number): Promise<ReferenceCandidate[]> {
     const rows = await this.prisma.$queryRaw<CandidateRow[]>`
       SELECT r."id" AS "referenceId", r."name", r."note", r."maxPriceCents",
              MAX(1 - (li."embedding" <=> ri."embedding")) AS "similarity",
@@ -91,11 +92,12 @@ export class PrismaReferenceRepository implements IReferenceRepository {
       GROUP BY r."id"
       HAVING MAX(1 - (li."embedding" <=> ri."embedding")) >= ${minSimilarity}
       ORDER BY "similarity" DESC
+      LIMIT ${limit}
     `
     return rows.map(toCandidate)
   }
 
-  async findRecentListingsCloseTo(referenceId: string, minSimilarity: number, days: number) {
+  async findRecentListingsCloseTo(referenceId: string, minSimilarity: number, days: number, limit: number) {
     const rows = await this.prisma.$queryRaw<Array<CandidateRow & { listingId: string; title: string; priceCents: number }>>`
       SELECT p."id" AS "listingId", p."title", p."priceCents",
              r."id" AS "referenceId", r."name", r."note", r."maxPriceCents",
@@ -111,9 +113,25 @@ export class PrismaReferenceRepository implements IReferenceRepository {
       GROUP BY p."id", r."id"
       HAVING MAX(1 - (li."embedding" <=> ri."embedding")) >= ${minSimilarity}
       ORDER BY "similarity" DESC
+      LIMIT ${limit}
     `
     const listings = await this.attachImages(rows.map((r) => ({ id: r.listingId, title: r.title, priceCents: r.priceCents })))
     return rows.map((row, i) => ({ listing: listings[i], candidate: toCandidate(row) }))
+  }
+
+  async findReferencesToBackfill(): Promise<string[]> {
+    const rows = await this.prisma.$queryRaw<Array<{ id: string }>>`
+      SELECT r."id" FROM "photo_references" r
+      WHERE r."isActive" AND r."backfilledAt" IS NULL
+        AND EXISTS (SELECT 1 FROM "reference_images" ri WHERE ri."referenceId" = r."id")
+        AND NOT EXISTS (SELECT 1 FROM "reference_images" ri WHERE ri."referenceId" = r."id" AND ri."embedding" IS NULL)
+      ORDER BY r."createdAt" ASC
+    `
+    return rows.map((r) => r.id)
+  }
+
+  async markBackfilled(referenceId: string): Promise<void> {
+    await this.prisma.photoReference.update({ where: { id: referenceId }, data: { backfilledAt: new Date() } })
   }
 
   async recordMatch(match: RecordedMatch): Promise<void> {

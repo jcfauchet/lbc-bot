@@ -138,6 +138,11 @@ export class Container {
         backfillDays: 7,
         emailTo: env.NOTIFICATION_EMAIL_TO,
         emailFrom: env.NOTIFICATION_EMAIL_FROM ?? 'LBC Bot <bot@example.com>',
+        // Leaves most of the 800s cron to the deal funnel that runs after it.
+        maxRunMs: 120_000,
+        maxVerificationsPerRun: 20,
+        maxCandidatesPerListing: 3,
+        maxBackfillPerReference: 15,
       },
     )
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { RunReferenceMatchUseCase } from './RunReferenceMatchUseCase'
+import { RunReferenceMatchUseCase, type ReferenceMatchConfig } from './RunReferenceMatchUseCase'
 import type { ListingToCheck, PendingAlert, ReferenceCandidate } from '@/domain/repositories/IReferenceRepository'
 
 const listing = (id: string, priceCents = 12000, embedded = false): ListingToCheck => ({
@@ -23,6 +23,9 @@ function setup(opts: {
   verdict?: (referenceId: string) => { same: boolean; reason: string | null }
   pending?: PendingAlert[]
   missingRefImages?: Array<{ id: string; url: string }>
+  toBackfill?: string[]
+  config?: Partial<ReferenceMatchConfig>
+  now?: () => number
 } = {}) {
   const recorded: any[] = []
   const repo = {
@@ -31,8 +34,10 @@ function setup(opts: {
     setReferenceImageEmbedding: vi.fn(async () => {}),
     findListingsToCheck: vi.fn(async () => opts.listings ?? []),
     setListingImageEmbedding: vi.fn(async () => {}),
-    findCandidates: vi.fn(async (listingId: string) => opts.candidates?.[listingId] ?? []),
+    findCandidates: vi.fn(async (listingId: string, ..._rest: any[]) => opts.candidates?.[listingId] ?? []),
     findRecentListingsCloseTo: vi.fn(async (..._args: any[]): Promise<any[]> => []),
+    findReferencesToBackfill: vi.fn(async () => opts.toBackfill ?? []),
+    markBackfilled: vi.fn(async () => {}),
     recordMatch: vi.fn(async (m: any) => { recorded.push(m) }),
     markListingChecked: vi.fn(async () => {}),
     findPendingAlerts: vi.fn(async () => opts.pending ?? []),
@@ -43,7 +48,9 @@ function setup(opts: {
   const mailer = { send: vi.fn(async (_data: any) => {}) }
   const useCase = new RunReferenceMatchUseCase(repo as any, embedder, verifier, mailer, {
     minSimilarity: 0.75, maxListingsPerRun: 60, backfillDays: 7, emailTo: ['her@example.com'], emailFrom: 'bot@example.com',
-  })
+    maxRunMs: 120_000, maxVerificationsPerRun: 20, maxCandidatesPerListing: 3, maxBackfillPerReference: 15,
+    ...opts.config,
+  }, opts.now)
   return { repo, embedder, verifier, mailer, useCase, recorded }
 }
 
@@ -137,14 +144,73 @@ describe('RunReferenceMatchUseCase', () => {
     expect(res.alerted).toBe(0)
   })
 
-  it('backfill judges recent close listings for the new reference and sends alerts', async () => {
-    const { repo, verifier, mailer, useCase, recorded } = setup({ pending: [alert('m1')] })
+  it('only looks at recent listings and caps candidates per listing', async () => {
+    const { repo, useCase } = setup({ listings: [listing('l1')] })
+    await useCase.execute()
+    expect(repo.findListingsToCheck).toHaveBeenCalledWith(60, 7)
+    expect(repo.findCandidates).toHaveBeenCalledWith('l1', 0.75, 3)
+  })
+
+  it('stops taking listings once the run deadline has passed, leaving them unchecked', async () => {
+    let clock = 0
+    const { repo, embedder, useCase } = setup({ listings: [listing('l1'), listing('l2')], now: () => clock })
+    embedder.embedImage.mockImplementation(async () => { clock += 200_000; return [0.1] })
+    const res = await useCase.execute()
+    expect(repo.markListingChecked).toHaveBeenCalledTimes(1)
+    expect(repo.markListingChecked).toHaveBeenCalledWith('l1')
+    expect(res.checked).toBe(1)
+  })
+
+  it('stops before a listing whose candidates exceed the verification budget, keeping it for next run', async () => {
+    const { repo, verifier, useCase } = setup({
+      listings: [listing('l1'), listing('l2')],
+      candidates: { l1: [candidate('a')], l2: [candidate('a'), candidate('b')] },
+      config: { maxVerificationsPerRun: 2 },
+    })
+    await useCase.execute()
+    expect(verifier.verify).toHaveBeenCalledTimes(1)
+    expect(repo.markListingChecked).toHaveBeenCalledWith('l1')
+    expect(repo.markListingChecked).not.toHaveBeenCalledWith('l2')
+  })
+
+  it('marks a listing checked when its photos are gone (4xx), without failing the run', async () => {
+    const { repo, embedder, useCase } = setup({ listings: [listing('gone')] })
+    embedder.embedImage.mockRejectedValueOnce(new Error('Image download failed (404) for https://img/gone.jpg'))
+    const res = await useCase.execute()
+    expect(repo.markListingChecked).toHaveBeenCalledWith('gone')
+    expect(res.failed).toBe(0)
+  })
+
+  it('matches on the photos that remain when one of them is gone', async () => {
+    const l = listing('l1')
+    l.images.push({ id: 'l1-img2', url: 'https://img/l1b.jpg', hasEmbedding: false })
+    const { repo, embedder, useCase } = setup({ listings: [l], candidates: { l1: [candidate('a')] } })
+    embedder.embedImage.mockRejectedValueOnce(new Error('Image download failed (404) for https://img/l1.jpg'))
+    const res = await useCase.execute()
+    expect(repo.setListingImageEmbedding).toHaveBeenCalledWith('l1-img2', [0.1, 0.2])
+    expect(res).toMatchObject({ checked: 1, confirmed: 1 })
+  })
+
+  it('backfills a new reference from the cron, capped, then marks it done and alerts', async () => {
+    const { repo, verifier, mailer, useCase, recorded } = setup({ toBackfill: ['new'], pending: [alert('m1')] })
     repo.findRecentListingsCloseTo.mockResolvedValueOnce([{ listing: listing('old', 12000, true), candidate: candidate('new') }])
-    const res = await useCase.backfill('new')
-    expect(repo.findRecentListingsCloseTo).toHaveBeenCalledWith('new', 0.75, 7)
+    const res = await useCase.execute()
+    expect(repo.findRecentListingsCloseTo).toHaveBeenCalledWith('new', 0.75, 7, 15)
     expect(verifier.verify).toHaveBeenCalledOnce()
     expect(recorded[0]).toMatchObject({ referenceId: 'new', listingId: 'old', confirmed: true })
+    expect(repo.markBackfilled).toHaveBeenCalledWith('new')
     expect(mailer.send).toHaveBeenCalledOnce()
     expect(res).toMatchObject({ judged: 1, confirmed: 1, alerted: 1 })
+  })
+
+  it('leaves a backfill pending when the verification budget runs out mid-way', async () => {
+    const { repo, verifier, useCase } = setup({ toBackfill: ['new'], config: { maxVerificationsPerRun: 1 } })
+    repo.findRecentListingsCloseTo.mockResolvedValueOnce([
+      { listing: listing('a1', 12000, true), candidate: candidate('new') },
+      { listing: listing('a2', 12000, true), candidate: candidate('new') },
+    ])
+    await useCase.execute()
+    expect(verifier.verify).toHaveBeenCalledTimes(1)
+    expect(repo.markBackfilled).not.toHaveBeenCalled()
   })
 })

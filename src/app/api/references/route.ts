@@ -46,13 +46,9 @@ export async function POST(req: NextRequest) {
       }
     }))
 
-    let backfill = null
-    try {
-      backfill = await container.runReferenceMatchUseCase.backfill(created.id)
-    } catch (err) {
-      console.error(`Reference backfill failed for ${created.id}:`, err)
-    }
-    return NextResponse.json({ id: created.id, backfill })
+    // The 7-day backfill runs in the next cron pass, not here: it can take
+    // minutes, and a timed-out upload invites a retry that duplicates the reference.
+    return NextResponse.json({ id: created.id })
   } catch (err) {
     console.error('Reference creation failed:', err)
     return NextResponse.json({ error: "L'enregistrement a échoué, réessaie dans un instant." }, { status: 500 })

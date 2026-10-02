@@ -84,8 +84,12 @@ export const envSchema = z.object({
   // disables the check.
   MASS_MARKET_MIN_MATCHES: z.coerce.number().min(0).default(4),
   // Secret in the references page link (/feedback/references?k=...). Unset locks
-  // the page and API and hides the button in emails.
-  REFERENCES_KEY: z.string().min(16).optional(),
+  // the page and API and hides the button in emails. A short or empty value is
+  // dropped rather than rejected: failing here would take down every route.
+  REFERENCES_KEY: z
+    .string()
+    .optional()
+    .transform((v) => (v && v.length >= 16 ? v : undefined)),
   // Cosine similarity between listing and reference photos from which Gemini is
   // asked "same model?". Deliberately loose at launch; tune from reference_matches.
   REFERENCE_MATCH_MIN_SIMILARITY: z.coerce.number().min(0).max(1).default(0.75),

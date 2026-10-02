@@ -4,6 +4,8 @@ CREATE TABLE "photo_references" (
     "maxPriceCents" INTEGER,
     "note" TEXT,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
+    -- Set once the 7-day backfill has judged every close recent listing.
+    "backfilledAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "photo_references_pkey" PRIMARY KEY ("id")
 );

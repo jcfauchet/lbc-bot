@@ -46,12 +46,16 @@ export interface IReferenceRepository {
   setActive(id: string, isActive: boolean): Promise<void>
   findReferenceImagesMissingEmbedding(limit: number): Promise<ImageToEmbed[]>
   setReferenceImageEmbedding(imageId: string, embedding: number[]): Promise<void>
-  findListingsToCheck(limit: number): Promise<ListingToCheck[]>
+  /** Unchecked listings scraped in the last `maxAgeDays`, newest first, not voted down. */
+  findListingsToCheck(limit: number, maxAgeDays: number): Promise<ListingToCheck[]>
   setListingImageEmbedding(imageId: string, embedding: number[]): Promise<void>
   /** Active references close to this listing's photos, excluding pairs already judged. */
-  findCandidates(listingId: string, minSimilarity: number): Promise<ReferenceCandidate[]>
+  findCandidates(listingId: string, minSimilarity: number, limit: number): Promise<ReferenceCandidate[]>
   /** Recent listings (embedded photos, not voted down) close to one reference, excluding pairs already judged. */
-  findRecentListingsCloseTo(referenceId: string, minSimilarity: number, days: number): Promise<Array<{ listing: ListingToCheck; candidate: ReferenceCandidate }>>
+  findRecentListingsCloseTo(referenceId: string, minSimilarity: number, days: number, limit: number): Promise<Array<{ listing: ListingToCheck; candidate: ReferenceCandidate }>>
+  /** Active references never backfilled whose photos are all embedded. */
+  findReferencesToBackfill(): Promise<string[]>
+  markBackfilled(referenceId: string): Promise<void>
   recordMatch(match: RecordedMatch): Promise<void>
   markListingChecked(listingId: string): Promise<void>
   findPendingAlerts(): Promise<PendingAlert[]>
