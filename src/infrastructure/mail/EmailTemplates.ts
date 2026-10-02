@@ -5,6 +5,16 @@ import type { PendingAlert } from '@/domain/repositories/IReferenceRepository'
 import { referencesPageUrl } from './references-link'
 
 export class EmailTemplates {
+  /** The comp the estimate leans on, as a link she can open to judge it herself. */
+  static comparableLink(source: string): string {
+    try {
+      const url = new URL(source)
+      return `<a href="${source}" style="color: #0066cc; text-decoration: none;">voir sur ${url.hostname.replace(/^www\./, '')}</a>`
+    } catch {
+      return source
+    }
+  }
+
   /** Always-at-hand link to the references page; empty when the feature is locked. */
   static referencesButton(): string {
     const url = referencesPageUrl(env.APP_URL, env.REFERENCES_KEY)
@@ -51,10 +61,8 @@ export class EmailTemplates {
                 </span>
               </div>
               <div style="margin-top: 10px;">
-                <strong>Estimation:</strong> ${analysis.estimatedMinPrice.toString()} - ${analysis.estimatedMaxPrice.toString()}
-                <br>
                 <strong>Marge estimée (min):</strong> ${analysis.estimatedMinPrice.minus(listing.price).toString()}
-                ${analysis.bestMatchSource ? `<br><strong>Revente recommandée:</strong> ${analysis.bestMatchSource}` : ''}
+                ${analysis.bestMatchSource ? `<br><strong>Objet comparable :</strong> ${EmailTemplates.comparableLink(analysis.bestMatchSource)}` : ''}
                 ${imageUrl ? `<br><a href="https://lens.google.com/upload?url=${encodeURIComponent(imageUrl)}" style="color: #0066cc; text-decoration: none; display: inline-block; margin-top: 5px;">🔍 Recherche Google Lens</a>` : ''}
               </div>
               <p style="margin: 10px 0; color: #333;">

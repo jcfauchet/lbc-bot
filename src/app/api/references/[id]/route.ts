@@ -10,6 +10,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params
   const body = (await req.json().catch(() => null)) as { isActive?: unknown } | null
   if (typeof body?.isActive !== 'boolean') return NextResponse.json({ error: 'isActive manquant' }, { status: 400 })
-  await container.referenceRepository.setActive(id, body.isActive)
+  const updated = await container.referenceRepository.setActive(id, body.isActive)
+  if (!updated) return NextResponse.json({ error: 'Référence introuvable' }, { status: 404 })
   return NextResponse.json({ ok: true })
 }

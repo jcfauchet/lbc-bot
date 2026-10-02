@@ -43,7 +43,8 @@ export interface IReferenceRepository {
   hasActiveReferences(): Promise<boolean>
   create(reference: NewPhotoReference, imageUrls: string[]): Promise<{ id: string; images: ImageToEmbed[] }>
   list(): Promise<PhotoReferenceSummary[]>
-  setActive(id: string, isActive: boolean): Promise<void>
+  /** False when no reference has this id. */
+  setActive(id: string, isActive: boolean): Promise<boolean>
   findReferenceImagesMissingEmbedding(limit: number): Promise<ImageToEmbed[]>
   setReferenceImageEmbedding(imageId: string, embedding: number[]): Promise<void>
   /** Unchecked listings scraped in the last `maxAgeDays`, newest first, not voted down. */

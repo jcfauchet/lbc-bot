@@ -45,8 +45,9 @@ export class PrismaReferenceRepository implements IReferenceRepository {
     }))
   }
 
-  async setActive(id: string, isActive: boolean): Promise<void> {
-    await this.prisma.photoReference.update({ where: { id }, data: { isActive } })
+  async setActive(id: string, isActive: boolean): Promise<boolean> {
+    const { count } = await this.prisma.photoReference.updateMany({ where: { id }, data: { isActive } })
+    return count > 0
   }
 
   async findReferenceImagesMissingEmbedding(limit: number): Promise<ImageToEmbed[]> {
@@ -152,8 +153,10 @@ export class PrismaReferenceRepository implements IReferenceRepository {
       where: { confirmed: true, notifiedAt: null },
       orderBy: { createdAt: 'asc' },
       include: {
-        reference: { include: { images: { orderBy: { createdAt: 'asc' }, take: 1 } } },
-        listing: { include: { images: { orderBy: { createdAt: 'asc' }, take: 1 } } },
+        // Listing photos share a createdAt (one createMany per ad): id keeps the
+        // insertion order, so the email shows the ad's real main photo.
+        reference: { include: { images: { orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], take: 1 } } },
+        listing: { include: { images: { orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], take: 1 } } },
       },
     })
     return rows.map((m) => ({
