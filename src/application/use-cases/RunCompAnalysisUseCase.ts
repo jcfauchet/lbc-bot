@@ -67,6 +67,12 @@ export interface LensBudgetConfig {
   rankingShortlistSize?: number
 }
 
+const MIN_DISTINCTIVE_TITLE_WORDS = 4
+
+function isDistinctiveTitle(title: string): boolean {
+  return title.trim().split(/\s+/).length >= MIN_DISTINCTIVE_TITLE_WORDS
+}
+
 /** Embeds short listing text to look up similar past feedback. */
 export interface ITextEmbedder {
   embed(text: string): Promise<number[]>
@@ -228,6 +234,27 @@ export class RunCompAnalysisUseCase {
         await this.listingRepository.update(listing)
         ignored++
         continue
+      }
+
+      // A repost of a piece already judged "pas intéressant": new lbcId, same
+      // title. The vector check below misses these because the feedback embedding
+      // covers the title plus the AI estimate, not the seller's description.
+      // Short titles ("Table basse vintage") are shared by unrelated pieces voted
+      // both ways, so only a distinctive title counts as the same listing.
+      if (this.feedbackRepository && isDistinctiveTitle(listing.title)) {
+        try {
+          const rejected = await this.feedbackRepository.findRejectedByTitle(listing.title)
+          if (rejected) {
+            listing.markAsIgnored()
+            const why = rejected.comment ? ` ("${rejected.comment}")` : ''
+            listing.setIgnoreReason(`Republication d'une annonce déjà jugée sans intérêt${why}`)
+            await this.listingRepository.update(listing)
+            ignored++
+            continue
+          }
+        } catch (err) {
+          console.error(`Repost check failed for ${listing.id}:`, err)
+        }
       }
 
       // Learn from past feedback: a near-duplicate of a piece already judged "pas

@@ -23,7 +23,9 @@ export const envSchema = z.object({
   // estimate band. 0 disables the gate.
   MIN_CONSERVATIVE_MARGIN_IN_EUR: z.coerce.number().min(0).default(60),
   MIN_LISTING_PRICE_EUR: z.coerce.number().min(0).default(50),
-  MAX_LISTING_PRICE_EUR: z.coerce.number().min(0).default(700),
+  // Feedback through Sep 2026: above ~450€ only 4/23 notified deals were liked,
+  // and half the rejections read "too expensive to buy for resale".
+  MAX_LISTING_PRICE_EUR: z.coerce.number().min(0).default(400),
   AI_PROVIDER: z.enum(['openai', 'gemini', 'random']).default('openai'),
   SEARCH_TERM_MIN_CONFIDENCE: z.coerce.number().min(0).max(1).default(0.8),
   APP_URL: z.string().url().default('http://localhost:3000'),

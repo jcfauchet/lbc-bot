@@ -271,6 +271,52 @@ describe('RunCompAnalysisUseCase', () => {
     expect(res.ignored).toBe(1)
   })
 
+  it('skips a repost of a rejected listing even when the embeddings disagree', async () => {
+    // Reposts get a new lbcId but keep the title; the feedback embedding covers
+    // "title. ai description" while the candidate's covers "title description",
+    // so the vector check alone misses them.
+    const d = deps({ listings: [mk('repost', 9, 240, { title: 'Lot de 10 appliques éventail' })] })
+    const embedder = { embed: vi.fn(async () => [0.1, 0.2, 0.3]) }
+    const feedbackRepository = {
+      findRejectedByTitle: vi.fn(async () => ({ comment: 'déjà proposé' })),
+      findSimilar: vi.fn(async () => [{ listingTitle: 'x', priceCents: 9000, isGood: false, similarity: 0.5 }]),
+    } as any
+    const useCase = new RunCompAnalysisUseCase(
+      d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
+      { dailyBudget: 8, monthlyBudget: 250, resaleFactor: 1, similarFeedbackSkipThreshold: 0.92 },
+      feedbackRepository, embedder,
+    )
+    const res = await useCase.execute()
+
+    expect(feedbackRepository.findRejectedByTitle).toHaveBeenCalledWith('Lot de 10 appliques éventail')
+    expect(embedder.embed).not.toHaveBeenCalled()
+    expect(d.compService.findComps).not.toHaveBeenCalled()
+    expect(d.statuses['repost']).toBe(ListingStatus.IGNORED)
+    expect(res.ignored).toBe(1)
+  })
+
+  it('does not treat a generic short title as a repost', async () => {
+    // "Table basse vintage" was voted both ways on unrelated pieces.
+    const d = deps({ listings: [mk('generic', 9, 120, { title: 'Table basse vintage' })], comps: { matches: [
+      { title: 'a', source: '1stdibs', link: 'https://1stdibs.com/a', isValueDomain: true, price: { value: 1000, currency: 'EUR' } },
+      { title: 'b', source: '1stdibs', link: 'https://1stdibs.com/b', isValueDomain: true, price: { value: 2000, currency: 'EUR' } },
+      { title: 'c', source: '1stdibs', link: 'https://1stdibs.com/c', isValueDomain: true, price: { value: 3000, currency: 'EUR' } },
+    ] } })
+    const feedbackRepository = {
+      findRejectedByTitle: vi.fn(async () => ({ comment: 'pas intéressant' })),
+      findSimilar: vi.fn(async () => []),
+    } as any
+    const useCase = new RunCompAnalysisUseCase(
+      d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
+      { dailyBudget: 8, monthlyBudget: 250, resaleFactor: 1 },
+      feedbackRepository,
+    )
+    const res = await useCase.execute()
+
+    expect(feedbackRepository.findRejectedByTitle).not.toHaveBeenCalled()
+    expect(res.analyzed).toBe(1)
+  })
+
   it('does not skip when the closest feedback is positive or below threshold', async () => {
     const d = deps({ listings: [mk('keep', 9, 120)], comps: { matches: [
       { title: 'a', source: '1stdibs', link: 'https://1stdibs.com/a', isValueDomain: true, price: { value: 1000, currency: 'EUR' } },

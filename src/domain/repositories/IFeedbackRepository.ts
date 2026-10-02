@@ -22,6 +22,8 @@ export interface IFeedbackRepository {
   updateEmbedding(id: string, embedding: number[]): Promise<void>
   updateComment(id: string, comment: string): Promise<void>
   findSimilar(embedding: number[], limit: number): Promise<SimilarFeedback[]>
+  /** A rejected listing with the same title (case- and whitespace-insensitive), if any. */
+  findRejectedByTitle(title: string): Promise<{ comment?: string } | null>
   /** Recent listings the user judged NOT worth it, newest first. */
   findRecentNegative(limit: number): Promise<FeedbackDigestItem[]>
   /** Recent listings the user judged worth it, newest first. */

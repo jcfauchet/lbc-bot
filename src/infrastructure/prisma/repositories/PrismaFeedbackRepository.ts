@@ -85,6 +85,20 @@ export class PrismaFeedbackRepository implements IFeedbackRepository {
     }))
   }
 
+  async findRejectedByTitle(title: string): Promise<{ comment?: string } | null> {
+    const rows = await this.prisma.$queryRaw<Array<{ comment: string | null }>>`
+      SELECT f."comment"
+      FROM "listing_feedbacks" f
+      JOIN "lbc_product_listings" p ON p.id = f."listingId"
+      WHERE f."isGood" = false
+        AND lower(regexp_replace(trim(p.title), '\\s+', ' ', 'g')) = lower(regexp_replace(trim(${title}), '\\s+', ' ', 'g'))
+      ORDER BY f."createdAt" DESC
+      LIMIT 1
+    `
+    if (rows.length === 0) return null
+    return { comment: rows[0].comment ?? undefined }
+  }
+
   async findRecentNegative(limit: number): Promise<FeedbackDigestItem[]> {
     return this.findRecentByVote(false, limit)
   }
