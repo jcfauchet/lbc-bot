@@ -37,7 +37,7 @@ the email.
 
 New tables (Prisma models, one migration):
 
-- `references` — `id`, `name`, `maxPriceCents Int?`, `note Text?`,
+- `photo_references` (`references` is a reserved SQL word) — `id`, `name`, `maxPriceCents Int?`, `note Text?`,
   `isActive Boolean @default(true)`, `createdAt`.
 - `reference_images` — `id`, `referenceId` (cascade delete), `urlRemote` (Cloudinary),
   `embedding vector(768)` nullable, `createdAt`.
@@ -76,6 +76,12 @@ the page forwards it to the API. The vote pages stay as they are. An embedding
 failure does not fail the upload: the image is saved with a NULL embedding and the
 matching stage embeds it on its next run.
 
+**Link always at hand:** the good-deals digest email and the 🎯 alert email carry
+an "Ajouter des références" button pointing to `/feedback/references?k=<REFERENCES_KEY>`,
+next to the existing "Noter toutes les annonces" button. Hidden when the key is unset.
+The key travels in emails sent only to `NOTIFICATION_EMAIL_TO`, which is acceptable
+for a two-person tool.
+
 ## Matching stage
 
 New `RunReferenceMatchUseCase`, run as the **first** stage of the
@@ -110,7 +116,8 @@ embedding. Pure DB query plus a few confirmation calls; no re-embedding.
 Interfaces (domain), with Gemini adapters in `infrastructure/ai/Gemini`:
 
 - `IImageEmbeddingService.embedImage(url): Promise<number[]>` — `gemini-embedding-2-preview`,
-  `outputDimensionality: 768`. May require bumping `@google/genai` (currently 1.30.0).
+  768 dimensions, called through the REST `embedContent` endpoint: the installed
+  `@google/genai` 1.30 only embeds text parts, and 2.x is a major bump.
 - `IReferenceMatchVerifier.verify(listingImageUrls, referenceImageUrls, name, note)`
   → `{ same, reason }` — `gemini-2.5-flash`, same parse-tolerant style as triage.
 - `IReferenceRepository` — CRUD, candidate similarity query, match recording,
