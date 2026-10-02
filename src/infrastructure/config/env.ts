@@ -83,6 +83,14 @@ export const envSchema = z.object({
   // matches (outnumbering value comps) is dropped as a common new product. 0
   // disables the check.
   MASS_MARKET_MIN_MATCHES: z.coerce.number().min(0).default(4),
+  // Secret in the references page link (/feedback/references?k=...). Unset locks
+  // the page and API and hides the button in emails.
+  REFERENCES_KEY: z.string().min(16).optional(),
+  // Cosine similarity between listing and reference photos from which Gemini is
+  // asked "same model?". Deliberately loose at launch; tune from reference_matches.
+  REFERENCE_MATCH_MIN_SIMILARITY: z.coerce.number().min(0).max(1).default(0.75),
+  // ~500 new ads/day over 96 runs/day; 60 also drains the 7-day backlog in a day.
+  REFERENCE_MATCH_MAX_PER_RUN: z.coerce.number().int().min(1).default(60),
 })
 
 export type Env = z.infer<typeof envSchema>

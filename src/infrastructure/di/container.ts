@@ -43,6 +43,10 @@ import { RunPreFilterUseCase } from '@/application/use-cases/RunPreFilterUseCase
 import { RunTriageUseCase } from '@/application/use-cases/RunTriageUseCase'
 import { RunCompAnalysisUseCase } from '@/application/use-cases/RunCompAnalysisUseCase'
 import { RunFeedbackLearningUseCase } from '@/application/use-cases/RunFeedbackLearningUseCase'
+import { PrismaReferenceRepository } from '@/infrastructure/prisma/repositories/PrismaReferenceRepository'
+import { GeminiImageEmbeddingService } from '@/infrastructure/ai/Gemini/GeminiImageEmbeddingService'
+import { GeminiReferenceMatchVerifier } from '@/infrastructure/ai/Gemini/GeminiReferenceMatchVerifier'
+import { RunReferenceMatchUseCase } from '@/application/use-cases/RunReferenceMatchUseCase'
 
 export class Container {
   private static instance: Container
@@ -85,6 +89,9 @@ export class Container {
   public readonly runTriageUseCase: RunTriageUseCase
   public readonly runCompAnalysisUseCase: RunCompAnalysisUseCase
   public readonly runFeedbackLearningUseCase: RunFeedbackLearningUseCase
+  public readonly referenceRepository: PrismaReferenceRepository
+  public readonly imageEmbeddingService: GeminiImageEmbeddingService
+  public readonly runReferenceMatchUseCase: RunReferenceMatchUseCase
 
   private constructor() {
     const openAiApiKey = env.OPENAI_API_KEY ?? 'missing-openai-api-key'
@@ -117,6 +124,22 @@ export class Container {
     )
     this.textFilterService = new TextFilterService()
     this.mailer = new ResendMailer(resendApiKey)
+
+    this.referenceRepository = new PrismaReferenceRepository(this.prisma)
+    this.imageEmbeddingService = new GeminiImageEmbeddingService(geminiApiKey)
+    this.runReferenceMatchUseCase = new RunReferenceMatchUseCase(
+      this.referenceRepository,
+      this.imageEmbeddingService,
+      new GeminiReferenceMatchVerifier(geminiApiKey),
+      this.mailer,
+      {
+        minSimilarity: env.REFERENCE_MATCH_MIN_SIMILARITY,
+        maxListingsPerRun: env.REFERENCE_MATCH_MAX_PER_RUN,
+        backfillDays: 7,
+        emailTo: env.NOTIFICATION_EMAIL_TO,
+        emailFrom: env.NOTIFICATION_EMAIL_FROM ?? 'LBC Bot <bot@example.com>',
+      },
+    )
 
     this.compService = new SerpApiLensCompService(serpApiKey)
     this.triageService = new FallbackTriageService(

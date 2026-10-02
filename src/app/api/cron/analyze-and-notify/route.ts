@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { container } from '@/infrastructure/di/container'
 import { logError, logInfo } from '@/infrastructure/logger/logger'
 
-// 800s is the Vercel Pro/Fluid ceiling; the funnel (prefilter→triage→comp→notify)
+// 800s is the Vercel Pro/Fluid ceiling; the funnel (references→prefilter→triage→comp→notify)
 // was hitting the old 300s cap and skipping the final notify stage. If the plan
 // does not allow 800, Vercel clamps this down at deploy time.
 export const maxDuration = 800
@@ -31,12 +31,14 @@ export async function GET(request: Request) {
 
   logInfo('CRON:analyze', 'Starting scheduled analysis job')
 
+  // First: a reference match must not depend on prefilter, triage score or comp budget.
+  const references = await runStage('references', () => container.runReferenceMatchUseCase.execute())
   const prefilter = await runStage('prefilter', () => container.runPreFilterUseCase.execute())
   const triage = await runStage('triage', () => container.runTriageUseCase.execute())
   const analysis = await runStage('comp', () => container.runCompAnalysisUseCase.execute())
   const notification = await runStage('notify', () => container.runNotificationUseCase.execute())
 
-  const stages = { prefilter, triage, analysis, notification }
+  const stages = { references, prefilter, triage, analysis, notification }
   const failed = Object.entries(stages)
     .filter(([, r]) => r && typeof r === 'object' && 'error' in r)
     .map(([k]) => k)
