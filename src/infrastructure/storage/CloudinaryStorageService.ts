@@ -76,6 +76,17 @@ export class CloudinaryStorageService implements IStorageService {
     }
   }
 
+  async saveReferenceImage(bytes: Buffer, mimeType: string, referenceKey: string, index: number): Promise<string> {
+    const folder = `references/${this.sanitizePublicId(referenceKey)}`
+    const result = await cloudinary.uploader.upload(`data:${mimeType};base64,${bytes.toString('base64')}`, {
+      folder,
+      public_id: `${index}`,
+      overwrite: false,
+      resource_type: 'image',
+    })
+    return result.secure_url
+  }
+
   getImagePath(listingId: string, filename: string): string {
     return `listings/${listingId}/${filename}`
   }

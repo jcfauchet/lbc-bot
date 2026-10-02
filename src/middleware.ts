@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const ALLOWED_PATHS = ['/feedback', '/api/feedback', '/api/cron']
+const ALLOWED_PATHS = ['/feedback', '/api/feedback', '/api/references', '/api/cron']
 
 export function middleware(req: NextRequest) {
   if (process.env.NODE_ENV !== 'production') return NextResponse.next()
