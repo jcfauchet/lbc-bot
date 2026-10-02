@@ -33,6 +33,8 @@ model LbcProductListing {
   status       String    @default("new")
   triageScore  Int?
   ignoreReason String?   @db.Text
+  // Set once the reference-matching stage has compared this listing's photos.
+  referenceCheckedAt DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   
@@ -41,6 +43,7 @@ model LbcProductListing {
   aiAnalysis  AiAnalysis?
   notifications Notification[]
   feedbacks   ListingFeedback[]
+  referenceMatches ReferenceMatch[]
 
   @@index([searchId])
   // Every analyze-and-notify tick expires the stale TRIAGED backlog with a
@@ -141,4 +144,48 @@ model RankingWindow {
   createdAt DateTime @default(now())
 
   @@map("ranking_windows")
+}
+
+// Vector columns (reference_images.embedding, listing_images.embedding) live in
+// the migration SQL only and are accessed through raw queries, like
+// listing_feedbacks.embedding.
+model PhotoReference {
+  id            String           @id @default(cuid())
+  name          String
+  maxPriceCents Int?
+  note          String?          @db.Text
+  isActive      Boolean          @default(true)
+  createdAt     DateTime         @default(now())
+  images        ReferenceImage[]
+  matches       ReferenceMatch[]
+
+  @@map("photo_references")
+}
+
+model ReferenceImage {
+  id          String         @id @default(cuid())
+  referenceId String
+  urlRemote   String
+  createdAt   DateTime       @default(now())
+  reference   PhotoReference @relation(fields: [referenceId], references: [id], onDelete: Cascade)
+
+  @@index([referenceId])
+  @@map("reference_images")
+}
+
+model ReferenceMatch {
+  id          String            @id @default(cuid())
+  referenceId String
+  listingId   String
+  similarity  Float
+  confirmed   Boolean
+  reason      String?           @db.Text
+  notifiedAt  DateTime?
+  createdAt   DateTime          @default(now())
+  reference   PhotoReference    @relation(fields: [referenceId], references: [id], onDelete: Cascade)
+  listing     LbcProductListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@unique([referenceId, listingId])
+  @@index([listingId])
+  @@map("reference_matches")
 }
