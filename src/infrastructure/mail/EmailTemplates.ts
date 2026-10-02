@@ -2,8 +2,21 @@ import { Listing } from '@/domain/entities/Listing'
 import { AiAnalysis } from '@/domain/entities/AiAnalysis'
 import { env } from '@/infrastructure/config/env'
 import type { PendingAlert } from '@/domain/repositories/IReferenceRepository'
+import { referencesPageUrl } from './references-link'
 
 export class EmailTemplates {
+  /** Always-at-hand link to the references page; empty when the feature is locked. */
+  static referencesButton(): string {
+    const url = referencesPageUrl(env.APP_URL, env.REFERENCES_KEY)
+    if (!url) return ''
+    return `
+    <a href="${url}"
+       style="display: inline-block; background: #ff6b00; color: white; text-decoration: none;
+              font-weight: bold; padding: 12px 22px; border-radius: 8px; margin: 6px;">
+      📸 Ajouter des références
+    </a>`
+  }
+
   static goodDealsDigest(
     listings: Array<{ listing: Listing; analysis: AiAnalysis; imageUrl?: string }>
   ): string {
@@ -84,6 +97,7 @@ export class EmailTemplates {
               font-weight: bold; padding: 12px 22px; border-radius: 8px;">
       🗳️ Noter toutes les annonces sur une page
     </a>
+    ${EmailTemplates.referencesButton()}
     <p style="margin: 8px 0 0 0; font-size: 12px; color: #999;">
       Tout au même endroit, sans revenir à ce mail.
     </p>
@@ -135,6 +149,7 @@ export class EmailTemplates {
   <p style="margin: 16px 0;">
     <a href="${alert.listingUrl}" style="display: inline-block; background: #ff6b00; color: white; text-decoration: none; font-weight: bold; padding: 12px 22px; border-radius: 8px;">Voir l'annonce</a>
   </p>
+  <p style="margin: 0 0 16px 0;">${EmailTemplates.referencesButton()}</p>
   <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #eee; font-size: 13px; color: #999;">
     C'est bien la même pièce ?
     <a href="${env.APP_URL}/feedback?id=${alert.listingId}&vote=good" style="margin-left: 8px; color: #22c55e; text-decoration: none; font-weight: bold;">👍 Oui</a>
