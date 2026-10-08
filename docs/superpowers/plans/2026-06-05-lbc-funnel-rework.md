@@ -737,7 +737,7 @@ export class GeminiTriageService implements ITriageService {
   private readonly ai: GoogleGenAI
   private readonly model: string
 
-  constructor(apiKey: string, model = 'gemini-2.5-flash') {
+  constructor(apiKey: string, model = 'gemini-3.6-flash') {
     this.ai = new GoogleGenAI({ apiKey })
     this.model = model
   }
@@ -756,7 +756,7 @@ export class GeminiTriageService implements ITriageService {
 }
 ```
 
-> NOTE for implementer: confirm `gemini-2.5-flash` is available to the key (`curl '.../v1beta/models?key=...'`). If the repo's `gemini-3-flash-preview` is available, prefer it; otherwise keep `2.5-flash`.
+> NOTE for implementer: confirm `gemini-3.6-flash` is available to the key (`curl '.../v1beta/models?key=...'`). If the repo's `gemini-3-flash-preview` is available, prefer it; otherwise keep `2.5-flash`.
 
 - [ ] **Step 6: Implement the OpenAI triage service**
 

@@ -10,7 +10,7 @@ async function toInlinePart(url: string) {
 export class GeminiReferenceMatchVerifier implements IReferenceMatchVerifier {
   private readonly ai: GoogleGenAI
 
-  constructor(apiKey: string, private readonly model = 'gemini-2.5-flash') {
+  constructor(apiKey: string, private readonly model = 'gemini-3.6-flash') {
     this.ai = new GoogleGenAI({ apiKey })
   }
 

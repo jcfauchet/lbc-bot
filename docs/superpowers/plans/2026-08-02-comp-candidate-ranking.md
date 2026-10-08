@@ -355,7 +355,7 @@ git commit -m "feat(ranking): add selection ranker port and prompt module"
   `buildRankingPrompt`, `renderCandidateList`, `parseRanking` from Task 1.
 - Produces: `class GeminiSelectionRanker implements ISelectionRanker`, constructed as
   `new GeminiSelectionRanker(apiKey: string, model?: string)` (model defaults to
-  `'gemini-2.5-flash'`).
+  `'gemini-3.6-flash'`).
 
 **Revised after the Task 2 review.** The first draft of this task waived a unit test
 by analogy with `GeminiTriageService`. The analogy does not hold: that service does
@@ -380,7 +380,7 @@ export class GeminiSelectionRanker implements ISelectionRanker {
   private readonly ai: GoogleGenAI
   private readonly model: string
 
-  constructor(apiKey: string, model = 'gemini-2.5-flash') {
+  constructor(apiKey: string, model = 'gemini-3.6-flash') {
     this.ai = new GoogleGenAI({ apiKey })
     this.model = model
   }
