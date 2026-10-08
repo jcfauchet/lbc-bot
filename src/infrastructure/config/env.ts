@@ -91,8 +91,12 @@ export const envSchema = z.object({
     .optional()
     .transform((v) => (v && v.length >= 16 ? v : undefined)),
   // Cosine similarity between listing and reference photos from which Gemini is
-  // asked "same model?". Deliberately loose at launch; tune from reference_matches.
-  REFERENCE_MATCH_MIN_SIMILARITY: z.coerce.number().min(0).max(1).default(0.75),
+  // asked "same model?". Two photos of one reference score 0.78+ against each
+  // other; unrelated ads top out around 0.81 (Oct 2026). A keyword hit bypasses it.
+  REFERENCE_MATCH_MIN_SIMILARITY: z.coerce.number().min(0).max(1).default(0.78),
+  // Cover similarity from which the ad's other photos get embedded too. About a
+  // third of ads pass it (Oct 2026); the rest cost a single embedding.
+  REFERENCE_MATCH_WIDEN_SIMILARITY: z.coerce.number().min(0).max(1).default(0.7),
   // ~500 new ads/day over 96 runs/day; 60 also drains the 7-day backlog in a day.
   REFERENCE_MATCH_MAX_PER_RUN: z.coerce.number().int().min(1).default(60),
 })

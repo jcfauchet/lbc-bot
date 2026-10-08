@@ -121,8 +121,8 @@ export class RunListingScrapingUseCase {
         )
         await this.imageRepository.saveMany(
           saved.flatMap((listing) =>
-            (imageUrlsByLbcId.get(listing.lbcId) ?? []).map((urlRemote) =>
-              ListingImage.create({ listingId: listing.id, urlRemote })
+            (imageUrlsByLbcId.get(listing.lbcId) ?? []).map((urlRemote, position) =>
+              ListingImage.create({ listingId: listing.id, urlRemote, position })
             )
           )
         )

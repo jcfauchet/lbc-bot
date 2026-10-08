@@ -26,7 +26,7 @@ export class GetTriageBacklogUseCase {
       where: { status: ListingStatus.TRIAGED, triageScore: { gte: minScore } },
       orderBy: [{ triageScore: 'desc' }, { createdAt: 'desc' }],
       take: limit,
-      include: { images: { take: 1, orderBy: { createdAt: 'asc' } } },
+      include: { images: { take: 1, orderBy: { position: 'asc' } } },
     })
 
     return rows.map((r) => ({

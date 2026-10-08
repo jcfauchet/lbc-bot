@@ -133,7 +133,7 @@ export class GetNonNotifiedListingsUseCase {
             urlRemote: true
           },
           orderBy: {
-            createdAt: 'asc'
+            position: 'asc'
           },
           take: 1
         },

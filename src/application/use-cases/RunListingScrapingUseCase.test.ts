@@ -13,7 +13,7 @@ const ad = (lbcId: string, imageUrls: string[] = []): ScrapedListing => ({
 })
 
 const deps = (scraped: ScrapedListing[], knownLbcIds: string[] = [], searchCount = 1) => {
-  const savedImages: Array<{ listingId: string; urlRemote: string }> = []
+  const savedImages: Array<{ listingId: string; urlRemote: string; position: number }> = []
   return {
     savedImages,
     searchRepository: {
@@ -41,7 +41,7 @@ const deps = (scraped: ScrapedListing[], knownLbcIds: string[] = [], searchCount
     imageRepository: {
       saveMany: vi.fn(async (images: any[]) => {
         savedImages.push(
-          ...images.map((i) => ({ listingId: i.listingId, urlRemote: i.urlRemote }))
+          ...images.map((i) => ({ listingId: i.listingId, urlRemote: i.urlRemote, position: i.position }))
         )
       }),
     } as any,
@@ -106,16 +106,16 @@ describe('RunListingScrapingUseCase', () => {
     expect(result.newListings).toBe(2)
   })
 
-  it('attaches each image to the listing it was scraped with', async () => {
+  it('attaches each image to the listing it was scraped with, cover at position 0', async () => {
     const d = deps([ad('a', ['a1.jpg', 'a2.jpg']), ad('b', ['b1.jpg'])])
 
     await run(d)
 
     expect(d.imageRepository.saveMany).toHaveBeenCalledTimes(1)
     expect(d.savedImages).toEqual([
-      { listingId: 'id-a', urlRemote: 'a1.jpg' },
-      { listingId: 'id-a', urlRemote: 'a2.jpg' },
-      { listingId: 'id-b', urlRemote: 'b1.jpg' },
+      { listingId: 'id-a', urlRemote: 'a1.jpg', position: 0 },
+      { listingId: 'id-a', urlRemote: 'a2.jpg', position: 1 },
+      { listingId: 'id-b', urlRemote: 'b1.jpg', position: 0 },
     ])
   })
 

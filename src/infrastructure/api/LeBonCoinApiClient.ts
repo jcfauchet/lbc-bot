@@ -4,6 +4,7 @@ import { ScrapedListing } from '../scraping/types'
 import { IListingSource, DataDomeBlockedError } from '@/domain/services/IListingSource'
 import { DataDomeBypass } from './DataDomeBypass'
 import { ProxyManager } from '../proxy/ProxyManager'
+import { listingImageUrls } from './listing-image-urls'
 
 interface LeBonCoinApiResponse {
   ads: Array<{
@@ -259,7 +260,7 @@ export class LeBonCoinApiClient implements IListingSource {
             city: ad.location?.city || '',
             region: ad.location?.region_name || '',
             publishedAt: ad.first_publication_date ? new Date(ad.first_publication_date) : undefined,
-            imageUrls: ad.images?.urls || ad.images?.small_url ? [ad.images.small_url] : [],
+            imageUrls: listingImageUrls(ad.images),
           }))
           .filter((l) => l.lbcId && l.title)
           .filter((l) => l.priceCents >= env.MIN_LISTING_PRICE_EUR * 100)

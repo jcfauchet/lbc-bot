@@ -135,7 +135,8 @@ export class GetDashboardStatsUseCase {
         listing: {
           include: {
             images: {
-              take: 1
+              take: 1,
+              orderBy: { position: 'asc' }
             },
             aiAnalysis: true
           }

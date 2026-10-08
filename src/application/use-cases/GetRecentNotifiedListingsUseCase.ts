@@ -36,7 +36,7 @@ export class GetRecentNotifiedListingsUseCase {
       include: {
         listing: {
           include: {
-            images: { take: 1 },
+            images: { take: 1, orderBy: { position: 'asc' } },
             aiAnalysis: true,
           },
         },

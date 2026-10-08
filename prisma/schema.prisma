@@ -58,6 +58,8 @@ model ListingImage {
   id         String   @id @default(cuid())
   listingId  String
   urlRemote  String
+  /// 0 is the ad's cover; readers that want one photo order by this.
+  position   Int      @default(0)
   pathLocal  String?
   createdAt  DateTime @default(now())
   
@@ -156,6 +158,8 @@ model PhotoReference {
   note          String?          @db.Text
   isActive      Boolean          @default(true)
   backfilledAt  DateTime?
+  /// Lower-case words; an ad whose text holds one goes to the verifier regardless of photo similarity.
+  keywords      String[]         @default([])
   createdAt     DateTime         @default(now())
   images        ReferenceImage[]
   matches       ReferenceMatch[]

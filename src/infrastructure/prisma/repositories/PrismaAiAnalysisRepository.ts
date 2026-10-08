@@ -62,7 +62,7 @@ export class PrismaAiAnalysisRepository implements IAiAnalysisRepository {
         listing: {
           include: {
             // Only the thumbnail the digest renders is needed.
-            images: { orderBy: { createdAt: 'asc' }, take: 1 },
+            images: { orderBy: { position: 'asc' }, take: 1 },
           },
         },
       },

@@ -134,6 +134,7 @@ export class Container {
       this.mailer,
       {
         minSimilarity: env.REFERENCE_MATCH_MIN_SIMILARITY,
+        widenSimilarity: env.REFERENCE_MATCH_WIDEN_SIMILARITY,
         maxListingsPerRun: env.REFERENCE_MATCH_MAX_PER_RUN,
         backfillDays: 7,
         emailTo: env.NOTIFICATION_EMAIL_TO,

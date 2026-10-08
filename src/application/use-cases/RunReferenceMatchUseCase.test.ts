@@ -2,12 +2,16 @@ import { describe, it, expect, vi } from 'vitest'
 import { RunReferenceMatchUseCase, type ReferenceMatchConfig } from './RunReferenceMatchUseCase'
 import type { ListingToCheck, PendingAlert, ReferenceCandidate } from '@/domain/repositories/IReferenceRepository'
 
-const listing = (id: string, priceCents = 12000, embedded = false): ListingToCheck => ({
+const listing = (id: string, priceCents = 12000, embedded = false, photos = 1): ListingToCheck => ({
   id, title: `title ${id}`, priceCents,
-  images: [{ id: `${id}-img`, url: `https://img/${id}.jpg`, hasEmbedding: embedded }],
+  images: Array.from({ length: photos }, (_, i) => ({
+    id: i === 0 ? `${id}-img` : `${id}-img${i + 1}`,
+    url: i === 0 ? `https://img/${id}.jpg` : `https://img/${id}-${i + 1}.jpg`,
+    hasEmbedding: embedded,
+  })),
 })
 const candidate = (referenceId: string, overrides: Partial<ReferenceCandidate> = {}): ReferenceCandidate => ({
-  referenceId, name: `ref ${referenceId}`, note: null, maxPriceCents: null, similarity: 0.8,
+  referenceId, name: `ref ${referenceId}`, note: null, maxPriceCents: null, similarity: 0.8, textHit: false,
   imageUrls: [`https://ref/${referenceId}.jpg`], ...overrides,
 })
 const alert = (matchId: string): PendingAlert => ({
@@ -47,7 +51,7 @@ function setup(opts: {
   const verifier = { verify: vi.fn(async (input: any) => (opts.verdict ?? (() => ({ same: true, reason: 'same' })))(input.referenceName.replace('ref ', ''))) }
   const mailer = { send: vi.fn(async (_data: any) => {}) }
   const useCase = new RunReferenceMatchUseCase(repo as any, embedder, verifier, mailer, {
-    minSimilarity: 0.75, maxListingsPerRun: 60, backfillDays: 7, emailTo: ['her@example.com'], emailFrom: 'bot@example.com',
+    minSimilarity: 0.78, widenSimilarity: 0.7, maxListingsPerRun: 60, backfillDays: 7, emailTo: ['her@example.com'], emailFrom: 'bot@example.com',
     maxRunMs: 120_000, maxVerificationsPerRun: 20, maxCandidatesPerListing: 3, maxBackfillPerReference: 15,
     ...opts.config,
   }, opts.now)
@@ -148,7 +152,53 @@ describe('RunReferenceMatchUseCase', () => {
     const { repo, useCase } = setup({ listings: [listing('l1')] })
     await useCase.execute()
     expect(repo.findListingsToCheck).toHaveBeenCalledWith(60, 7)
-    expect(repo.findCandidates).toHaveBeenCalledWith('l1', 0.75, 3)
+    expect(repo.findCandidates).toHaveBeenCalledWith('l1', 0.7, 3)
+  })
+
+  it('embeds only the cover when no reference comes close to it', async () => {
+    const { repo, embedder, useCase } = setup({ listings: [listing('l1', 12000, false, 4)] })
+    await useCase.execute()
+    expect(embedder.embedImage).toHaveBeenCalledTimes(1)
+    expect(embedder.embedImage).toHaveBeenCalledWith('https://img/l1.jpg')
+    expect(repo.markListingChecked).toHaveBeenCalledWith('l1')
+  })
+
+  it('embeds the other photos once the cover comes close, then looks again before deciding', async () => {
+    const { repo, embedder, verifier, useCase } = setup({
+      listings: [listing('l1', 12000, false, 3)], candidates: { l1: [candidate('a', { similarity: 0.72 })] },
+    })
+    await useCase.execute()
+    expect(embedder.embedImage).toHaveBeenCalledTimes(3)
+    expect(repo.findCandidates).toHaveBeenCalledTimes(2)
+    // 0.72 is enough to widen, not enough to spend a vision call.
+    expect(verifier.verify).not.toHaveBeenCalled()
+    expect(repo.markListingChecked).toHaveBeenCalledWith('l1')
+  })
+
+  it('verifies a reference that becomes close enough thanks to the other photos', async () => {
+    const { repo, verifier, useCase } = setup({ listings: [listing('l1', 12000, false, 3)] })
+    repo.findCandidates
+      .mockResolvedValueOnce([candidate('a', { similarity: 0.72 })])
+      .mockResolvedValueOnce([candidate('a', { similarity: 0.85 })])
+    await useCase.execute()
+    expect(verifier.verify).toHaveBeenCalledOnce()
+  })
+
+  it('verifies a keyword hit whatever the photo similarity', async () => {
+    const { verifier, recorded, useCase } = setup({
+      listings: [listing('l1')], candidates: { l1: [candidate('a', { similarity: 0.4, textHit: true })] },
+    })
+    await useCase.execute()
+    expect(verifier.verify).toHaveBeenCalledOnce()
+    expect(recorded[0]).toMatchObject({ referenceId: 'a', similarity: 0.4 })
+  })
+
+  it('shows the verifier the cover and at most three other photos', async () => {
+    const { verifier, useCase } = setup({ listings: [listing('l1', 12000, true, 6)], candidates: { l1: [candidate('a')] } })
+    await useCase.execute()
+    expect(verifier.verify.mock.calls[0][0].listingImageUrls).toEqual([
+      'https://img/l1.jpg', 'https://img/l1-2.jpg', 'https://img/l1-3.jpg', 'https://img/l1-4.jpg',
+    ])
   })
 
   it('stops taking listings once the run deadline has passed, leaving them unchecked', async () => {
@@ -195,7 +245,7 @@ describe('RunReferenceMatchUseCase', () => {
     const { repo, verifier, mailer, useCase, recorded } = setup({ toBackfill: ['new'], pending: [alert('m1')] })
     repo.findRecentListingsCloseTo.mockResolvedValueOnce([{ listing: listing('old', 12000, true), candidate: candidate('new') }])
     const res = await useCase.execute()
-    expect(repo.findRecentListingsCloseTo).toHaveBeenCalledWith('new', 0.75, 7, 15)
+    expect(repo.findRecentListingsCloseTo).toHaveBeenCalledWith('new', 0.78, 7, 15)
     expect(verifier.verify).toHaveBeenCalledOnce()
     expect(recorded[0]).toMatchObject({ referenceId: 'new', listingId: 'old', confirmed: true })
     expect(repo.markBackfilled).toHaveBeenCalledWith('new')

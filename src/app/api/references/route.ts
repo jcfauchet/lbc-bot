@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
   }
   const files = form.getAll('images').filter((f): f is File => f instanceof File)
   const parsed = parseReferenceForm({
-    name: form.get('name'), maxPrice: form.get('maxPrice'), note: form.get('note'),
+    name: form.get('name'), maxPrice: form.get('maxPrice'), note: form.get('note'), keywords: form.get('keywords'),
     images: files.map((f) => ({ size: f.size, type: f.type })),
   })
   if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: parsed.status })

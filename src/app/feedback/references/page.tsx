@@ -8,7 +8,7 @@ import { addPhotos, removePhoto, MAX_PHOTOS } from './photo-selection'
 
 type Reference = {
   id: string; name: string; note: string | null; maxPriceCents: number | null; isActive: boolean
-  imageUrls: string[]; matchCount: number; matchedListingUrls: string[]
+  keywords: string[]; imageUrls: string[]; matchCount: number; matchedListingUrls: string[]
 }
 
 const inputClass =
@@ -26,6 +26,7 @@ function ReferencesContent() {
   const [name, setName] = useState('')
   const [maxPrice, setMaxPrice] = useState('')
   const [note, setNote] = useState('')
+  const [keywords, setKeywords] = useState('')
 
   const previews = useMemo(() => files.map((f) => URL.createObjectURL(f)), [files])
   useEffect(() => () => previews.forEach((url) => URL.revokeObjectURL(url)), [previews])
@@ -56,7 +57,7 @@ function ReferencesContent() {
     setSaving(true); setMessage(null); setError(null)
     try {
       const body = new FormData()
-      body.set('name', name); body.set('maxPrice', maxPrice); body.set('note', note)
+      body.set('name', name); body.set('maxPrice', maxPrice); body.set('note', note); body.set('keywords', keywords)
       const blobs = await Promise.all(files.map(resizeImage))
       if (isUploadTooHeavy(blobs)) { setError(TOO_HEAVY_MESSAGE); return }
       blobs.forEach((blob, i) => body.append('images', blob, `photo-${i}.jpg`))
@@ -154,6 +155,14 @@ function ReferencesContent() {
 
         <label className="flex flex-col gap-1.5">
           <span className="text-sm font-semibold text-gray-800">
+            Mots-clés <span className="font-normal text-gray-500">(optionnel)</span>
+          </span>
+          <input className={inputClass} placeholder="ex. chapo, pierre chapo" value={keywords} onChange={(e) => setKeywords(e.target.value)} />
+          <span className="text-xs text-gray-500">Séparés par des virgules. Une annonce qui cite un de ces mots est vérifiée même si la photo ne ressemble pas.</span>
+        </label>
+
+        <label className="flex flex-col gap-1.5">
+          <span className="text-sm font-semibold text-gray-800">
             Note <span className="font-normal text-gray-500">(optionnel)</span>
           </span>
           <textarea
@@ -195,6 +204,9 @@ function ReferencesContent() {
                 {ref.matchCount} trouvaille{ref.matchCount > 1 ? 's' : ''}
                 {!ref.isActive && ' · en pause'}
               </div>
+              {ref.keywords.length > 0 && (
+                <div className="mt-0.5 truncate text-xs text-gray-500">mots-clés : {ref.keywords.join(', ')}</div>
+              )}
               {ref.matchedListingUrls.slice(0, 3).map((url) => (
                 <a key={url} href={url} className="block truncate text-xs text-blue-600 hover:underline">{url}</a>
               ))}

@@ -2,6 +2,8 @@ export interface ListingImageProps {
   id: string
   listingId: string
   urlRemote: string
+  /** 0 is the ad's cover; the rest follow the ad's own order. */
+  position: number
   pathLocal?: string
   createdAt: Date
 }
@@ -33,6 +35,10 @@ export class ListingImage {
 
   get urlRemote(): string {
     return this.props.urlRemote
+  }
+
+  get position(): number {
+    return this.props.position
   }
 
   get pathLocal(): string | undefined {

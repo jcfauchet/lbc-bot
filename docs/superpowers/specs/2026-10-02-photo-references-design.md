@@ -94,16 +94,23 @@ Per run:
 1. Embed any `reference_images` with a NULL embedding (retry path).
 2. Take listings with `referenceCheckedAt IS NULL`, newest first, capped per run
    (`REFERENCE_MATCH_MAX_PER_RUN`, default 60; ~500 ads/day over 96 runs fits easily).
-3. For each listing, isolated in its own try/catch:
-   - Embed its first 3 images (missing embeddings only), store on `listing_images`.
+3. For each listing, isolated in its own try/catch, in three stages so the
+   spend stays near one embedding per ad (revised 8 Oct 2026):
+   - Embed the cover (position 0) if missing, store on `listing_images`.
    - pgvector query: best cosine similarity per active reference across
-     listing photos × reference photos.
+     embedded listing photos × reference photos, plus a *keyword hit* flag: one of
+     the reference's `keywords` appears in the ad's title or description.
+   - Nothing at or above `REFERENCE_MATCH_WIDEN_SIMILARITY` (default 0.70) and no
+     keyword hit: the ad is done. Otherwise embed its remaining photos (up to 6 are
+     stored per ad) and run the query again.
    - Skip references already judged for this listing, references whose
      `maxPriceCents` is below the ad price, and listings the user voted down.
    - For each reference with similarity ≥ `REFERENCE_MATCH_MIN_SIMILARITY`
-     (default 0.75, deliberately loose, to calibrate on real references): ask Gemini
-     vision with the ad photos, the reference photos, the reference name and note:
-     "is this the same model/design?" → strict JSON `{"same": bool, "reason": string}`.
+     (default 0.78: two photos of one reference score 0.78+ against each other,
+     unrelated ads top out near 0.81) **or** a keyword hit: ask Gemini vision with
+     the cover plus up to three other ad photos, the reference photos, the reference
+     name and note: "is this the same model/design?" → strict JSON
+     `{"same": bool, "reason": string}`.
    - Record a `reference_matches` row (confirmed or not — a rejected pair is not
      re-asked).
    - Set `referenceCheckedAt`. On failure: log, leave the marker NULL so the next
@@ -111,7 +118,8 @@ Per run:
 
 **Backfill on creation:** when a reference is created, the same compare-and-confirm
 runs against listings scraped in the last 7 days whose images already carry an
-embedding. Pure DB query plus a few confirmation calls; no re-embedding.
+embedding, or whose text holds one of its keywords. Pure DB query plus a few
+confirmation calls; no re-embedding.
 
 Interfaces (domain), with Gemini adapters in `infrastructure/ai/Gemini`:
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseMaxPriceCents, parseReferenceForm, MAX_TOTAL_UPLOAD_BYTES } from './form'
+import { parseKeywords, parseMaxPriceCents, parseReferenceForm, MAX_TOTAL_UPLOAD_BYTES } from './form'
 
 const jpeg = (size = 300_000) => ({ size, type: 'image/jpeg' })
 
@@ -15,11 +15,24 @@ describe('parseMaxPriceCents', () => {
   })
 })
 
+describe('parseKeywords', () => {
+  it('splits on commas, lowercases, trims and de-duplicates', () => {
+    expect(parseKeywords(' Chapo, pierre chapo ,CHAPO,, ')).toEqual(['chapo', 'pierre chapo'])
+  })
+  it('drops words too short to mean anything in an ad', () => {
+    expect(parseKeywords('ab, jansen')).toEqual(['jansen'])
+  })
+  it('is empty when blank', () => expect(parseKeywords('')).toEqual([]))
+})
+
 describe('parseReferenceForm', () => {
-  const base = { name: ' Desserte Jansen ', maxPrice: '150 €', note: '', images: [jpeg()] }
+  const base = { name: ' Desserte Jansen ', maxPrice: '150 €', note: '', keywords: 'jansen', images: [jpeg()] }
 
   it('accepts a valid form and trims', () => {
-    expect(parseReferenceForm(base)).toEqual({ ok: true, value: { name: 'Desserte Jansen', note: null, maxPriceCents: 15000 } })
+    expect(parseReferenceForm(base)).toEqual({ ok: true, value: { name: 'Desserte Jansen', note: null, maxPriceCents: 15000, keywords: ['jansen'] } })
+  })
+  it('accepts a reference without keywords', () => {
+    expect(parseReferenceForm({ ...base, keywords: null })).toMatchObject({ ok: true, value: { keywords: [] } })
   })
   it('requires a name', () => {
     expect(parseReferenceForm({ ...base, name: '  ' })).toMatchObject({ ok: false, status: 400 })

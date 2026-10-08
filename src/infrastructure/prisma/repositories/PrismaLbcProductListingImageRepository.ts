@@ -9,6 +9,7 @@ export class PrismaLbcProductListingImageRepository implements IListingImageRepo
     const data = {
       listingId: image.listingId,
       urlRemote: image.urlRemote,
+      position: image.position,
       pathLocal: image.pathLocal,
     }
 
@@ -23,6 +24,7 @@ export class PrismaLbcProductListingImageRepository implements IListingImageRepo
       data: images.map((image) => ({
         listingId: image.listingId,
         urlRemote: image.urlRemote,
+        position: image.position,
         pathLocal: image.pathLocal,
       })),
     })
@@ -36,7 +38,7 @@ export class PrismaLbcProductListingImageRepository implements IListingImageRepo
   async findByListingId(listingId: string): Promise<ListingImage[]> {
     const images = await this.prisma.listingImage.findMany({
       where: { listingId },
-      orderBy: { createdAt: 'asc' },
+      orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
     })
     return images.map((i) => this.toDomain(i))
   }
@@ -68,6 +70,7 @@ export class PrismaLbcProductListingImageRepository implements IListingImageRepo
       id: raw.id,
       listingId: raw.listingId,
       urlRemote: raw.urlRemote,
+      position: raw.position,
       pathLocal: raw.pathLocal,
       createdAt: raw.createdAt,
     })

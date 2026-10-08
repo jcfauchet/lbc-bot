@@ -5,17 +5,24 @@ export interface PhotoReferenceSummary {
   maxPriceCents: number | null
   isActive: boolean
   createdAt: Date
+  keywords: string[]
   imageUrls: string[]
   matchCount: number
   matchedListingUrls: string[]
 }
-export interface NewPhotoReference { name: string; note: string | null; maxPriceCents: number | null }
+export interface NewPhotoReference {
+  name: string
+  note: string | null
+  maxPriceCents: number | null
+  /** Lower-case words that, found in an ad's text, send it to the verifier regardless of photo similarity. */
+  keywords: string[]
+}
 export interface ImageToEmbed { id: string; url: string }
 export interface ListingToCheck {
   id: string
   title: string
   priceCents: number
-  /** First 3 photos, oldest first. */
+  /** Every stored photo, cover first. */
   images: Array<{ id: string; url: string; hasEmbedding: boolean }>
 }
 export interface ReferenceCandidate {
@@ -24,6 +31,8 @@ export interface ReferenceCandidate {
   note: string | null
   maxPriceCents: number | null
   similarity: number
+  /** One of the reference's keywords appears in the ad's title or description. */
+  textHit: boolean
   imageUrls: string[]
 }
 export interface RecordedMatch { referenceId: string; listingId: string; similarity: number; confirmed: boolean; reason: string | null }
@@ -50,9 +59,9 @@ export interface IReferenceRepository {
   /** Unchecked listings scraped in the last `maxAgeDays`, newest first, not voted down. */
   findListingsToCheck(limit: number, maxAgeDays: number): Promise<ListingToCheck[]>
   setListingImageEmbedding(imageId: string, embedding: number[]): Promise<void>
-  /** Active references close to this listing's photos, excluding pairs already judged. */
+  /** Active references close to this listing's photos or named in its text, excluding pairs already judged. */
   findCandidates(listingId: string, minSimilarity: number, limit: number): Promise<ReferenceCandidate[]>
-  /** Recent listings (embedded photos, not voted down) close to one reference, excluding pairs already judged. */
+  /** Recent listings (not voted down) close to one reference or naming it, excluding pairs already judged. */
   findRecentListingsCloseTo(referenceId: string, minSimilarity: number, days: number, limit: number): Promise<Array<{ listing: ListingToCheck; candidate: ReferenceCandidate }>>
   /** Active references never backfilled whose photos are all embedded. */
   findReferencesToBackfill(): Promise<string[]>

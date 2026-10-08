@@ -11,9 +11,18 @@ export function parseMaxPriceCents(raw: string): number | null | 'invalid' {
   return cents > 0 ? cents : 'invalid'
 }
 
-type FormInput = { name: unknown; maxPrice: unknown; note: unknown; images: Array<{ size: number; type: string }> }
+/** Shorter than this matches too much of any ad to be a signal. */
+const MIN_KEYWORD_LENGTH = 3
+
+/** Comma-separated words as typed; lower-case, trimmed, unique, in typing order. */
+export function parseKeywords(raw: string): string[] {
+  const words = raw.split(',').map((w) => w.trim().toLowerCase()).filter((w) => w.length >= MIN_KEYWORD_LENGTH)
+  return [...new Set(words)]
+}
+
+type FormInput = { name: unknown; maxPrice: unknown; note: unknown; keywords?: unknown; images: Array<{ size: number; type: string }> }
 type FormResult =
-  | { ok: true; value: { name: string; note: string | null; maxPriceCents: number | null } }
+  | { ok: true; value: { name: string; note: string | null; maxPriceCents: number | null; keywords: string[] } }
   | { ok: false; status: 400 | 413; error: string }
 
 export function parseReferenceForm(input: FormInput): FormResult {
@@ -34,5 +43,6 @@ export function parseReferenceForm(input: FormInput): FormResult {
   if (maxPriceCents === 'invalid') return { ok: false, status: 400, error: 'Le prix max doit être un nombre, par ex. 150.' }
 
   const note = typeof input.note === 'string' && input.note.trim() ? input.note.trim() : null
-  return { ok: true, value: { name, note, maxPriceCents } }
+  const keywords = parseKeywords(typeof input.keywords === 'string' ? input.keywords : '')
+  return { ok: true, value: { name, note, maxPriceCents, keywords } }
 }

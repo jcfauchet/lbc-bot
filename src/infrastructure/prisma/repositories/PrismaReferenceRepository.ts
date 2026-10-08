@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client'
+import { Prisma, PrismaClient } from '@prisma/client'
 import type {
   IReferenceRepository, ImageToEmbed, ListingToCheck, NewPhotoReference, PendingAlert,
   PhotoReferenceSummary, RecordedMatch, ReferenceCandidate,
@@ -6,13 +6,19 @@ import type {
 
 const toVector = (embedding: number[]) => `[${embedding.join(',')}]`
 
+/** True when one of reference r's keywords appears in listing p's title or description. */
+const KEYWORD_HIT_SQL = Prisma.sql`EXISTS (
+  SELECT 1 FROM unnest(r."keywords") AS kw
+  WHERE p."title" ILIKE '%' || kw || '%' OR p."description" ILIKE '%' || kw || '%'
+)`
+
 type CandidateRow = {
   referenceId: string; name: string; note: string | null; maxPriceCents: number | null
-  similarity: number; imageUrls: string[]
+  similarity: number; textHit: boolean; imageUrls: string[]
 }
 const toCandidate = (row: CandidateRow): ReferenceCandidate => ({
   referenceId: row.referenceId, name: row.name, note: row.note, maxPriceCents: row.maxPriceCents,
-  similarity: Number(row.similarity), imageUrls: row.imageUrls,
+  similarity: Number(row.similarity), textHit: row.textHit, imageUrls: row.imageUrls,
 })
 
 export class PrismaReferenceRepository implements IReferenceRepository {
@@ -40,7 +46,7 @@ export class PrismaReferenceRepository implements IReferenceRepository {
     })
     return rows.map((r) => ({
       id: r.id, name: r.name, note: r.note, maxPriceCents: r.maxPriceCents, isActive: r.isActive,
-      createdAt: r.createdAt, imageUrls: r.images.map((i) => i.urlRemote),
+      createdAt: r.createdAt, keywords: r.keywords, imageUrls: r.images.map((i) => i.urlRemote),
       matchCount: r.matches.length, matchedListingUrls: r.matches.map((m) => m.listing.url),
     }))
   }
@@ -80,19 +86,26 @@ export class PrismaReferenceRepository implements IReferenceRepository {
     `
   }
 
+  /**
+   * Similarity is the best (listing photo, reference photo) pair, 0 when the ad has
+   * no embedded photo yet. A keyword hit qualifies the reference on its own.
+   */
   async findCandidates(listingId: string, minSimilarity: number, limit: number): Promise<ReferenceCandidate[]> {
     const rows = await this.prisma.$queryRaw<CandidateRow[]>`
       SELECT r."id" AS "referenceId", r."name", r."note", r."maxPriceCents",
-             MAX(1 - (li."embedding" <=> ri."embedding")) AS "similarity",
+             COALESCE(MAX(1 - (li."embedding" <=> ri."embedding")), 0) AS "similarity",
+             ${KEYWORD_HIT_SQL} AS "textHit",
              ARRAY_AGG(DISTINCT ri."urlRemote") AS "imageUrls"
-      FROM "listing_images" li
-      JOIN "reference_images" ri ON ri."embedding" IS NOT NULL
-      JOIN "photo_references" r ON r."id" = ri."referenceId" AND r."isActive"
-      WHERE li."listingId" = ${listingId} AND li."embedding" IS NOT NULL
-        AND NOT EXISTS (SELECT 1 FROM "reference_matches" m WHERE m."referenceId" = r."id" AND m."listingId" = ${listingId})
-      GROUP BY r."id"
-      HAVING MAX(1 - (li."embedding" <=> ri."embedding")) >= ${minSimilarity}
-      ORDER BY "similarity" DESC
+      FROM "lbc_product_listings" p
+      CROSS JOIN "photo_references" r
+      JOIN "reference_images" ri ON ri."referenceId" = r."id" AND ri."embedding" IS NOT NULL
+      LEFT JOIN "listing_images" li ON li."listingId" = p."id" AND li."embedding" IS NOT NULL
+      WHERE p."id" = ${listingId} AND r."isActive"
+        AND NOT EXISTS (SELECT 1 FROM "reference_matches" m WHERE m."referenceId" = r."id" AND m."listingId" = p."id")
+      GROUP BY p."id", r."id"
+      HAVING COALESCE(MAX(1 - (li."embedding" <=> ri."embedding")), 0) >= ${minSimilarity}
+          OR ${KEYWORD_HIT_SQL}
+      ORDER BY "textHit" DESC, "similarity" DESC
       LIMIT ${limit}
     `
     return rows.map(toCandidate)
@@ -102,18 +115,21 @@ export class PrismaReferenceRepository implements IReferenceRepository {
     const rows = await this.prisma.$queryRaw<Array<CandidateRow & { listingId: string; title: string; priceCents: number }>>`
       SELECT p."id" AS "listingId", p."title", p."priceCents",
              r."id" AS "referenceId", r."name", r."note", r."maxPriceCents",
-             MAX(1 - (li."embedding" <=> ri."embedding")) AS "similarity",
+             COALESCE(MAX(1 - (li."embedding" <=> ri."embedding")), 0) AS "similarity",
+             ${KEYWORD_HIT_SQL} AS "textHit",
              ARRAY_AGG(DISTINCT ri."urlRemote") AS "imageUrls"
       FROM "lbc_product_listings" p
-      JOIN "listing_images" li ON li."listingId" = p."id" AND li."embedding" IS NOT NULL
-      JOIN "reference_images" ri ON ri."referenceId" = ${referenceId} AND ri."embedding" IS NOT NULL
-      JOIN "photo_references" r ON r."id" = ri."referenceId" AND r."isActive"
-      WHERE p."createdAt" >= NOW() - make_interval(days => ${days})
+      CROSS JOIN "photo_references" r
+      JOIN "reference_images" ri ON ri."referenceId" = r."id" AND ri."embedding" IS NOT NULL
+      LEFT JOIN "listing_images" li ON li."listingId" = p."id" AND li."embedding" IS NOT NULL
+      WHERE r."id" = ${referenceId} AND r."isActive"
+        AND p."createdAt" >= NOW() - make_interval(days => ${days})
         AND NOT EXISTS (SELECT 1 FROM "listing_feedbacks" f WHERE f."listingId" = p."id" AND f."isGood" = false)
         AND NOT EXISTS (SELECT 1 FROM "reference_matches" m WHERE m."referenceId" = r."id" AND m."listingId" = p."id")
       GROUP BY p."id", r."id"
-      HAVING MAX(1 - (li."embedding" <=> ri."embedding")) >= ${minSimilarity}
-      ORDER BY "similarity" DESC
+      HAVING COALESCE(MAX(1 - (li."embedding" <=> ri."embedding")), 0) >= ${minSimilarity}
+          OR ${KEYWORD_HIT_SQL}
+      ORDER BY "textHit" DESC, "similarity" DESC
       LIMIT ${limit}
     `
     const listings = await this.attachImages(rows.map((r) => ({ id: r.listingId, title: r.title, priceCents: r.priceCents })))
@@ -153,10 +169,8 @@ export class PrismaReferenceRepository implements IReferenceRepository {
       where: { confirmed: true, notifiedAt: null },
       orderBy: { createdAt: 'asc' },
       include: {
-        // Listing photos share a createdAt (one createMany per ad): id keeps the
-        // insertion order, so the email shows the ad's real main photo.
         reference: { include: { images: { orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], take: 1 } } },
-        listing: { include: { images: { orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], take: 1 } } },
+        listing: { include: { images: { orderBy: { position: 'asc' }, take: 1 } } },
       },
     })
     return rows.map((m) => ({
@@ -182,12 +196,8 @@ export class PrismaReferenceRepository implements IReferenceRepository {
     const ids = listings.map((l) => l.id)
     const images = await this.prisma.$queryRaw<Array<{ id: string; listingId: string; url: string; hasEmbedding: boolean }>>`
       SELECT "id", "listingId", "urlRemote" AS "url", ("embedding" IS NOT NULL) AS "hasEmbedding"
-      FROM (
-        SELECT *, ROW_NUMBER() OVER (PARTITION BY "listingId" ORDER BY "createdAt", "id") AS rn
-        FROM "listing_images" WHERE "listingId" = ANY(${ids})
-      ) ranked
-      WHERE rn <= 3
-      ORDER BY "listingId", rn
+      FROM "listing_images" WHERE "listingId" = ANY(${ids})
+      ORDER BY "listingId", "position", "createdAt", "id"
     `
     return listings.map((l) => ({
       ...l,

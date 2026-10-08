@@ -5,8 +5,13 @@ import type { IMailer } from '@/infrastructure/mail/IMailer'
 import { EmailTemplates } from '@/infrastructure/mail/EmailTemplates'
 
 export interface ReferenceMatchConfig {
-  /** Cosine similarity from which Gemini is asked to confirm. Deliberately loose. */
+  /** Cosine similarity from which Gemini is asked to confirm; a keyword hit skips this gate. */
   minSimilarity: number
+  /**
+   * Cosine similarity of the cover from which the ad's other photos get embedded.
+   * Below it the ad costs one embedding; the verifier is never reached.
+   */
+  widenSimilarity: number
   maxListingsPerRun: number
   /** Listings older than this are neither checked nor backfilled: the ad is mostly gone. */
   backfillDays: number
@@ -28,6 +33,8 @@ export interface ReferenceMatchResult { checked: number; failed: number; judged:
 
 /** Reference photos whose embedding failed at upload, retried per run. */
 const REFERENCE_IMAGE_RETRY_BATCH = 20
+/** Cover plus three: enough angles to decide, bounded vision tokens per call. */
+const VERIFIER_LISTING_PHOTOS = 4
 
 /** A 4xx on the photo means the ad (or its image) is gone: retrying cannot help. */
 function isPermanentImageError(err: unknown): boolean {
@@ -84,8 +91,7 @@ export class RunReferenceMatchUseCase {
       // One listing failing (Gemini hiccup) must not stop the run; its marker
       // stays NULL so the next run retries it.
       try {
-        await this.embedListingImages(listing)
-        const candidates = await this.repo.findCandidates(listing.id, this.config.minSimilarity, this.config.maxCandidatesPerListing)
+        const candidates = await this.findCandidatesInStages(listing)
         // Not enough verifications left to judge this listing completely: keep it
         // for the next run (its photo embeddings are already stored).
         if (candidates.length > budget.verificationsLeft) break
@@ -123,8 +129,29 @@ export class RunReferenceMatchUseCase {
     return this.now() >= budget.deadline || budget.verificationsLeft <= 0
   }
 
-  private async embedListingImages(listing: ListingToCheck): Promise<void> {
-    const pending = listing.images.filter((i) => !i.hasEmbedding)
+  /**
+   * Cover first; the other photos only once a reference comes close to the cover
+   * or is named in the ad. Keeps the embedding spend near one call per ad while
+   * a match can still surface from a detail shot.
+   */
+  private async findCandidatesInStages(listing: ListingToCheck): Promise<ReferenceCandidate[]> {
+    const [cover, ...others] = listing.images
+    await this.embedListingImages(cover ? [cover] : [])
+    let candidates = await this.findWideCandidates(listing)
+    if (candidates.length === 0) return []
+    if (others.some((i) => !i.hasEmbedding)) {
+      await this.embedListingImages(others)
+      candidates = await this.findWideCandidates(listing)
+    }
+    return candidates.filter((c) => c.textHit || c.similarity >= this.config.minSimilarity)
+  }
+
+  private findWideCandidates(listing: ListingToCheck): Promise<ReferenceCandidate[]> {
+    return this.repo.findCandidates(listing.id, this.config.widenSimilarity, this.config.maxCandidatesPerListing)
+  }
+
+  private async embedListingImages(images: ListingToCheck['images']): Promise<void> {
+    const pending = images.filter((i) => !i.hasEmbedding)
     const outcomes = await Promise.allSettled(pending.map(async (image) => {
       await this.repo.setListingImageEmbedding(image.id, await this.embedder.embedImage(image.url))
     }))
@@ -140,7 +167,7 @@ export class RunReferenceMatchUseCase {
 
     budget.verificationsLeft--
     const verdict = await this.verifier.verify({
-      listingImageUrls: listing.images.map((i) => i.url),
+      listingImageUrls: listing.images.slice(0, VERIFIER_LISTING_PHOTOS).map((i) => i.url),
       listingTitle: listing.title,
       referenceImageUrls: candidate.imageUrls,
       referenceName: candidate.name,
