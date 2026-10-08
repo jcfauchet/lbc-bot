@@ -119,7 +119,7 @@ Interfaces (domain), with Gemini adapters in `infrastructure/ai/Gemini`:
   768 dimensions, called through the REST `embedContent` endpoint: the installed
   `@google/genai` 1.30 only embeds text parts, and 2.x is a major bump.
 - `IReferenceMatchVerifier.verify(listingImageUrls, referenceImageUrls, name, note)`
-  → `{ same, reason }` — `gemini-2.5-flash`, same parse-tolerant style as triage.
+  → `{ same, reason }` — `gemini-3.6-flash`, same parse-tolerant style as triage.
 - `IReferenceRepository` — CRUD, candidate similarity query, match recording,
   pending-alert query.
 

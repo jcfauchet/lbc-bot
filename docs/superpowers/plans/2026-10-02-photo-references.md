@@ -6,7 +6,7 @@
 
 **Architecture:** A new funnel stage (`RunReferenceMatchUseCase`, first in the `analyze-and-notify` cron) embeds listing photos with Gemini Embedding 2, shortlists active references by pgvector cosine similarity, asks Gemini vision to confirm "same model", records each judged pair in `reference_matches`, and emails confirmed ones. A key-protected mobile page + API let her manage references; every bot email links to that page.
 
-**Tech Stack:** Next.js 16 App Router, TypeScript, Prisma 7 + raw SQL for pgvector, Supabase Postgres, Gemini REST `embedContent` (`gemini-embedding-2-preview`), `@google/genai` 1.30 `generateContent` (`gemini-2.5-flash`), Cloudinary, Resend, Vitest.
+**Tech Stack:** Next.js 16 App Router, TypeScript, Prisma 7 + raw SQL for pgvector, Supabase Postgres, Gemini REST `embedContent` (`gemini-embedding-2-preview`), `@google/genai` 1.30 `generateContent` (`gemini-3.6-flash`), Cloudinary, Resend, Vitest.
 
 **Spec:** `docs/superpowers/specs/2026-10-02-photo-references-design.md`
 
@@ -544,7 +544,7 @@ async function toInlinePart(url: string) {
 export class GeminiReferenceMatchVerifier implements IReferenceMatchVerifier {
   private readonly ai: GoogleGenAI
 
-  constructor(apiKey: string, private readonly model = 'gemini-2.5-flash') {
+  constructor(apiKey: string, private readonly model = 'gemini-3.6-flash') {
     this.ai = new GoogleGenAI({ apiKey })
   }
 

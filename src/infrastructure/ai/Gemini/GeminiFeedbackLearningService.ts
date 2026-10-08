@@ -35,7 +35,7 @@ export class GeminiFeedbackLearningService implements IFeedbackLearningService {
   private readonly ai: GoogleGenAI
   private readonly model: string
 
-  constructor(apiKey: string, model = 'gemini-2.5-flash') {
+  constructor(apiKey: string, model = 'gemini-3.6-flash') {
     this.ai = new GoogleGenAI({ apiKey })
     this.model = model
   }
