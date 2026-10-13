@@ -8,6 +8,10 @@
  *
  * Usage:
  *   npx tsx src/cli/eval-triage.ts [--limit 100] [--with-guidance] [--concurrency 3]
+ *                                  [--model gemini-2.5-flash] [--thinking-budget 0]
+ *
+ * --model scores with that Gemini model alone (no OpenAI fallback) instead of the
+ * production triage service, so two models can be compared on the same labels.
  *
  * Notes:
  * - Labels are biased towards listings that reached notification or the
@@ -16,6 +20,10 @@
  */
 import { prisma } from '@/infrastructure/prisma/client'
 import { container } from '@/infrastructure/di/container'
+import { env } from '@/infrastructure/config/env'
+import { GeminiTriageService } from '@/infrastructure/ai/Gemini/GeminiTriageService'
+import type { ITriageService } from '@/domain/services/ITriageService'
+import { parseEvalArgs } from './eval-triage-args'
 
 interface LabelledListing {
   id: string
@@ -29,19 +37,6 @@ interface EvalRow extends LabelledListing {
   score: number
 }
 
-function parseArgs(): { limit: number; withGuidance: boolean; concurrency: number } {
-  const args = process.argv.slice(2)
-  const get = (flag: string): string | undefined => {
-    const i = args.indexOf(flag)
-    return i >= 0 ? args[i + 1] : undefined
-  }
-  return {
-    limit: Number(get('--limit') ?? 200),
-    withGuidance: args.includes('--with-guidance'),
-    concurrency: Number(get('--concurrency') ?? 3),
-  }
-}
-
 async function loadLabelled(limit: number): Promise<LabelledListing[]> {
   const rows = await prisma.$queryRaw<Array<{
     id: string
@@ -52,7 +47,7 @@ async function loadLabelled(limit: number): Promise<LabelledListing[]> {
   }>>`
     SELECT l.id, l.title, l."priceCents", f."isGood",
       (SELECT i."urlRemote" FROM "listing_images" i
-       WHERE i."listingId" = l.id ORDER BY i."createdAt" ASC LIMIT 1) AS "imageUrl"
+       WHERE i."listingId" = l.id ORDER BY i."position" ASC, i."createdAt" ASC LIMIT 1) AS "imageUrl"
     FROM "listing_feedbacks" f
     JOIN "lbc_product_listings" l ON l.id = f."listingId"
     ORDER BY f."createdAt" DESC
@@ -62,6 +57,7 @@ async function loadLabelled(limit: number): Promise<LabelledListing[]> {
 }
 
 async function scoreAll(
+  triageService: ITriageService,
   listings: LabelledListing[],
   guidance: string | null,
   concurrency: number,
@@ -73,7 +69,7 @@ async function scoreAll(
   async function worker(): Promise<void> {
     for (let item = queue.shift(); item; item = queue.shift()) {
       try {
-        const { score } = await container.triageService.triage(
+        const { score } = await triageService.triage(
           { imageUrl: item.imageUrl, title: item.title, priceEur: item.priceCents / 100 },
           guidance,
         )
@@ -110,8 +106,12 @@ function report(rows: EvalRow[]): void {
 }
 
 async function main() {
-  const { limit, withGuidance, concurrency } = parseArgs()
-  console.log(`🧪 Triage eval — limit ${limit}, guidance ${withGuidance ? 'ON' : 'OFF'}`)
+  const { limit, withGuidance, concurrency, model, thinkingBudget } = parseEvalArgs(process.argv.slice(2))
+  const triageService: ITriageService = model
+    ? new GeminiTriageService(env.GOOGLE_GEMINI_API_KEY ?? 'missing-google-gemini-api-key', { model, thinkingBudget })
+    : container.triageService
+  const thinking = thinkingBudget === undefined ? 'default' : String(thinkingBudget)
+  console.log(`🧪 Triage eval — ${model ? `${model} (thinking ${thinking})` : 'production triage service'}, limit ${limit}, guidance ${withGuidance ? 'ON' : 'OFF'}`)
 
   const guidance = withGuidance
     ? (await container.triageGuidanceRepository.getLatest())?.content ?? null
@@ -119,7 +119,7 @@ async function main() {
   const labelled = await loadLabelled(limit)
   console.log(`Loaded ${labelled.length} labelled listings with an image.`)
 
-  const rows = await scoreAll(labelled, guidance, concurrency)
+  const rows = await scoreAll(triageService, labelled, guidance, concurrency)
   report(rows)
 }
 
