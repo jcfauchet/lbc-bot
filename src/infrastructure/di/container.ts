@@ -149,7 +149,9 @@ export class Container {
 
     this.compService = new SerpApiLensCompService(serpApiKey)
     this.triageService = new FallbackTriageService(
-      new GeminiTriageService(geminiApiKey),
+      // Thinking off: eval:triage on 13 Oct 2026 (200 labelled ads) gave the same
+      // precision/recall with and without it, and thinking tokens bill as output.
+      new GeminiTriageService(geminiApiKey, { thinkingBudget: 0 }),
       new OpenAiTriageService(openAiApiKey),
     )
     this.lensBudgetRepository = new PrismaLensBudgetRepository(this.prisma)
