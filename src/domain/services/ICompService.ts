@@ -3,6 +3,8 @@ export interface CompMatch {
   source: string
   link: string
   price?: { value: number; currency: string }
+  /** Thumbnail of the matched page, when the provider has one: what a visual check compares against. */
+  imageUrl?: string
   isValueDomain: boolean
   /**
    * True when the match comes from a mass-produced retail / marketplace domain

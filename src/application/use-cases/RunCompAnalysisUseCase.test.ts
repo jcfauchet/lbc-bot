@@ -38,6 +38,55 @@ const ranker = (picks: any) => ({
 })
 
 describe('RunCompAnalysisUseCase', () => {
+  describe('comp verification', () => {
+    const comps = { matches: [
+      { title: 'a', source: '1stdibs', link: 'https://1stdibs.com/a', isValueDomain: true, price: { value: 1000, currency: 'EUR' }, imageUrl: 'https://t/a' },
+      { title: 'b', source: '1stdibs', link: 'https://1stdibs.com/b', isValueDomain: true, price: { value: 2000, currency: 'EUR' }, imageUrl: 'https://t/b' },
+      { title: 'noprice', source: 'selency', link: 'https://selency.fr/c', isValueDomain: true },
+      { title: 'youtube', source: 'youtube', link: 'https://youtube.com/d', isValueDomain: false, price: { value: 5, currency: 'EUR' } },
+    ] }
+    const build = (d: any, verifier: any) => new RunCompAnalysisUseCase(
+      d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
+      { dailyBudget: 8, monthlyBudget: 250, resaleFactor: 1 },
+      undefined, undefined, undefined, undefined, undefined, undefined, verifier,
+    )
+
+    it('asks the verifier about the priced value comps and records which ones it confirmed', async () => {
+      const d = deps({ listings: [mk('x', 9)], comps })
+      const verifier = { verify: vi.fn(async (input: any) => [input.comps[1]]) }
+      await build(d, verifier).execute()
+
+      expect(verifier.verify).toHaveBeenCalledWith({
+        listingImageUrl: 'https://img/x.jpg', listingTitle: 'x', comps: [comps.matches[0], comps.matches[1]],
+      })
+      expect(d.saved[0].compCheck).toEqual({
+        confirmedCount: 1,
+        candidates: [
+          { title: 'a', link: 'https://1stdibs.com/a', source: '1stdibs', priceEur: 1000, imageUrl: 'https://t/a', confirmed: false },
+          { title: 'b', link: 'https://1stdibs.com/b', source: '1stdibs', priceEur: 2000, imageUrl: 'https://t/b', confirmed: true },
+        ],
+      })
+      // The estimate itself is unchanged: verification qualifies, it does not mute.
+      expect(d.saved[0].estimatedMinPrice.getEuros()).toBe(1250)
+    })
+
+    it('still saves the analysis, without a check, when the verifier fails', async () => {
+      const d = deps({ listings: [mk('x', 9)], comps })
+      const verifier = { verify: vi.fn(async () => { throw new Error('gemini down') }) }
+      await build(d, verifier).execute()
+      expect(d.saved).toHaveLength(1)
+      expect(d.saved[0].compCheck).toBeUndefined()
+      expect(d.statuses['x']).toBe(ListingStatus.ANALYZED)
+    })
+
+    it('does not consult the verifier when nothing is priced', async () => {
+      const d = deps({ listings: [mk('x', 9)], comps: { matches: [comps.matches[2]] } })
+      const verifier = { verify: vi.fn(async () => []) }
+      await build(d, verifier).execute()
+      expect(verifier.verify).not.toHaveBeenCalled()
+    })
+  })
+
   it('analyzes the highest-scored listing and saves an AiAnalysis', async () => {
     const d = deps({
       listings: [mk('low', 6), mk('high', 9)],

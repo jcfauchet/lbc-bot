@@ -22,6 +22,7 @@
     "notify": "tsx src/cli/notify.ts",
     "eval:triage": "tsx src/cli/eval-triage.ts",
     "eval:comps": "tsx src/cli/eval-comps.ts",
+    "eval:comp-verify": "tsx src/cli/eval-comp-verify.ts",
     "funnel": "pnpm scrape && pnpm prefilter && pnpm triage && pnpm analyze",
     "test": "vitest --run",
     "test:live": "RUN_LIVE=1 vitest --run **/*.live.test.ts",

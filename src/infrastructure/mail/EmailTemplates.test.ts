@@ -32,3 +32,36 @@ describe('EmailTemplates.goodDealsDigest', () => {
     expect(EmailTemplates.goodDealsDigest([deal('Selency')])).toContain('Selency')
   })
 })
+
+describe('EmailTemplates.goodDealsDigest comp check badge', () => {
+  const withCheck = (compCheck: any) => {
+    const d = deal()
+    d.analysis = AiAnalysis.create({
+      listingId: 'l1', estimatedMinPrice: Money.fromEuros(400), estimatedMaxPrice: Money.fromEuros(600),
+      margin: Money.fromEuros(280), description: 'brass trolley', provider: 'serpapi', compCheck,
+    })
+    return d
+  }
+  const candidate = (link: string, confirmed: boolean) => ({ title: 't', link, source: 'selency.fr', priceEur: 500, confirmed })
+
+  it('says how many comparables were confirmed and links them', () => {
+    const html = EmailTemplates.goodDealsDigest([withCheck({
+      confirmedCount: 2,
+      candidates: [candidate('https://www.selency.fr/a', true), candidate('https://www.pamono.fr/b', false), candidate('https://www.1stdibs.com/c', true)],
+    })])
+    expect(html).toContain('2 comparables confirmés sur 3')
+    expect(html).toContain('href="https://www.selency.fr/a"')
+    expect(html).toContain('href="https://www.1stdibs.com/c"')
+    expect(html).not.toContain('href="https://www.pamono.fr/b"')
+  })
+
+  it('warns when none of the comparables is the same piece', () => {
+    const html = EmailTemplates.goodDealsDigest([withCheck({ confirmedCount: 0, candidates: [candidate('https://www.selency.fr/a', false)] })])
+    expect(html).toContain('Aucun comparable confirmé sur 1')
+    expect(html).toContain('ressemblances')
+  })
+
+  it('shows nothing about verification when the analysis was not checked', () => {
+    expect(EmailTemplates.goodDealsDigest([deal()])).not.toContain('comparable confirmé')
+  })
+})

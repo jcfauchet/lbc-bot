@@ -22,6 +22,8 @@ export class PrismaAiAnalysisRepository implements IAiAnalysisRepository {
       provider: analysis.provider,
       bestMatchSource: analysis.bestMatchSource,
       searchTerms: analysis.searchTerms ? JSON.parse(JSON.stringify(analysis.searchTerms)) : null,
+      compCheck: analysis.compCheck ? JSON.parse(JSON.stringify(analysis.compCheck)) : null,
+      confirmedCompCount: analysis.compCheck?.confirmedCount ?? null,
     }
 
     const created = await this.prisma.aiAnalysis.create({ data })
@@ -93,6 +95,8 @@ export class PrismaAiAnalysisRepository implements IAiAnalysisRepository {
         confidence: analysis.confidence,
         bestMatchSource: analysis.bestMatchSource,
         searchTerms: analysis.searchTerms ? JSON.parse(JSON.stringify(analysis.searchTerms)) : null,
+        compCheck: analysis.compCheck ? JSON.parse(JSON.stringify(analysis.compCheck)) : null,
+        confirmedCompCount: analysis.compCheck?.confirmedCount ?? null,
         updatedAt: new Date(),
       },
     })
@@ -115,6 +119,7 @@ export class PrismaAiAnalysisRepository implements IAiAnalysisRepository {
       provider: raw.provider,
       bestMatchSource: raw.bestMatchSource,
       searchTerms: raw.searchTerms ? (raw.searchTerms as any[]) : undefined,
+      compCheck: raw.compCheck ?? undefined,
       createdAt: raw.createdAt,
       updatedAt: raw.updatedAt,
     })

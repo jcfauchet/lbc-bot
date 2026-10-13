@@ -8,6 +8,7 @@ describe('SerpApiLensCompService', () => {
     const payload = {
       visual_matches: [
         { title: 'Willy Rizzo Alveo', link: 'https://www.1stdibs.com/x', source: '1stDibs',
+          thumbnail: 'https://encrypted-tbn0.gstatic.com/t1',
           price: { value: '$7,855', extracted_value: 7855, currency: '$' } },
         { title: 'Coffee table', link: 'https://youtube.com/y', source: 'YouTube' },
       ],
@@ -21,7 +22,9 @@ describe('SerpApiLensCompService', () => {
     expect(matches[0]).toMatchObject({
       isValueDomain: true,
       price: { value: 7855, currency: 'USD' },
+      imageUrl: 'https://encrypted-tbn0.gstatic.com/t1',
     })
+    expect(matches[1].imageUrl).toBeUndefined()
     expect(matches[1].isValueDomain).toBe(false)
     expect(matches[1].price).toBeUndefined()
   })

@@ -6,6 +6,22 @@ export interface SearchTerm {
   confidence: number
 }
 
+/** A priced comparable the visual check looked at, and whether it showed the same model. */
+export interface CheckedComp {
+  title: string
+  link: string
+  source: string
+  priceEur?: number
+  imageUrl?: string
+  confirmed: boolean
+}
+
+/** Outcome of the visual check on the comparables behind the estimate. Absent when no check ran. */
+export interface CompCheck {
+  candidates: CheckedComp[]
+  confirmedCount: number
+}
+
 export interface AiAnalysisProps {
   id: string
   listingId: string
@@ -17,6 +33,7 @@ export interface AiAnalysisProps {
   provider: string
   bestMatchSource?: string
   searchTerms?: SearchTerm[]
+  compCheck?: CompCheck
   createdAt: Date
   updatedAt: Date
 }
@@ -34,6 +51,7 @@ export class AiAnalysis {
     provider: string
     bestMatchSource?: string
     searchTerms?: SearchTerm[]
+    compCheck?: CompCheck
   }): AiAnalysis {
     return new AiAnalysis({
       id: crypto.randomUUID(),
@@ -93,6 +111,10 @@ export class AiAnalysis {
 
   get searchTerms(): SearchTerm[] | undefined {
     return this.props.searchTerms
+  }
+
+  get compCheck(): CompCheck | undefined {
+    return this.props.compCheck
   }
 }
 

@@ -1,7 +1,9 @@
 import type { IListingRepository } from '@/domain/repositories/IListingRepository'
 import type { IAiAnalysisRepository } from '@/domain/repositories/IAiAnalysisRepository'
 import type { IListingImageRepository } from '@/domain/repositories/IListingImageRepository'
-import type { ICompService } from '@/domain/services/ICompService'
+import type { ICompService, CompMatch } from '@/domain/services/ICompService'
+import type { ICompVerifier } from '@/domain/services/ICompVerifier'
+import type { CompCheck } from '@/domain/entities/AiAnalysis'
 import type { ILensBudgetRepository } from '@/domain/repositories/ILensBudgetRepository'
 import type { IFeedbackRepository } from '@/domain/repositories/IFeedbackRepository'
 import type { IListingAvailabilityService } from '@/domain/services/IListingAvailabilityService'
@@ -151,7 +153,30 @@ export class RunCompAnalysisUseCase {
     // ranking stage entirely instead of repeating it for a near-certainly
     // identical verdict. Unwired, every run ranks again — today's behaviour.
     private rankingWindowRepository?: IRankingWindowRepository,
+    // Optional: looks at the ad photo next to each priced comparable and says
+    // which ones show the same model. Reverse-image search returns look-alikes,
+    // and a look-alike priced the piece as if it were the real thing. The check
+    // qualifies the analysis (badge in the email, numbers in the table); it does
+    // not change the estimate yet. Failing, the analysis is saved unchecked.
+    private compVerifier?: ICompVerifier,
   ) {}
+
+  private async checkComps(imageUrl: string, listingTitle: string, matches: CompMatch[]): Promise<CompCheck | undefined> {
+    if (!this.compVerifier) return undefined
+    const candidates = matches.filter((m) => m.isValueDomain && m.price)
+    if (candidates.length === 0) return undefined
+    try {
+      const confirmed = new Set(await this.compVerifier.verify({ listingImageUrl: imageUrl, listingTitle, comps: candidates }))
+      const checked = candidates.map((m) => ({
+        title: m.title, link: m.link, source: m.source, priceEur: m.price?.value, imageUrl: m.imageUrl,
+        confirmed: confirmed.has(m),
+      }))
+      return { candidates: checked, confirmedCount: checked.filter((c) => c.confirmed).length }
+    } catch (err) {
+      console.error(`Comp verification failed for ${listingTitle}:`, err)
+      return undefined
+    }
+  }
 
   async execute(): Promise<{ processed: number; analyzed: number; ignored: number; expired: number; deferred: number }> {
     // Drop stale candidates first so the (tiny) daily budget only ever goes to
@@ -359,6 +384,7 @@ export class RunCompAnalysisUseCase {
       const estMax = Money.fromEuros(score.rangeMaxEur! * resaleFactor)
       const median = Money.fromEuros(score.estimatedValueEur * resaleFactor)
       const topComp = comps.matches.find((m) => m.isValueDomain && m.price)?.link
+      const compCheck = await this.checkComps(imageUrl, listing.title, comps.matches)
 
       const analysis = AiAnalysis.create({
         listingId: listing.id,
@@ -370,6 +396,7 @@ export class RunCompAnalysisUseCase {
         provider: this.compService.providerName,
         bestMatchSource: topComp ?? undefined,
         searchTerms: [],
+        compCheck,
       })
       await this.aiAnalysisRepository.save(analysis)
       listing.markAsAnalyzed()

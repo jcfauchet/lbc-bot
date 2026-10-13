@@ -6,6 +6,18 @@ import { referencesPageUrl } from './references-link'
 
 export class EmailTemplates {
   /** The comp the estimate leans on, as a link she can open to judge it herself. */
+  /** The visual check verdict: a count the reader can trust, and the confirmed links. */
+  static compCheckBadge(check: { candidates: Array<{ link: string; confirmed: boolean }>; confirmedCount: number } | undefined): string {
+    if (!check) return ''
+    const total = check.candidates.length
+    if (check.confirmedCount === 0) {
+      return `<br><span style="color: #b45309;">⚠️ Aucun comparable confirmé sur ${total} : estimation basée sur des ressemblances.</span>`
+    }
+    const plural = check.confirmedCount > 1 ? 's' : ''
+    const links = check.candidates.filter((c) => c.confirmed).slice(0, 3).map((c) => EmailTemplates.comparableLink(c.link)).join(' · ')
+    return `<br><span style="color: #15803d;">✅ ${check.confirmedCount} comparable${plural} confirmé${plural} sur ${total}</span> ${links}`
+  }
+
   static comparableLink(source: string): string {
     try {
       const url = new URL(source)
@@ -63,6 +75,7 @@ export class EmailTemplates {
               <div style="margin-top: 10px;">
                 <strong>Marge estimée (min):</strong> ${analysis.estimatedMinPrice.minus(listing.price).toString()}
                 ${analysis.bestMatchSource ? `<br><strong>Objet comparable :</strong> ${EmailTemplates.comparableLink(analysis.bestMatchSource)}` : ''}
+                ${EmailTemplates.compCheckBadge(analysis.compCheck)}
                 ${imageUrl ? `<br><a href="https://lens.google.com/upload?url=${encodeURIComponent(imageUrl)}" style="color: #0066cc; text-decoration: none; display: inline-block; margin-top: 5px;">🔍 Recherche Google Lens</a>` : ''}
               </div>
               <p style="margin: 10px 0; color: #333;">

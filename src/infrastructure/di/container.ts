@@ -35,6 +35,7 @@ import { GetRecentNotifiedListingsUseCase } from '@/application/use-cases/GetRec
 import { SerpApiLensCompService } from '@/infrastructure/comps/SerpApiLensCompService'
 import { GeminiTriageService } from '@/infrastructure/ai/Gemini/GeminiTriageService'
 import { GeminiSelectionRanker } from '@/infrastructure/ai/Gemini/GeminiSelectionRanker'
+import { GeminiCompVerifier } from '@/infrastructure/ai/Gemini/GeminiCompVerifier'
 import { OpenAiTriageService } from '@/infrastructure/ai/OpenAi/OpenAiTriageService'
 import { FallbackTriageService } from '@/infrastructure/ai/FallbackTriageService'
 import { PrismaLensBudgetRepository } from '@/infrastructure/prisma/repositories/PrismaLensBudgetRepository'
@@ -194,6 +195,7 @@ export class Container {
         : undefined,
       this.triageGuidanceRepository,
       this.rankingWindowRepository,
+      new GeminiCompVerifier(geminiApiKey),
     )
 
     this.runListingScrapingUseCase = new RunListingScrapingUseCase(

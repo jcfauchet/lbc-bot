@@ -6,6 +6,7 @@ interface SerpVisualMatch {
   title?: string
   link?: string
   source?: string
+  thumbnail?: string
   price?: { extracted_value?: number; currency?: string }
 }
 
@@ -39,6 +40,7 @@ export class SerpApiLensCompService implements ICompService {
         isValueDomain: isValueDomain(`${link} ${source}`),
         isMassMarket: isMassMarketDomain(`${link} ${source}`),
         price: typeof value === 'number' ? { value, currency } : undefined,
+        imageUrl: vm.thumbnail || undefined,
       }
     })
 

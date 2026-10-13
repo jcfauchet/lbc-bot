@@ -80,6 +80,10 @@ model AiAnalysis {
   provider       String   @default("openai")
   bestMatchSource String?
   searchTerms    Json?
+  /// Visual check of the priced comparables behind the estimate; null when no check ran.
+  compCheck      Json?
+  /// Denormalised from compCheck so precision can be read per confirmed count.
+  confirmedCompCount Int?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   
