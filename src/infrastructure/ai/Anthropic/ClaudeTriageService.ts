@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import type { ITriageService, TriageInput, TriageResult } from '@/domain/services/ITriageService'
 import { buildTriagePrompt, parseTriageScore, renderListingContext } from '../triage-prompt'
-import { fetchImage } from '../fetch-image'
+import { imageBlock, responseText } from './claude-message'
 
 export interface ClaudeTriageOptions {
   model?: string
@@ -10,8 +10,6 @@ export interface ClaudeTriageOptions {
 }
 
 const DEFAULT_TRIAGE_MODEL = 'claude-haiku-5-5'
-
-type ImageMediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
 
 export class ClaudeTriageService implements ITriageService {
   readonly providerName = 'claude'
@@ -26,7 +24,6 @@ export class ClaudeTriageService implements ITriageService {
   }
 
   async triage(input: TriageInput, guidance?: string | null): Promise<TriageResult> {
-    const image = await fetchImage(input.imageUrl)
     const response = await this.client.messages.create({
       model: this.model,
       max_tokens: 4000,
@@ -34,13 +31,11 @@ export class ClaudeTriageService implements ITriageService {
       messages: [{
         role: 'user',
         content: [
-          { type: 'image', source: { type: 'base64', media_type: image.mimeType as ImageMediaType, data: image.data } },
+          await imageBlock(input.imageUrl),
           { type: 'text', text: `${buildTriagePrompt(guidance)}\n${renderListingContext(input)}` },
         ],
       }],
     })
-    if (response.stop_reason === 'refusal') throw new Error(`Claude refused triage for "${input.title}"`)
-    const text = response.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('')
-    return parseTriageScore(text)
+    return parseTriageScore(responseText(response, `triage for "${input.title}"`))
   }
 }

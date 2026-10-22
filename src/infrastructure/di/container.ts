@@ -38,6 +38,13 @@ import { GeminiSelectionRanker } from '@/infrastructure/ai/Gemini/GeminiSelectio
 import { GeminiCompVerifier } from '@/infrastructure/ai/Gemini/GeminiCompVerifier'
 import { OpenAiTriageService } from '@/infrastructure/ai/OpenAi/OpenAiTriageService'
 import { ClaudeTriageService } from '@/infrastructure/ai/Anthropic/ClaudeTriageService'
+import { ClaudeSelectionRanker } from '@/infrastructure/ai/Anthropic/ClaudeSelectionRanker'
+import { ClaudeReferenceMatchVerifier } from '@/infrastructure/ai/Anthropic/ClaudeReferenceMatchVerifier'
+import { ClaudeFeedbackLearningService } from '@/infrastructure/ai/Anthropic/ClaudeFeedbackLearningService'
+import { withFallback } from '@/infrastructure/ai/with-fallback'
+import type { IFeedbackLearningService } from '@/domain/services/IFeedbackLearningService'
+import type { ISelectionRanker } from '@/domain/services/ISelectionRanker'
+import type { IReferenceMatchVerifier } from '@/domain/services/IReferenceMatchVerifier'
 import { FallbackTriageService } from '@/infrastructure/ai/FallbackTriageService'
 import { PrismaLensBudgetRepository } from '@/infrastructure/prisma/repositories/PrismaLensBudgetRepository'
 import { PrismaRankingWindowRepository } from '@/infrastructure/prisma/repositories/PrismaRankingWindowRepository'
@@ -63,7 +70,7 @@ export class Container {
   public readonly feedbackRepository: PrismaFeedbackRepository
   public readonly triageGuidanceRepository: PrismaTriageGuidanceRepository
   public readonly embeddingService: EmbeddingService
-  public readonly feedbackLearningService: GeminiFeedbackLearningService
+  public readonly feedbackLearningService: IFeedbackLearningService
 
   public readonly scraper: LeBonCoinListingScraper
   public readonly listingSourceApi: IListingSource
@@ -100,6 +107,11 @@ export class Container {
     const geminiApiKey = env.GOOGLE_GEMINI_API_KEY ?? 'missing-google-gemini-api-key'
     const resendApiKey = env.RESEND_API_KEY ?? 'missing-resend-api-key'
     const serpApiKey = env.SERPAPI_KEY ?? 'missing-serpapi-key'
+    const anthropicApiKey = env.ANTHROPIC_API_KEY
+    // Claude answers first wherever a key is set, to spend the prepaid monthly
+    // Claude budget; Gemini takes over on any error, including the spend limit.
+    const claudeFirst = <T extends object>(claude: (key: string) => T, gemini: T, label: string): T =>
+      anthropicApiKey ? withFallback(claude(anthropicApiKey), gemini, label) : gemini
 
     this.prisma = prisma
 
@@ -111,7 +123,11 @@ export class Container {
     this.feedbackRepository = new PrismaFeedbackRepository(this.prisma)
     this.triageGuidanceRepository = new PrismaTriageGuidanceRepository(this.prisma)
     this.embeddingService = new EmbeddingService(openAiApiKey)
-    this.feedbackLearningService = new GeminiFeedbackLearningService(geminiApiKey)
+    this.feedbackLearningService = claudeFirst<IFeedbackLearningService>(
+      (key) => new ClaudeFeedbackLearningService(key),
+      new GeminiFeedbackLearningService(geminiApiKey),
+      'Feedback learning',
+    )
 
     this.scraper = new LeBonCoinListingScraper()
     
@@ -132,7 +148,7 @@ export class Container {
     this.runReferenceMatchUseCase = new RunReferenceMatchUseCase(
       this.referenceRepository,
       this.imageEmbeddingService,
-      new GeminiReferenceMatchVerifier(geminiApiKey),
+      claudeFirst<IReferenceMatchVerifier>((key) => new ClaudeReferenceMatchVerifier(key), new GeminiReferenceMatchVerifier(geminiApiKey), 'Reference match'),
       this.mailer,
       {
         minSimilarity: env.REFERENCE_MATCH_MIN_SIMILARITY,
@@ -159,8 +175,8 @@ export class Container {
     // Claude first: the Anthropic credit is prepaid each month, and eval:triage on
     // 22 Oct 2026 put Haiku 5.5 at 40% precision at threshold 6 vs ~32% for Gemini.
     // Once the monthly spend limit is hit, its errors fall through to Gemini.
-    this.triageService = env.ANTHROPIC_API_KEY
-      ? new FallbackTriageService(new ClaudeTriageService(env.ANTHROPIC_API_KEY), geminiThenOpenAi)
+    this.triageService = anthropicApiKey
+      ? new FallbackTriageService(new ClaudeTriageService(anthropicApiKey), geminiThenOpenAi)
       : geminiThenOpenAi
     this.lensBudgetRepository = new PrismaLensBudgetRepository(this.prisma)
     this.rankingWindowRepository = new PrismaRankingWindowRepository(this.prisma)
@@ -198,10 +214,12 @@ export class Container {
       this.embeddingService,
       new LbcListingAvailabilityChecker(),
       env.RANKING_ENABLED && env.GOOGLE_GEMINI_API_KEY
-        ? new GeminiSelectionRanker(env.GOOGLE_GEMINI_API_KEY)
+        ? claudeFirst<ISelectionRanker>((key) => new ClaudeSelectionRanker(key), new GeminiSelectionRanker(env.GOOGLE_GEMINI_API_KEY), 'Ranking')
         : undefined,
       this.triageGuidanceRepository,
       this.rankingWindowRepository,
+      // Stays on Gemini: the 22 Oct 2026 replay (eval-claude-judges --step comp) found the two
+      // models disagreeing on over half of the confirmed comps, pending a human verdict.
       new GeminiCompVerifier(geminiApiKey),
     )
 
