@@ -42,6 +42,12 @@ import { ClaudeSelectionRanker } from '@/infrastructure/ai/Anthropic/ClaudeSelec
 import { ClaudeReferenceMatchVerifier } from '@/infrastructure/ai/Anthropic/ClaudeReferenceMatchVerifier'
 import { ClaudeFeedbackLearningService } from '@/infrastructure/ai/Anthropic/ClaudeFeedbackLearningService'
 import { withFallback } from '@/infrastructure/ai/with-fallback'
+import { ClaudeCompVerifier } from '@/infrastructure/ai/Anthropic/ClaudeCompVerifier'
+import { ConsensusCompVerifier } from '@/infrastructure/ai/ConsensusCompVerifier'
+import { ProductPhotoCompVerifier } from '@/infrastructure/ai/ProductPhotoCompVerifier'
+
+/** Dealer-page photos shown per comparable; each one costs vision tokens on both models. */
+const COMP_DEALER_PHOTOS = 2
 import type { IFeedbackLearningService } from '@/domain/services/IFeedbackLearningService'
 import type { ISelectionRanker } from '@/domain/services/ISelectionRanker'
 import type { IReferenceMatchVerifier } from '@/domain/services/IReferenceMatchVerifier'
@@ -218,9 +224,14 @@ export class Container {
         : undefined,
       this.triageGuidanceRepository,
       this.rankingWindowRepository,
-      // Stays on Gemini: the 22 Oct 2026 replay (eval-claude-judges --step comp) found the two
-      // models disagreeing on over half of the confirmed comps, pending a human verdict.
-      new GeminiCompVerifier(geminiApiKey),
+      // Dealer-page photos instead of the blurry Lens thumbnail, then two models that
+      // must agree (see ConsensusCompVerifier). Without a Claude key, Gemini alone.
+      new ProductPhotoCompVerifier(
+        anthropicApiKey
+          ? new ConsensusCompVerifier(new ClaudeCompVerifier(anthropicApiKey, 'claude-opus-5-5'), new ClaudeCompVerifier(anthropicApiKey, 'claude-sonnet-5-5'))
+          : new GeminiCompVerifier(geminiApiKey),
+        COMP_DEALER_PHOTOS,
+      ),
     )
 
     this.runListingScrapingUseCase = new RunListingScrapingUseCase(

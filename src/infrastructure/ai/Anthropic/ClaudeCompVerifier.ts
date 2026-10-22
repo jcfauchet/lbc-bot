@@ -1,11 +1,10 @@
 import Anthropic from '@anthropic-ai/sdk'
 import type { CompMatch } from '@/domain/services/ICompService'
 import type { CompVerifyInput, ICompVerifier } from '@/domain/services/ICompVerifier'
-import { buildCompVerifyPrompt, parseCompVerdicts } from '../comp-verify-prompt'
-import { CLAUDE_JUDGE_MODEL, imageBlock, responseText } from './claude-message'
+import { buildCompVerifyRequest, compCandidates, parseCompVerdicts } from '../comp-verify-prompt'
+import { CLAUDE_JUDGE_MODEL, responseText } from './claude-message'
 
-/** Same bound as the Gemini verifier: Lens rarely yields more priced value comps anyway. */
-const MAX_CANDIDATES = 8
+type ImageMediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
 
 /** Claude twin of GeminiCompVerifier: keeps only the comparables showing the same model as the ad. */
 export class ClaudeCompVerifier implements ICompVerifier {
@@ -16,20 +15,19 @@ export class ClaudeCompVerifier implements ICompVerifier {
   }
 
   async verify(input: CompVerifyInput): Promise<CompMatch[]> {
-    const candidates = input.comps.filter((c) => c.imageUrl).slice(0, MAX_CANDIDATES)
+    const candidates = compCandidates(input.comps)
     if (candidates.length === 0) return []
 
-    const images = await Promise.all([input.listingImageUrl, ...candidates.map((c) => c.imageUrl!)].map(imageBlock))
+    const parts = await buildCompVerifyRequest({ listingTitle: input.listingTitle, listingImageUrls: input.listingImageUrls, candidates })
     const response = await this.client.messages.create({
       model: this.model,
       max_tokens: 16000,
       output_config: { effort: 'medium' },
       messages: [{
         role: 'user',
-        content: [
-          { type: 'text', text: buildCompVerifyPrompt({ listingTitle: input.listingTitle, compCount: candidates.length }) },
-          ...images,
-        ],
+        content: parts.map((p): Anthropic.ContentBlockParam => ('text' in p
+          ? { type: 'text', text: p.text }
+          : { type: 'image', source: { type: 'base64', media_type: p.image.mimeType as ImageMediaType, data: p.image.data } })),
       }],
     })
     const flags = parseCompVerdicts(responseText(response, 'the comp check'), candidates.length)

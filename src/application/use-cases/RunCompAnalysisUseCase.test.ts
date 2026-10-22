@@ -57,7 +57,7 @@ describe('RunCompAnalysisUseCase', () => {
       await build(d, verifier).execute()
 
       expect(verifier.verify).toHaveBeenCalledWith({
-        listingImageUrl: 'https://img/x.jpg', listingTitle: 'x', comps: [comps.matches[0], comps.matches[1]],
+        listingImageUrls: ['https://img/x.jpg'], listingTitle: 'x', comps: [comps.matches[0], comps.matches[1]],
       })
       expect(d.saved[0].compCheck).toEqual({
         confirmedCount: 1,

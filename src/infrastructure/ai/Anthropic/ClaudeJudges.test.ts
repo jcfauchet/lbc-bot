@@ -29,7 +29,7 @@ describe('ClaudeCompVerifier', () => {
   it('keeps only the confirmed comparables, on Opus, with the ad photo first', async () => {
     create.mockResolvedValueOnce(reply('{"confirmed": [2]}'))
     const comps = [comp('a', 'https://t/a'), comp('b', 'https://t/b'), comp('c')]
-    const kept = await new ClaudeCompVerifier('key').verify({ listingImageUrl: 'https://img/ad.jpg', listingTitle: 'Table', comps })
+    const kept = await new ClaudeCompVerifier('key').verify({ listingImageUrls: ['https://img/ad.jpg'], listingTitle: 'Table', comps })
     expect(kept.map((c) => c.link)).toEqual(['b'])
     const call = create.mock.calls[0][0]
     expect(call.model).toBe('claude-opus-5-5')
@@ -38,7 +38,7 @@ describe('ClaudeCompVerifier', () => {
 
   it('throws on a refusal so the Gemini verifier decides instead of confirming nothing', async () => {
     create.mockResolvedValueOnce(reply('', 'refusal'))
-    await expect(new ClaudeCompVerifier('key').verify({ listingImageUrl: 'https://img/ad.jpg', listingTitle: 'Table', comps: [comp('a', 'https://t/a')] }))
+    await expect(new ClaudeCompVerifier('key').verify({ listingImageUrls: ['https://img/ad.jpg'], listingTitle: 'Table', comps: [comp('a', 'https://t/a')] }))
       .rejects.toThrow(/refused/)
   })
 })

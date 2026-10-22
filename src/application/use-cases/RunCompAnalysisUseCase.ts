@@ -20,7 +20,10 @@ import { ListingStatus } from '@/domain/value-objects/ListingStatus'
 /** A candidate that survived the free filters, with the image both later stages need. */
 interface ShortlistEntry {
   listing: Listing
+  /** Cover photo: what Lens searches on and the ranker sees. */
   imageUrl: string
+  /** Every photo, cover first, for the comp check. */
+  imageUrls: string[]
 }
 
 export interface LensBudgetConfig {
@@ -153,7 +156,7 @@ export class RunCompAnalysisUseCase {
     // ranking stage entirely instead of repeating it for a near-certainly
     // identical verdict. Unwired, every run ranks again — today's behaviour.
     private rankingWindowRepository?: IRankingWindowRepository,
-    // Optional: looks at the ad photo next to each priced comparable and says
+    // Optional: looks at the ad photos next to each priced comparable and says
     // which ones show the same model. Reverse-image search returns look-alikes,
     // and a look-alike priced the piece as if it were the real thing. The check
     // qualifies the analysis (badge in the email, numbers in the table); it does
@@ -161,12 +164,12 @@ export class RunCompAnalysisUseCase {
     private compVerifier?: ICompVerifier,
   ) {}
 
-  private async checkComps(imageUrl: string, listingTitle: string, matches: CompMatch[]): Promise<CompCheck | undefined> {
+  private async checkComps(listingImageUrls: string[], listingTitle: string, matches: CompMatch[]): Promise<CompCheck | undefined> {
     if (!this.compVerifier) return undefined
     const candidates = matches.filter((m) => m.isValueDomain && m.price)
     if (candidates.length === 0) return undefined
     try {
-      const confirmed = new Set(await this.compVerifier.verify({ listingImageUrl: imageUrl, listingTitle, comps: candidates }))
+      const confirmed = new Set(await this.compVerifier.verify({ listingImageUrls, listingTitle, comps: candidates }))
       const checked = candidates.map((m) => ({
         title: m.title, link: m.link, source: m.source, priceEur: m.price?.value, imageUrl: m.imageUrl,
         confirmed: confirmed.has(m),
@@ -313,7 +316,7 @@ export class RunCompAnalysisUseCase {
         continue
       }
 
-      shortlist.push({ listing, imageUrl })
+      shortlist.push({ listing, imageUrl, imageUrls: images.map((i) => i.urlRemote) })
     }
 
     // Captured before pass two spends any of it: the entitlement this window had
@@ -331,7 +334,7 @@ export class RunCompAnalysisUseCase {
     // dropped one, under-spending the window even when good candidates remain.
     let probeDropped = 0
 
-    for (const { listing, imageUrl } of picks) {
+    for (const { listing, imageUrl, imageUrls } of picks) {
       if (remaining <= 0) break
 
       // A removed listing means the deal is already gone: don't spend a credit
@@ -384,7 +387,7 @@ export class RunCompAnalysisUseCase {
       const estMax = Money.fromEuros(score.rangeMaxEur! * resaleFactor)
       const median = Money.fromEuros(score.estimatedValueEur * resaleFactor)
       const topComp = comps.matches.find((m) => m.isValueDomain && m.price)?.link
-      const compCheck = await this.checkComps(imageUrl, listing.title, comps.matches)
+      const compCheck = await this.checkComps(imageUrls, listing.title, comps.matches)
 
       const analysis = AiAnalysis.create({
         listingId: listing.id,

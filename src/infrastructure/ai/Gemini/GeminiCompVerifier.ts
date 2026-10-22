@@ -1,14 +1,10 @@
 import { GoogleGenAI } from '@google/genai'
 import type { CompMatch } from '@/domain/services/ICompService'
 import type { CompVerifyInput, ICompVerifier } from '@/domain/services/ICompVerifier'
-import { buildCompVerifyPrompt, parseCompVerdicts } from '../comp-verify-prompt'
-import { fetchImage } from '../fetch-image'
-
-/** Bounds the vision tokens per call; Lens rarely yields more priced value comps anyway. */
-const MAX_CANDIDATES = 8
+import { buildCompVerifyRequest, compCandidates, parseCompVerdicts } from '../comp-verify-prompt'
 
 /**
- * Looks at the ad photo next to each comparable's thumbnail and keeps only the
+ * Looks at the ad photos next to each comparable's photos and keeps only the
  * ones showing the same model. A reverse-image search returns look-alikes, and
  * a look-alike from a dealer site used to price the piece as if it were the
  * real thing.
@@ -21,18 +17,13 @@ export class GeminiCompVerifier implements ICompVerifier {
   }
 
   async verify(input: CompVerifyInput): Promise<CompMatch[]> {
-    const candidates = input.comps.filter((c) => c.imageUrl).slice(0, MAX_CANDIDATES)
+    const candidates = compCandidates(input.comps)
     if (candidates.length === 0) return []
 
-    const listingPart = { inlineData: await fetchImage(input.listingImageUrl) }
-    const candidateParts = await Promise.all(candidates.map(async (c) => ({ inlineData: await fetchImage(c.imageUrl!) })))
+    const parts = await buildCompVerifyRequest({ listingTitle: input.listingTitle, listingImageUrls: input.listingImageUrls, candidates })
     const response = await this.ai.models.generateContent({
       model: this.model,
-      contents: [
-        { text: buildCompVerifyPrompt({ listingTitle: input.listingTitle, compCount: candidates.length }) },
-        listingPart,
-        ...candidateParts,
-      ],
+      contents: parts.map((p) => ('text' in p ? { text: p.text } : { inlineData: p.image })),
     })
     const flags = parseCompVerdicts(response.text ?? '', candidates.length)
     return candidates.filter((_, i) => flags[i])

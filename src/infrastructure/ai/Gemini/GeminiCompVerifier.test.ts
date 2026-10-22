@@ -17,7 +17,7 @@ describe('GeminiCompVerifier', () => {
 
   it('keeps only the comparables the model confirms as the same model', async () => {
     const comps = [comp('a', 'https://t/a'), comp('b', 'https://t/b'), comp('c', 'https://t/c')]
-    const kept = await new GeminiCompVerifier('key').verify({ listingImageUrl: 'https://img/ad.jpg', listingTitle: 'Table', comps })
+    const kept = await new GeminiCompVerifier('key').verify({ listingImageUrls: ['https://img/ad.jpg'], listingTitle: 'Table', comps })
     expect(kept.map((c) => c.link)).toEqual(['b'])
     const call = generateContent.mock.calls[0][0]
     expect(call.model).toBe('gemini-3.6-flash')
@@ -25,14 +25,14 @@ describe('GeminiCompVerifier', () => {
   })
 
   it('cannot vouch for a comparable without a thumbnail, so it drops it', async () => {
-    const kept = await new GeminiCompVerifier('key').verify({ listingImageUrl: 'https://img/ad.jpg', listingTitle: 'Table', comps: [comp('a'), comp('b', 'https://t/b')] })
+    const kept = await new GeminiCompVerifier('key').verify({ listingImageUrls: ['https://img/ad.jpg'], listingTitle: 'Table', comps: [comp('a'), comp('b', 'https://t/b')] })
     expect(generateContent).toHaveBeenCalledOnce()
     // Only 'b' was shown, as candidate 1; the mock confirms candidate 2, which does not exist.
     expect(kept).toEqual([])
   })
 
   it('skips the call when nothing can be verified', async () => {
-    const kept = await new GeminiCompVerifier('key').verify({ listingImageUrl: 'https://img/ad.jpg', listingTitle: 'Table', comps: [comp('a')] })
+    const kept = await new GeminiCompVerifier('key').verify({ listingImageUrls: ['https://img/ad.jpg'], listingTitle: 'Table', comps: [comp('a')] })
     expect(kept).toEqual([])
     expect(generateContent).not.toHaveBeenCalled()
   })

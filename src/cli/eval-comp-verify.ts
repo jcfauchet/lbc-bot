@@ -87,7 +87,7 @@ async function scoreAll(lens: SerpApiLensCompService, verifier: GeminiCompVerifi
         const { matches } = await lens.findComps(item.imageUrl!)
         const raw = estimate(matches)
         const candidates = matches.filter((m) => m.isValueDomain && m.price)
-        const confirmed = await verifier.verify({ listingImageUrl: item.imageUrl!, listingTitle: item.title, comps: candidates })
+        const confirmed = await verifier.verify({ listingImageUrls: [item.imageUrl!], listingTitle: item.title, comps: candidates })
         const verified = confirmed.length >= MIN_VERIFIED_COMPS ? estimate(confirmed) : { estimateEur: null, comps: confirmed.length }
         const price = item.priceCents / 100
         const row: EvalRow = {

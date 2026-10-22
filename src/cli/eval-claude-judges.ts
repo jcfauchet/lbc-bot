@@ -5,30 +5,37 @@
  *
  * Usage:
  *   npx tsx src/cli/eval-claude-judges.ts --step comp|reference|ranking [--limit N] [--concurrency 3]
+ *                                         [--provider claude|gemini|both] [--photos 4] [--comp-photos 2]
+ *                                         [--claude-model claude-opus-5-5] [--listings id,id] [--out verdicts.json]
  *
- * - comp: replays the comp check on the Lens thumbnails stored in ai_analyses.compCheck
- *   and compares Claude's verdicts with Gemini's, per comparable and per ad. No SerpApi credit.
+ * - comp: replays the comp check on the Lens thumbnails stored in ai_analyses.compCheck with
+ *   the chosen verifiers, number of ad photos and dealer-page photos per comparable, next to
+ *   the stored production verdict.
+ *   --out writes every per-comparable verdict, to score against human votes. No SerpApi credit.
  * - reference: replays the reference verifier on stored reference_matches (highest photo
  *   similarity first) and lists every match Claude confirms where Gemini did not.
  * - ranking: has Claude rank shuffled shortlists of voted listings and reports how many
  *   👍 land in its top picks against the shortlist base rate.
  *
- * Needs ANTHROPIC_API_KEY (dotenv only reads .env, so export it from .env.local).
+ * Needs ANTHROPIC_API_KEY, plus GOOGLE_GEMINI_API_KEY for a Gemini replay (dotenv only
+ * reads .env, so export keys kept in .env.local).
  * Costs Opus calls: roughly $0.07 per comp/reference case, $0.20 per ranking shortlist.
  */
+import { writeFileSync } from 'node:fs'
 import { prisma } from '@/infrastructure/prisma/client'
 import { env } from '@/infrastructure/config/env'
 import { container } from '@/infrastructure/di/container'
 import { ClaudeCompVerifier } from '@/infrastructure/ai/Anthropic/ClaudeCompVerifier'
+import { GeminiCompVerifier } from '@/infrastructure/ai/Gemini/GeminiCompVerifier'
+import type { ICompVerifier } from '@/domain/services/ICompVerifier'
+import { ProductPhotoCompVerifier } from '@/infrastructure/ai/ProductPhotoCompVerifier'
 import { ClaudeReferenceMatchVerifier } from '@/infrastructure/ai/Anthropic/ClaudeReferenceMatchVerifier'
 import { ClaudeSelectionRanker } from '@/infrastructure/ai/Anthropic/ClaudeSelectionRanker'
 import type { CheckedComp, CompCheck } from '@/domain/entities/AiAnalysis'
 import type { CompMatch } from '@/domain/services/ICompService'
 import type { RankingCandidate } from '@/domain/services/ISelectionRanker'
-import { parseEvalClaudeJudgesArgs } from './eval-claude-judges-args'
+import { parseEvalClaudeJudgesArgs, type EvalClaudeJudgesArgs } from './eval-claude-judges-args'
 
-/** Same thresholds as production: the email badge counts ≥2 confirmed comps as a real price. */
-const MIN_CONFIRMED_COMPS = 2
 const LISTING_PHOTOS = 4
 const REFERENCE_PHOTOS = 3
 /** Production spends LENS_DAILY_BUDGET / LENS_WINDOWS_PER_DAY credits per ranked shortlist. */
@@ -56,39 +63,61 @@ function pct(n: number, d: number): string {
   return d ? `${((100 * n) / d).toFixed(0)}%` : 'n/a'
 }
 
-async function evalComp(key: string, limit: number, concurrency: number): Promise<void> {
-  const rows = await prisma.$queryRaw<Array<{ listingId: string; title: string; compCheck: CompCheck; imageUrl: string | null }>>`
+/** One replayed comparable: the stored production verdict next to each replayed one. */
+interface CompVerdictRow {
+  listingId: string
+  listingTitle: string
+  link: string
+  compTitle: string
+  storedGemini: boolean
+  claude?: boolean
+  gemini?: boolean
+}
+
+async function evalComp(args: EvalClaudeJudgesArgs): Promise<void> {
+  const { limit, concurrency, provider, photos, out, compPhotos, claudeModel, listingIds } = args
+  const rows = await prisma.$queryRaw<Array<{ listingId: string; title: string; compCheck: CompCheck; imageUrls: string[] }>>`
     SELECT a."listingId", l.title, a."compCheck",
-      (SELECT i."urlRemote" FROM listing_images i WHERE i."listingId" = l.id ORDER BY i.position ASC, i."createdAt" ASC LIMIT 1) AS "imageUrl"
+      ARRAY(SELECT i."urlRemote" FROM listing_images i WHERE i."listingId" = l.id ORDER BY i.position ASC, i."createdAt" ASC LIMIT ${photos}) AS "imageUrls"
     FROM ai_analyses a JOIN lbc_product_listings l ON l.id = a."listingId"
     WHERE a."compCheck" IS NOT NULL AND a."compCheck"::text <> 'null'
     ORDER BY a."createdAt" DESC LIMIT ${limit}
   `
-  const cases = rows.filter((r) => r.imageUrl && r.compCheck.candidates.some((c) => c.imageUrl))
-  console.log(`🧪 Comp check — ${cases.length} stored Gemini checks replayed on Claude`)
-  const verifier = new ClaudeCompVerifier(key)
+  const cases = rows.filter((r) => r.imageUrls.length && r.compCheck.candidates.some((c) => c.imageUrl)
+    && (!listingIds || listingIds.includes(r.listingId)))
+  const withPhotos = (v: ICompVerifier) => (compPhotos > 0 ? new ProductPhotoCompVerifier(v, compPhotos) : v)
+  const verifiers: Array<['claude' | 'gemini', ICompVerifier]> = []
+  if (provider !== 'gemini') verifiers.push(['claude', withPhotos(new ClaudeCompVerifier(requireKey(env.ANTHROPIC_API_KEY, 'ANTHROPIC_API_KEY'), claudeModel))])
+  if (provider !== 'claude') verifiers.push(['gemini', withPhotos(new GeminiCompVerifier(requireKey(env.GOOGLE_GEMINI_API_KEY, 'GOOGLE_GEMINI_API_KEY')))])
+  console.log(`🧪 Comp check — ${cases.length} stored checks replayed on ${verifiers.map(([n]) => n).join(' + ')}${claudeModel ? ` (${claudeModel})` : ''}, up to ${photos} ad photo(s), ${compPhotos || 'thumbnail only'} dealer photo(s) per comp`)
 
-  const results = await mapConcurrent(cases, concurrency, async (r) => {
-    const shown = r.compCheck.candidates.filter((c) => c.imageUrl)
+  const perAd = await mapConcurrent(cases, concurrency, async (r) => {
+    // Same candidates and order production showed: those with a thumbnail, first 8.
+    const shown = r.compCheck.candidates.filter((c) => c.imageUrl).slice(0, 8)
     const asMatch = (c: CheckedComp): CompMatch => ({ title: c.title, link: c.link, source: c.source, isValueDomain: true, imageUrl: c.imageUrl })
-    const confirmed = new Set((await verifier.verify({ listingImageUrl: r.imageUrl!, listingTitle: r.title, comps: shown.map(asMatch) })).map((m) => m.link))
-    return { ...r, shown: shown.slice(0, 8).map((c) => ({ ...c, claude: confirmed.has(c.link) })) }
+    const input = { listingImageUrls: r.imageUrls, listingTitle: r.title, comps: shown.map(asMatch) }
+    const verdicts = await Promise.all(verifiers.map(async ([name, v]) => [name, new Set((await v.verify(input)).map((m) => m.link))] as const))
+    return shown.map((c): CompVerdictRow => ({
+      listingId: r.listingId, listingTitle: r.title, link: c.link, compTitle: c.title, storedGemini: c.confirmed,
+      ...Object.fromEntries(verdicts.map(([name, set]) => [name, set.has(c.link)])),
+    }))
   })
+  const comps = perAd.flat()
 
-  const comps = results.flatMap((r) => r.shown)
-  const both = comps.filter((c) => c.confirmed && c.claude).length
-  const geminiOnly = comps.filter((c) => c.confirmed && !c.claude)
-  const claudeOnly = comps.filter((c) => !c.confirmed && c.claude)
-  console.log(`\nPer comparable (${comps.length}): both yes ${both} · Gemini only ${geminiOnly.length} · Claude only ${claudeOnly.length} · both no ${comps.length - both - geminiOnly.length - claudeOnly.length}`)
-  const geminiAds = results.filter((r) => r.shown.filter((c) => c.confirmed).length >= MIN_CONFIRMED_COMPS).length
-  const claudeAds = results.filter((r) => r.shown.filter((c) => c.claude).length >= MIN_CONFIRMED_COMPS).length
-  console.log(`Ads with ≥${MIN_CONFIRMED_COMPS} confirmed comps: Gemini ${geminiAds}/${results.length} · Claude ${claudeAds}/${results.length}`)
-  console.log('\nDisagreements (open the links to judge who is right):')
-  for (const r of results) {
-    for (const c of r.shown.filter((x) => x.confirmed !== x.claude)) {
-      console.log(`  [${c.claude ? 'Claude yes / Gemini no' : 'Gemini yes / Claude no'}] "${r.title}" ↔ "${c.title}"\n    ad ${r.imageUrl}\n    comp ${c.link}`)
-    }
+  const count = (pick: (c: CompVerdictRow) => boolean | undefined) => comps.filter((c) => pick(c)).length
+  console.log(`\n${comps.length} comparables on ${perAd.length} ads. Confirmed as same model:`)
+  console.log(`  stored Gemini (1 photo, production): ${count((c) => c.storedGemini)}`)
+  for (const [name] of verifiers) console.log(`  ${name} replay: ${count((c) => c[name])}`)
+  if (verifiers.length === 2) console.log(`  consensus (both replays agree): ${count((c) => c.claude && c.gemini)}`)
+  if (out) {
+    writeFileSync(out, JSON.stringify(comps, null, 2))
+    console.log(`\nPer-comparable verdicts written to ${out}`)
   }
+}
+
+function requireKey(value: string | undefined, name: string): string {
+  if (!value) throw new Error(`${name} is not set`)
+  return value
 }
 
 async function evalReference(key: string, limit: number, concurrency: number): Promise<void> {
@@ -165,12 +194,11 @@ async function evalRanking(key: string, limit: number, concurrency: number): Pro
 }
 
 async function main() {
-  const { step, limit, concurrency } = parseEvalClaudeJudgesArgs(process.argv.slice(2))
-  const key = env.ANTHROPIC_API_KEY
-  if (!key) throw new Error('ANTHROPIC_API_KEY is not set')
-  if (step === 'comp') await evalComp(key, limit, concurrency)
-  else if (step === 'reference') await evalReference(key, limit, concurrency)
-  else await evalRanking(key, limit, concurrency)
+  const args = parseEvalClaudeJudgesArgs(process.argv.slice(2))
+  if (args.step === 'comp') return evalComp(args)
+  const key = requireKey(env.ANTHROPIC_API_KEY, 'ANTHROPIC_API_KEY')
+  if (args.step === 'reference') await evalReference(key, args.limit, args.concurrency)
+  else await evalRanking(key, args.limit, args.concurrency)
 }
 
 main()

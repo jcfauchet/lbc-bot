@@ -5,6 +5,8 @@ export interface CompMatch {
   price?: { value: number; currency: string }
   /** Thumbnail of the matched page, when the provider has one: what a visual check compares against. */
   imageUrl?: string
+  /** Full-size photos from the matched product page, when fetched: far sharper than the Lens thumbnail. */
+  photoUrls?: string[]
   isValueDomain: boolean
   /**
    * True when the match comes from a mass-produced retail / marketplace domain
