@@ -37,6 +37,7 @@ import { GeminiTriageService } from '@/infrastructure/ai/Gemini/GeminiTriageServ
 import { GeminiSelectionRanker } from '@/infrastructure/ai/Gemini/GeminiSelectionRanker'
 import { GeminiCompVerifier } from '@/infrastructure/ai/Gemini/GeminiCompVerifier'
 import { OpenAiTriageService } from '@/infrastructure/ai/OpenAi/OpenAiTriageService'
+import { ClaudeTriageService } from '@/infrastructure/ai/Anthropic/ClaudeTriageService'
 import { FallbackTriageService } from '@/infrastructure/ai/FallbackTriageService'
 import { PrismaLensBudgetRepository } from '@/infrastructure/prisma/repositories/PrismaLensBudgetRepository'
 import { PrismaRankingWindowRepository } from '@/infrastructure/prisma/repositories/PrismaRankingWindowRepository'
@@ -149,12 +150,18 @@ export class Container {
     )
 
     this.compService = new SerpApiLensCompService(serpApiKey)
-    this.triageService = new FallbackTriageService(
+    const geminiThenOpenAi = new FallbackTriageService(
       // Thinking off: eval:triage on 13 Oct 2026 (200 labelled ads) gave the same
       // precision/recall with and without it, and thinking tokens bill as output.
       new GeminiTriageService(geminiApiKey, { thinkingBudget: 0 }),
       new OpenAiTriageService(openAiApiKey),
     )
+    // Claude first: the Anthropic credit is prepaid each month, and eval:triage on
+    // 22 Oct 2026 put Haiku 5.5 at 40% precision at threshold 6 vs ~32% for Gemini.
+    // Once the monthly spend limit is hit, its errors fall through to Gemini.
+    this.triageService = env.ANTHROPIC_API_KEY
+      ? new FallbackTriageService(new ClaudeTriageService(env.ANTHROPIC_API_KEY), geminiThenOpenAi)
+      : geminiThenOpenAi
     this.lensBudgetRepository = new PrismaLensBudgetRepository(this.prisma)
     this.rankingWindowRepository = new PrismaRankingWindowRepository(this.prisma)
 

@@ -6,6 +6,8 @@ export interface EvalArgs {
   model: string | undefined
   /** Thinking budget to pin on that model; unset leaves the model's default. */
   thinkingBudget: number | undefined
+  /** Claude effort level; unset leaves the Claude triage default. */
+  effort: 'low' | 'medium' | 'high' | undefined
 }
 
 export function parseEvalArgs(args: string[]): EvalArgs {
@@ -20,5 +22,6 @@ export function parseEvalArgs(args: string[]): EvalArgs {
     concurrency: Number(get('--concurrency') ?? 3),
     model: get('--model'),
     thinkingBudget: thinking === undefined ? undefined : Number(thinking),
+    effort: get('--effort') as EvalArgs['effort'],
   }
 }

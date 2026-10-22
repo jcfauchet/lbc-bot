@@ -9,9 +9,11 @@
  * Usage:
  *   npx tsx src/cli/eval-triage.ts [--limit 100] [--with-guidance] [--concurrency 3]
  *                                  [--model gemini-2.5-flash] [--thinking-budget 0]
+ *                                  [--model claude-haiku-5-5] [--effort low]
  *
- * --model scores with that Gemini model alone (no OpenAI fallback) instead of the
- * production triage service, so two models can be compared on the same labels.
+ * --model scores with that model alone (no fallback) instead of the production
+ * triage service, so two models can be compared on the same labels. A model id
+ * starting with "claude-" goes to Anthropic, anything else to Gemini.
  *
  * Notes:
  * - Labels are biased towards listings that reached notification or the
@@ -22,6 +24,7 @@ import { prisma } from '@/infrastructure/prisma/client'
 import { container } from '@/infrastructure/di/container'
 import { env } from '@/infrastructure/config/env'
 import { GeminiTriageService } from '@/infrastructure/ai/Gemini/GeminiTriageService'
+import { ClaudeTriageService } from '@/infrastructure/ai/Anthropic/ClaudeTriageService'
 import type { ITriageService } from '@/domain/services/ITriageService'
 import { parseEvalArgs } from './eval-triage-args'
 
@@ -106,12 +109,15 @@ function report(rows: EvalRow[]): void {
 }
 
 async function main() {
-  const { limit, withGuidance, concurrency, model, thinkingBudget } = parseEvalArgs(process.argv.slice(2))
-  const triageService: ITriageService = model
-    ? new GeminiTriageService(env.GOOGLE_GEMINI_API_KEY ?? 'missing-google-gemini-api-key', { model, thinkingBudget })
-    : container.triageService
-  const thinking = thinkingBudget === undefined ? 'default' : String(thinkingBudget)
-  console.log(`🧪 Triage eval — ${model ? `${model} (thinking ${thinking})` : 'production triage service'}, limit ${limit}, guidance ${withGuidance ? 'ON' : 'OFF'}`)
+  const { limit, withGuidance, concurrency, model, thinkingBudget, effort } = parseEvalArgs(process.argv.slice(2))
+  const isClaude = model?.startsWith('claude-') ?? false
+  const triageService: ITriageService = !model
+    ? container.triageService
+    : isClaude
+      ? new ClaudeTriageService(env.ANTHROPIC_API_KEY ?? 'missing-anthropic-api-key', { model, effort })
+      : new GeminiTriageService(env.GOOGLE_GEMINI_API_KEY ?? 'missing-google-gemini-api-key', { model, thinkingBudget })
+  const thinking = isClaude ? `effort ${effort ?? 'low'}` : `thinking ${thinkingBudget === undefined ? 'default' : thinkingBudget}`
+  console.log(`🧪 Triage eval — ${model ? `${model} (${thinking})` : 'production triage service'}, limit ${limit}, guidance ${withGuidance ? 'ON' : 'OFF'}`)
 
   const guidance = withGuidance
     ? (await container.triageGuidanceRepository.getLatest())?.content ?? null

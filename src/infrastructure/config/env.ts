@@ -5,6 +5,7 @@ export const envSchema = z.object({
   DATABASE_URL: z.string().url(),
   OPENAI_API_KEY: z.string().min(1).optional(),
   GOOGLE_GEMINI_API_KEY: z.string().min(1).optional(),
+  ANTHROPIC_API_KEY: z.string().min(1).optional(),
   RESEND_API_KEY: z.string().min(1).optional(),
   NOTIFICATION_EMAIL_FROM: z.string().email().optional(),
   NOTIFICATION_EMAIL_TO: z
