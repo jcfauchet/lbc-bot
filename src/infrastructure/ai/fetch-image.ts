@@ -1,4 +1,4 @@
-import sharp from 'sharp'
+import type { Sharp } from 'sharp'
 
 /** Long enough for a slow CDN, short enough that one stalled download cannot hold a cron stage. */
 export const IMAGE_FETCH_TIMEOUT_MS = 15_000
@@ -26,12 +26,29 @@ export function sniffImageType(bytes: Buffer): (typeof SUPPORTED_IMAGE_TYPES)[nu
  */
 export const MAX_IMAGE_EDGE_PX = 1568
 
+let sharpModule: Promise<((input: Buffer, options?: { animated?: boolean }) => Sharp) | null> | undefined
+
+/**
+ * sharp is a native module, loaded on first use: when its binaries are missing
+ * from a deployment (libvips was not bundled on Vercel on 23 Oct 2026), images go
+ * out unresized instead of every route that imports this file crashing on load.
+ */
+function loadSharp() {
+  sharpModule ??= import('sharp').then((m) => m.default).catch((err) => {
+    console.error('sharp unavailable, images are sent unresized:', err)
+    return null
+  })
+  return sharpModule
+}
+
 /**
  * The image, shrunk to fit MAX_IMAGE_EDGE_PX when it is larger; a GIF comes back
  * as PNG. Bytes sharp cannot decode pass through untouched: the model is the
  * judge of what it accepts, as before resizing existed.
  */
 export async function fitImage(bytes: Buffer, mimeType: string): Promise<{ mimeType: string; bytes: Buffer }> {
+  const sharp = await loadSharp()
+  if (!sharp) return { mimeType, bytes }
   const image = sharp(bytes, { animated: false })
   let width = 0
   let height = 0

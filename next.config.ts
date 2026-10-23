@@ -14,7 +14,12 @@ const nextConfig: NextConfig = {
       bodySizeLimit: '10mb',
     },
   },
-  serverExternalPackages: ['@sparticuz/chromium', 'playwright-core'],
+  serverExternalPackages: ['@sparticuz/chromium', 'playwright-core', 'sharp'],
+  // sharp's libvips shared library is loaded at runtime, so file tracing misses it
+  // under pnpm's layout and the function crashed with "libvips-cpp.so not found".
+  outputFileTracingIncludes: {
+    '/api/**': ['./node_modules/.pnpm/@img+sharp-*/**/*', './node_modules/@img/**/*'],
+  },
 }
 
 export default nextConfig
