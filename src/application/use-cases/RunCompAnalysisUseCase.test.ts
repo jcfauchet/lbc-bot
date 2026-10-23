@@ -777,3 +777,82 @@ describe('windowEntitlement', () => {
     expect(windowEntitlement(8, 1.5, 0, at(20))).toBe(8)
   })
 })
+
+describe('RunCompAnalysisUseCase with the appraisal agent', () => {
+  const lensMatches = [
+    { title: 'look-alike', source: '1stdibs', link: 'https://1stdibs.com/a', isValueDomain: true, price: { value: 5000, currency: 'EUR' } },
+  ]
+  const agentComp = (link: string, value: number, currency = 'EUR') => ({
+    title: link, source: 'pamono.com', link, isValueDomain: true, price: { value, currency }, photoUrls: [`${link}/1.jpg`],
+  })
+  const appraisal = (comps: any[], identification = 'Romeo Rega bar cart') => ({
+    identification, comps, notes: 'Matched on the wheels.',
+    cost: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, webSearches: 1, pagesInspected: 2, turns: 2, usd: 0.05 },
+  })
+  const build = (d: any, agent: any, config: any = {}, verifier?: any) => new RunCompAnalysisUseCase(
+    d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
+    { dailyBudget: 8, monthlyBudget: 250, resaleFactor: 0.5, ...config },
+    undefined, undefined, undefined, undefined, undefined, undefined, verifier, agent,
+  )
+
+  it('prices from the comparables the agent vouched for, with the Lens matches as its leads', async () => {
+    const d = deps({ listings: [mk('x', 9, 100, { description: 'brass cart' })], comps: { matches: lensMatches } })
+    const agent = { providerName: 'claude-appraisal-agent:sonnet', appraise: vi.fn(async () => appraisal([agentComp('https://p/a', 800), agentComp('https://p/b', 1000, 'USD')])) }
+    const verifier = { verify: vi.fn() }
+    await build(d, agent, {}, verifier).execute()
+
+    expect(agent.appraise).toHaveBeenCalledWith({ title: 'x', description: 'brass cart', priceEur: 100, imageUrls: ['https://img/x.jpg'], leads: lensMatches })
+    expect(verifier.verify).not.toHaveBeenCalled()
+    const [analysis] = d.saved
+    expect(analysis.confidence).toBe(0.9)
+    expect(analysis.provider).toBe('claude-appraisal-agent:sonnet')
+    expect(analysis.bestMatchSource).toBe('https://p/a')
+    // Median of 800 € and 920 € (1000 USD), at the 0.5 resale factor.
+    expect(analysis.margin.getEuros()).toBe(330)
+    expect(analysis.compCheck).toEqual({
+      confirmedCount: 2,
+      candidates: [
+        { title: 'https://p/a', link: 'https://p/a', source: 'pamono.com', priceEur: 800, imageUrl: 'https://p/a/1.jpg', confirmed: true },
+        { title: 'https://p/b', link: 'https://p/b', source: 'pamono.com', priceEur: 920, imageUrl: 'https://p/b/1.jpg', confirmed: true },
+      ],
+    })
+    expect(d.statuses['x']).toBe(ListingStatus.ANALYZED)
+  })
+
+  it('ignores the ad, naming what the agent identified, when it found no same-model comparable', async () => {
+    const d = deps({ listings: [mk('x', 9)], comps: { matches: lensMatches } })
+    const agent = { providerName: 'agent', appraise: vi.fn(async () => appraisal([], 'Maison Jansen style side table')) }
+    await build(d, agent).execute()
+    expect(d.saved).toHaveLength(0)
+    expect(d.statuses['x']).toBe(ListingStatus.IGNORED)
+    const updated = d.listingRepository.update.mock.calls.at(-1)[0]
+    expect(updated.ignoreReason).toBe('No same-model comparable found: Maison Jansen style side table')
+  })
+
+  it('falls back to the Lens estimate when the agent fails', async () => {
+    const d = deps({ listings: [mk('x', 9)], comps: { matches: lensMatches } })
+    const agent = { providerName: 'agent', appraise: vi.fn(async () => { throw new Error('overloaded') }) }
+    await build(d, agent).execute()
+    expect(d.saved).toHaveLength(1)
+    expect(d.saved[0].provider).toBe('serpapi')
+  })
+
+  it('analyses picks concurrently without spending more credits than the window holds', async () => {
+    const d = deps({ listings: ['a', 'b', 'c', 'd', 'e'].map((id) => mk(id, 9)), comps: { matches: lensMatches } })
+    let inFlight = 0
+    let peak = 0
+    const agent = {
+      providerName: 'agent',
+      appraise: vi.fn(async () => {
+        peak = Math.max(peak, ++inFlight)
+        await new Promise((r) => setTimeout(r, 5))
+        inFlight--
+        return appraisal([agentComp('https://p/a', 800)])
+      }),
+    }
+    const res = await build(d, agent, { dailyBudget: 3, analysisConcurrency: 2 }).execute()
+    expect(d.compService.findComps).toHaveBeenCalledTimes(3)
+    expect(res).toMatchObject({ processed: 3, analyzed: 3 })
+    expect(peak).toBe(2)
+  })
+})

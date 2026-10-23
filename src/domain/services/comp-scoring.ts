@@ -10,8 +10,14 @@ export interface CompScore {
   confidence: CompConfidence
 }
 
-// Coarse, configurable-later FX. Kept simple on purpose for the MVP.
-const FX_TO_EUR: Record<string, number> = { EUR: 1, USD: 0.92, GBP: 1.17 }
+// Coarse, configurable-later FX. Kept simple on purpose for the MVP. Dealer sites
+// pick the currency from the visitor's location (1stDibs served AUD to a French IP).
+const FX_TO_EUR: Record<string, number> = { EUR: 1, USD: 0.92, GBP: 1.17, CHF: 1.05, AUD: 0.6, CAD: 0.66, SEK: 0.088, DKK: 0.134 }
+
+/** Whether a price in this currency can be converted; unknown currencies used to count as euros. */
+export function isConvertibleCurrency(currency: string): boolean {
+  return currency.toUpperCase() in FX_TO_EUR
+}
 
 /**
  * Maximum interquartile spread, relative to the median, for which the comps are
@@ -29,7 +35,7 @@ const MAX_RELIABLE_IQR_RATIO = 0.75
  */
 const MIN_COMPS_TO_TRIM_TOP = 4
 
-function toEur(value: number, currency: string): number {
+export function toEur(value: number, currency: string): number {
   const rate = FX_TO_EUR[currency.toUpperCase()] ?? 1
   return Math.round(value * rate)
 }

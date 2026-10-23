@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { fetchImage, IMAGE_FETCH_TIMEOUT_MS } from './fetch-image'
+import sharp from 'sharp'
+import { fetchImage, fitImage, IMAGE_FETCH_TIMEOUT_MS, MAX_IMAGE_EDGE_PX } from './fetch-image'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -22,6 +23,17 @@ describe('fetchImage', () => {
   it('returns base64 data and the mime type', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(new Uint8Array([1, 2]), { headers: { 'content-type': 'image/png; charset=binary' } })))
     expect(await fetchImage('https://img/x.png')).toEqual({ mimeType: 'image/png', data: Buffer.from([1, 2]).toString('base64') })
+  })
+
+  it('shrinks an oversized photo to the model edge limit and leaves a small one untouched', async () => {
+    const big = await sharp({ create: { width: 4000, height: 2000, channels: 3, background: '#c8a050' } }).jpeg().toBuffer()
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(new Uint8Array(big))))
+    const fitted = await fetchImage('https://img/big.jpg')
+    expect(fitted.mimeType).toBe('image/jpeg')
+    expect(await sharp(Buffer.from(fitted.data, 'base64')).metadata()).toMatchObject({ width: MAX_IMAGE_EDGE_PX, height: 784 })
+
+    const small = await sharp({ create: { width: 800, height: 600, channels: 3, background: '#fff' } }).png().toBuffer()
+    expect(await fitImage(small, 'image/png')).toEqual({ mimeType: 'image/png', bytes: small })
   })
 
   it('defaults to jpeg when the CDN sends no content type', async () => {

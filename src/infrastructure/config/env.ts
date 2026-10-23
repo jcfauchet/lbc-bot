@@ -40,11 +40,16 @@ export const envSchema = z.object({
     .optional()
     .transform((v) => v ? v.split(',').map((s) => s.trim()).filter(Boolean) : []),
   SERPAPI_KEY: z.string().min(1).optional(),
-  // 8/day ≈ 240/month, fits the 250 SerpAPI plan (the account ran dry on
-  // 5 Jul 2026 at 8+2). Formerly 6 standard + 2 fast-track; the fast-track lane
-  // was folded in when windowed accrual made queue-jumping pointless.
-  LENS_DAILY_BUDGET: z.coerce.number().min(0).default(8),
-  LENS_MONTHLY_BUDGET: z.coerce.number().min(0).default(250),
+  APIFY_TOKEN: z.string().min(1).optional(),
+  // Unset, both follow the Lens providers configured (see the transform below).
+  // SerpApi alone: 8/day ≈ 240/month fits its free 250 (the account ran dry on
+  // 5 Jul 2026 at 8+2). With Apify first: its free 5 $ buys ~500 searches at
+  // 0.01 $ each, plus SerpApi's 250 as fallback, hence 24/day and 750/month.
+  LENS_DAILY_BUDGET: z.coerce.number().min(0).optional(),
+  LENS_MONTHLY_BUDGET: z.coerce.number().min(0).optional(),
+  // Kill switch for the appraisal agent: "false" restores the Lens-median
+  // estimate and the Opus + Sonnet comp check. Explicit enum, as RANKING_ENABLED.
+  APPRAISAL_AGENT_ENABLED: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
   // The day's comp budget accrues one share per window rather than being fully
   // available at midnight. 4 windows = 6h, so a fresh find waits 6h at worst.
   LENS_WINDOWS_PER_DAY: z.coerce.number().int().min(1).default(4),
@@ -100,7 +105,11 @@ export const envSchema = z.object({
   REFERENCE_MATCH_WIDEN_SIMILARITY: z.coerce.number().min(0).max(1).default(0.7),
   // ~500 new ads/day over 96 runs/day; 60 also drains the 7-day backlog in a day.
   REFERENCE_MATCH_MAX_PER_RUN: z.coerce.number().int().min(1).default(60),
-})
+}).transform((e) => ({
+  ...e,
+  LENS_DAILY_BUDGET: e.LENS_DAILY_BUDGET ?? (e.APIFY_TOKEN ? 24 : 8),
+  LENS_MONTHLY_BUDGET: e.LENS_MONTHLY_BUDGET ?? (e.APIFY_TOKEN ? 750 : 250),
+}))
 
 export type Env = z.infer<typeof envSchema>
 

@@ -34,3 +34,21 @@ describe('envSchema REFERENCES_KEY', () => {
     }
   })
 })
+
+describe('envSchema Lens budget', () => {
+  it('follows the configured providers when unset', () => {
+    expect(envSchema.parse(baseEnv)).toMatchObject({ LENS_DAILY_BUDGET: 8, LENS_MONTHLY_BUDGET: 250 })
+    expect(envSchema.parse({ ...baseEnv, APIFY_TOKEN: 'tok' })).toMatchObject({ LENS_DAILY_BUDGET: 24, LENS_MONTHLY_BUDGET: 750 })
+  })
+
+  it('keeps an explicit value', () => {
+    expect(envSchema.parse({ ...baseEnv, APIFY_TOKEN: 'tok', LENS_DAILY_BUDGET: '12' })).toMatchObject({ LENS_DAILY_BUDGET: 12, LENS_MONTHLY_BUDGET: 750 })
+  })
+})
+
+describe('envSchema APPRAISAL_AGENT_ENABLED', () => {
+  it('is on by default and only "false" turns it off', () => {
+    expect(envSchema.parse(baseEnv).APPRAISAL_AGENT_ENABLED).toBe(true)
+    expect(envSchema.parse({ ...baseEnv, APPRAISAL_AGENT_ENABLED: 'false' }).APPRAISAL_AGENT_ENABLED).toBe(false)
+  })
+})

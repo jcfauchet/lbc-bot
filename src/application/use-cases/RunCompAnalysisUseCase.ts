@@ -11,7 +11,8 @@ import type { ISelectionRanker, RankingCandidate } from '@/domain/services/ISele
 import type { ITriageGuidanceRepository } from '@/domain/repositories/ITriageGuidanceRepository'
 import type { IRankingWindowRepository } from '@/domain/repositories/IRankingWindowRepository'
 import type { Listing } from '@/domain/entities/Listing'
-import { scoreComps, isMassMarketCommon } from '@/domain/services/comp-scoring'
+import { scoreComps, isMassMarketCommon, toEur } from '@/domain/services/comp-scoring'
+import type { Appraisal, IAppraisalAgent } from '@/domain/services/IAppraisalAgent'
 import { hasReplicaSignal, hasKnownDesignerAttribution } from '@/domain/services/listing-signals'
 import { AiAnalysis } from '@/domain/entities/AiAnalysis'
 import { Money } from '@/domain/value-objects/Money'
@@ -25,6 +26,19 @@ interface ShortlistEntry {
   /** Every photo, cover first, for the comp check. */
   imageUrls: string[]
 }
+
+/** Shared by the concurrent pick workers of one window. */
+interface PickCounters {
+  /** Credits still unreserved in this window. */
+  remaining: number
+  processed: number
+  analyzed: number
+  ignored: number
+  probeDropped: number
+}
+
+/** An agent analysis rests on inspected same-model comps: it clears the 0.8 email gate. */
+const AGENT_CONFIDENCE = 0.9
 
 export interface LensBudgetConfig {
   dailyBudget: number
@@ -70,6 +84,8 @@ export interface LensBudgetConfig {
    * the free-filter pass that feeds it. Defaults to 20.
    */
   rankingShortlistSize?: number
+  /** Picks analysed at once within a window. Defaults to 1 (one after another). */
+  analysisConcurrency?: number
 }
 
 const MIN_DISTINCTIVE_TITLE_WORDS = 4
@@ -162,6 +178,11 @@ export class RunCompAnalysisUseCase {
     // qualifies the analysis (badge in the email, numbers in the table); it does
     // not change the estimate yet. Failing, the analysis is saved unchecked.
     private compVerifier?: ICompVerifier,
+    // Optional: researches each pick like an expert, starting from the Lens matches,
+    // and prices it only from the same-model comparables it inspected itself. When
+    // wired it replaces the Lens-median estimate and the comp check; it falls back
+    // to them only when it fails outright.
+    private appraisalAgent?: IAppraisalAgent,
   ) {}
 
   private async checkComps(listingImageUrls: string[], listingTitle: string, matches: CompMatch[]): Promise<CompCheck | undefined> {
@@ -196,7 +217,7 @@ export class RunCompAnalysisUseCase {
     const windowsPerDay = this.config.windowsPerDay ?? 1
     const usedToday = await this.budgetRepository.countSince(startOfDay())
     const usedThisMonth = await this.budgetRepository.countSince(startOfMonth())
-    let remaining = Math.min(
+    const remaining = Math.min(
       windowEntitlement(this.config.dailyBudget, windowsPerDay, usedToday, now),
       this.config.monthlyBudget - usedThisMonth,
     )
@@ -223,8 +244,6 @@ export class RunCompAnalysisUseCase {
         (b.triageScore ?? 0) - (a.triageScore ?? 0) ||
         b.createdAt.getTime() - a.createdAt.getTime())
 
-    let processed = 0
-    let analyzed = 0
     let ignored = 0
 
     // Pass one: walk the sorted candidates applying the filters that cost nothing,
@@ -332,80 +351,21 @@ export class RunCompAnalysisUseCase {
     // from the ranker declining to spend (finding 2), without capping `remaining`
     // on a drop: that would stop the loop from trying the picks ranked below the
     // dropped one, under-spending the window even when good candidates remain.
-    let probeDropped = 0
+    const run: PickCounters = { remaining, processed: 0, analyzed: 0, ignored: 0, probeDropped: 0 }
 
-    for (const { listing, imageUrl, imageUrls } of picks) {
-      if (remaining <= 0) break
-
-      // A removed listing means the deal is already gone: don't spend a credit
-      // estimating a piece nobody can buy. The probe only trusts a definitive
-      // 404/410 — an anti-bot block or network error never skips the listing.
-      // Probed here, on picks only: it is one HTTP request per listing.
-      if (this.availabilityService && await this.availabilityService.isGone(listing.url)) {
-        listing.markAsIgnored()
-        listing.setIgnoreReason('Annonce supprimée de LeBonCoin (vendue ou retirée)')
-        await this.listingRepository.update(listing)
-        ignored++
-        probeDropped++
-        continue
+    // Several picks at once: a Lens search plus an agent appraisal take a minute or
+    // two each, and a window's picks one after another would outlast the cron.
+    const queue = [...picks]
+    const worker = async (): Promise<void> => {
+      for (let pick = queue.shift(); pick; pick = queue.shift()) {
+        // The credit is reserved before the first await, so concurrent workers can
+        // never spend more than the window holds; analyzePick refunds a dropped pick.
+        if (run.remaining <= 0) return
+        run.remaining--
+        await this.analyzePick(pick, run)
       }
-
-      remaining--
-      processed++
-      let comps
-      try {
-        comps = await this.compService.findComps(imageUrl)
-        await this.budgetRepository.recordCall(listing.id, true)
-      } catch (err) {
-        await this.budgetRepository.recordCall(listing.id, false)
-        console.error(`Comp search failed for ${listing.id}:`, err)
-        continue
-      }
-
-      // The image matches many mass-market retail listings: the piece is a common
-      // new product ("trouvé neuf sur les marketplaces", "personne n'achète"), so
-      // there is no resale edge even if a stray value comp exists.
-      if (isMassMarketCommon(comps.matches, this.config.massMarketMinMatches ?? 0)) {
-        listing.markAsIgnored()
-        listing.setIgnoreReason('Objet trop commun (vendu neuf sur les marketplaces), pas de marge de revente')
-        await this.listingRepository.update(listing)
-        ignored++
-        continue
-      }
-
-      const score = scoreComps(comps.matches)
-      if (score.estimatedValueEur === null) {
-        listing.markAsIgnored()
-        listing.setIgnoreReason('no priced value comps')
-        await this.listingRepository.update(listing)
-        ignored++
-        continue
-      }
-
-      const resaleFactor = this.config.resaleFactor ?? 1
-      const estMin = Money.fromEuros(score.rangeMinEur! * resaleFactor)
-      const estMax = Money.fromEuros(score.rangeMaxEur! * resaleFactor)
-      const median = Money.fromEuros(score.estimatedValueEur * resaleFactor)
-      const topComp = comps.matches.find((m) => m.isValueDomain && m.price)?.link
-      const compCheck = await this.checkComps(imageUrls, listing.title, comps.matches)
-
-      const analysis = AiAnalysis.create({
-        listingId: listing.id,
-        estimatedMinPrice: estMin,
-        estimatedMaxPrice: estMax,
-        margin: median.minus(listing.price),
-        description: `Realistic resale ${median.getEuros()}€ (dealer median ${score.estimatedValueEur}€ ×${resaleFactor}) from ${score.pricedCompCount} value comps (${score.confidence}). Range ${estMin.getEuros()}–${estMax.getEuros()}€.`,
-        confidence: score.confidence === 'reliable' ? 0.9 : 0.6,
-        provider: this.compService.providerName,
-        bestMatchSource: topComp ?? undefined,
-        searchTerms: [],
-        compCheck,
-      })
-      await this.aiAnalysisRepository.save(analysis)
-      listing.markAsAnalyzed()
-      await this.listingRepository.update(listing)
-      analyzed++
     }
+    await Promise.all(Array.from({ length: Math.max(1, this.config.analysisConcurrency ?? 1) }, worker))
 
     // Credits the ranker declined to spend — as opposed to credits left unspent
     // because the shortlist simply didn't hold enough candidates (supply
@@ -414,9 +374,140 @@ export class RunCompAnalysisUseCase {
     // after day means the ranker itself is too severe; with no ranker wired there
     // is no one to blame, hence the guard.
     const supplyShortfall = Math.max(0, entitlement - shortlist.length)
-    const deferred = this.ranker ? Math.max(0, remaining - supplyShortfall - probeDropped) : 0
+    const deferred = this.ranker ? Math.max(0, run.remaining - supplyShortfall - run.probeDropped) : 0
 
-    return { processed, analyzed, ignored, expired, deferred }
+    return { processed: run.processed, analyzed: run.analyzed, ignored: ignored + run.ignored, expired, deferred }
+  }
+
+  /** One pick, its credit already reserved in `run.remaining`. */
+  private async analyzePick({ listing, imageUrl, imageUrls }: ShortlistEntry, run: PickCounters): Promise<void> {
+    const ignore = async (reason: string) => {
+      listing.markAsIgnored()
+      listing.setIgnoreReason(reason)
+      await this.listingRepository.update(listing)
+      run.ignored++
+    }
+
+    // A removed listing means the deal is already gone: don't spend a credit
+    // estimating a piece nobody can buy. The probe only trusts a definitive
+    // 404/410 — an anti-bot block or network error never skips the listing.
+    // Probed here, on picks only: it is one HTTP request per listing.
+    if (this.availabilityService && await this.availabilityService.isGone(listing.url)) {
+      run.remaining++
+      run.probeDropped++
+      await ignore('Annonce supprimée de LeBonCoin (vendue ou retirée)')
+      return
+    }
+
+    run.processed++
+    let comps
+    try {
+      comps = await this.compService.findComps(imageUrl)
+      await this.budgetRepository.recordCall(listing.id, true)
+    } catch (err) {
+      await this.budgetRepository.recordCall(listing.id, false)
+      console.error(`Comp search failed for ${listing.id}:`, err)
+      return
+    }
+
+    // The image matches many mass-market retail listings: the piece is a common
+    // new product ("trouvé neuf sur les marketplaces", "personne n'achète"), so
+    // there is no resale edge even if a stray value comp exists.
+    if (isMassMarketCommon(comps.matches, this.config.massMarketMinMatches ?? 0)) {
+      await ignore('Objet trop commun (vendu neuf sur les marketplaces), pas de marge de revente')
+      return
+    }
+
+    const appraisal = await this.appraise(listing, imageUrls, comps.matches)
+    const analysis = appraisal === undefined
+      ? await this.lensAnalysis(listing, imageUrls, comps.matches)
+      : this.agentAnalysis(listing, appraisal)
+    if (typeof analysis === 'string') {
+      await ignore(analysis)
+      return
+    }
+    await this.aiAnalysisRepository.save(analysis)
+    listing.markAsAnalyzed()
+    await this.listingRepository.update(listing)
+    run.analyzed++
+  }
+
+  /** The agent's appraisal with the Lens matches as leads; undefined when no agent is wired or it failed. */
+  private async appraise(listing: Listing, imageUrls: string[], leads: CompMatch[]): Promise<Appraisal | undefined> {
+    if (!this.appraisalAgent) return undefined
+    try {
+      const appraisal = await this.appraisalAgent.appraise({
+        title: listing.title, description: listing.description, priceEur: listing.price.getEuros(), imageUrls, leads,
+      })
+      const { turns, webSearches, pagesInspected, usd } = appraisal.cost
+      console.log(`Appraisal "${listing.title}": ${appraisal.comps.length} same-model comps`
+        + ` (${turns} turns, ${webSearches} searches, ${pagesInspected} pages, ${usd.toFixed(3)} $) — ${appraisal.identification}`)
+      return appraisal
+    } catch (err) {
+      console.error(`Appraisal agent failed for ${listing.id}, falling back to Lens scoring:`, err)
+      return undefined
+    }
+  }
+
+  /**
+   * Priced from the comparables the agent inspected and vouched for. None found
+   * means no estimate at all: on the 23 Oct 2026 backtest, the Lens estimate for
+   * the ads the agent could not price was no better than chance.
+   */
+  private agentAnalysis(listing: Listing, appraisal: Appraisal): AiAnalysis | string {
+    const identified = appraisal.identification ? `: ${appraisal.identification}` : ''
+    if (appraisal.comps.length === 0) return `No same-model comparable found${identified}`.slice(0, 500)
+    const score = scoreComps(appraisal.comps)
+    if (score.estimatedValueEur === null) return `No priced same-model comparable${identified}`.slice(0, 500)
+
+    const resaleFactor = this.config.resaleFactor ?? 1
+    const estMin = Money.fromEuros(score.rangeMinEur! * resaleFactor)
+    const estMax = Money.fromEuros(score.rangeMaxEur! * resaleFactor)
+    const median = Money.fromEuros(score.estimatedValueEur * resaleFactor)
+    const candidates = appraisal.comps.map((c) => ({
+      title: c.title, link: c.link, source: c.source, priceEur: c.price ? toEur(c.price.value, c.price.currency) : undefined,
+      imageUrl: c.photoUrls?.[0] ?? c.imageUrl, confirmed: true,
+    }))
+    return AiAnalysis.create({
+      listingId: listing.id,
+      estimatedMinPrice: estMin,
+      estimatedMaxPrice: estMax,
+      margin: median.minus(listing.price),
+      description: `${appraisal.identification}. Realistic resale ${median.getEuros()}€ (dealer median ${score.estimatedValueEur}€ ×${resaleFactor}) from ${score.pricedCompCount} same-model comps. Range ${estMin.getEuros()}–${estMax.getEuros()}€. ${appraisal.notes}`,
+      // Every comp was inspected and judged the same model, which is the evidence
+      // the Lens confidence levels approximate with comp counts.
+      confidence: AGENT_CONFIDENCE,
+      provider: this.appraisalAgent!.providerName,
+      bestMatchSource: appraisal.comps[0].link,
+      searchTerms: [],
+      compCheck: { candidates, confirmedCount: candidates.length },
+    })
+  }
+
+  /** The original estimate: every priced value comp Lens returned, look-alikes included. */
+  private async lensAnalysis(listing: Listing, imageUrls: string[], matches: CompMatch[]): Promise<AiAnalysis | string> {
+    const score = scoreComps(matches)
+    if (score.estimatedValueEur === null) return 'no priced value comps'
+
+    const resaleFactor = this.config.resaleFactor ?? 1
+    const estMin = Money.fromEuros(score.rangeMinEur! * resaleFactor)
+    const estMax = Money.fromEuros(score.rangeMaxEur! * resaleFactor)
+    const median = Money.fromEuros(score.estimatedValueEur * resaleFactor)
+    const topComp = matches.find((m) => m.isValueDomain && m.price)?.link
+    const compCheck = await this.checkComps(imageUrls, listing.title, matches)
+
+    return AiAnalysis.create({
+      listingId: listing.id,
+      estimatedMinPrice: estMin,
+      estimatedMaxPrice: estMax,
+      margin: median.minus(listing.price),
+      description: `Realistic resale ${median.getEuros()}€ (dealer median ${score.estimatedValueEur}€ ×${resaleFactor}) from ${score.pricedCompCount} value comps (${score.confidence}). Range ${estMin.getEuros()}–${estMax.getEuros()}€.`,
+      confidence: score.confidence === 'reliable' ? 0.9 : 0.6,
+      provider: this.compService.providerName,
+      bestMatchSource: topComp ?? undefined,
+      searchTerms: [],
+      compCheck,
+    })
   }
 
   /**

@@ -58,21 +58,79 @@ export function extractProductPhotos(html: string, pageUrl: string): string[] {
   return photos
 }
 
+export interface ProductPrice {
+  value: number
+  currency: string
+}
+
+function jsonLdOffers(node: unknown): ProductPrice[] {
+  if (Array.isArray(node)) return node.flatMap(jsonLdOffers)
+  if (!node || typeof node !== 'object') return []
+  const record = node as Record<string, unknown>
+  const own = record.offers === undefined ? [] : [record.offers].flat().flatMap((offer): ProductPrice[] => {
+    const o = offer as { price?: unknown; lowPrice?: unknown; priceCurrency?: unknown } | null
+    const value = Number(o?.price ?? o?.lowPrice)
+    return Number.isFinite(value) && value > 0 && typeof o?.priceCurrency === 'string'
+      ? [{ value, currency: o.priceCurrency.toUpperCase() }]
+      : []
+  })
+  return [...own, ...jsonLdOffers(record['@graph'])]
+}
+
 /**
- * Up to `max` photos from the product page, or [] when the page is unreachable,
- * blocks bots, or redirects elsewhere: a sold item often redirects to another
- * product, whose photos would be compared in its place.
+ * The asking price the page itself publishes, from JSON-LD Product offers, else
+ * the og/product:price meta tags. Null when the page states none: an appraiser
+ * must never price a comparable from a number it read or remembered elsewhere.
  */
-export async function fetchProductPhotos(link: string, max = MAX_PRODUCT_PHOTOS): Promise<string[]> {
+export function extractProductPrice(html: string): ProductPrice | null {
+  for (const m of html.matchAll(/<script[^>]+application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)) {
+    try {
+      const [offer] = jsonLdOffers(JSON.parse(m[1]))
+      if (offer) return offer
+    } catch {
+      continue
+    }
+  }
+  const meta = (name: string) =>
+    html.match(new RegExp(`<meta[^>]+property=["'](?:og|product):price:${name}["'][^>]+content=["']([^"']+)["']`, 'i'))?.[1]
+  const value = Number(meta('amount'))
+  const currency = meta('currency')
+  return Number.isFinite(value) && value > 0 && currency ? { value, currency: currency.toUpperCase() } : null
+}
+
+export interface ProductPage {
+  title: string | null
+  price: ProductPrice | null
+  photos: string[]
+}
+
+/**
+ * The product page's title, published price and up to `max` photos, or null when
+ * the page is unreachable, blocks bots, or redirects elsewhere: a sold item often
+ * redirects to another product, whose photos would be compared in its place.
+ */
+export async function fetchProductPage(link: string, max = MAX_PRODUCT_PHOTOS): Promise<ProductPage | null> {
   try {
     const response = await fetch(link, {
       headers: { 'user-agent': USER_AGENT, 'accept-language': 'en' },
       signal: AbortSignal.timeout(PAGE_TIMEOUT_MS),
     })
-    if (!response.ok) return []
-    if (response.url && new URL(response.url).pathname !== new URL(link).pathname) return []
-    return extractProductPhotos(await response.text(), link).slice(0, max)
+    if (!response.ok) return null
+    if (response.url && new URL(response.url).pathname !== new URL(link).pathname) return null
+    const html = await response.text()
+    const title = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i)?.[1]
+      ?? html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]
+    return {
+      title: title ? decodeEntities(title).trim() : null,
+      price: extractProductPrice(html),
+      photos: extractProductPhotos(html, link).slice(0, max),
+    }
   } catch {
-    return []
+    return null
   }
+}
+
+/** Up to `max` photos from the product page, or [] when it cannot be used (see fetchProductPage). */
+export async function fetchProductPhotos(link: string, max = MAX_PRODUCT_PHOTOS): Promise<string[]> {
+  return (await fetchProductPage(link, max))?.photos ?? []
 }

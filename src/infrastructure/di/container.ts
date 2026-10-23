@@ -57,6 +57,9 @@ import { PrismaRankingWindowRepository } from '@/infrastructure/prisma/repositor
 import { RunPreFilterUseCase } from '@/application/use-cases/RunPreFilterUseCase'
 import { RunTriageUseCase } from '@/application/use-cases/RunTriageUseCase'
 import { RunCompAnalysisUseCase } from '@/application/use-cases/RunCompAnalysisUseCase'
+import { ClaudeAppraisalAgent } from '@/infrastructure/ai/Anthropic/ClaudeAppraisalAgent'
+import type { ICompService } from '@/domain/services/ICompService'
+import { ApifyLensCompService } from '@/infrastructure/comps/ApifyLensCompService'
 import { RunFeedbackLearningUseCase } from '@/application/use-cases/RunFeedbackLearningUseCase'
 import { PrismaReferenceRepository } from '@/infrastructure/prisma/repositories/PrismaReferenceRepository'
 import { GeminiImageEmbeddingService } from '@/infrastructure/ai/Gemini/GeminiImageEmbeddingService'
@@ -96,7 +99,7 @@ export class Container {
   public readonly getRecentNotifiedListingsUseCase: GetRecentNotifiedListingsUseCase
   public readonly getTriageBacklogUseCase: GetTriageBacklogUseCase
 
-  public readonly compService: SerpApiLensCompService
+  public readonly compService: ICompService
   public readonly triageService: FallbackTriageService
   public readonly lensBudgetRepository: PrismaLensBudgetRepository
   public readonly rankingWindowRepository: PrismaRankingWindowRepository
@@ -171,7 +174,13 @@ export class Container {
       },
     )
 
-    this.compService = new SerpApiLensCompService(serpApiKey)
+    // Apify first: several times more Lens searches per dollar than SerpApi, whose
+    // free 250/month capped the comp stage at 8 ads a day. SerpApi takes over on
+    // any Apify error, including spent credits.
+    const serpApi = new SerpApiLensCompService(serpApiKey)
+    this.compService = env.APIFY_TOKEN
+      ? withFallback<ICompService>(new ApifyLensCompService(env.APIFY_TOKEN), serpApi, 'Lens')
+      : serpApi
     const geminiThenOpenAi = new FallbackTriageService(
       // Thinking off: eval:triage on 13 Oct 2026 (200 labelled ads) gave the same
       // precision/recall with and without it, and thinking tokens bill as output.
@@ -215,6 +224,9 @@ export class Container {
         windowsPerDay: env.LENS_WINDOWS_PER_DAY,
         massMarketMinMatches: env.MASS_MARKET_MIN_MATCHES,
         rankingShortlistSize: env.RANKING_SHORTLIST_SIZE,
+        // Three picks at a time keep a window of ~6 Lens searches and appraisals
+        // well inside the 800 s cron.
+        analysisConcurrency: 3,
       },
       this.feedbackRepository,
       this.embeddingService,
@@ -232,6 +244,10 @@ export class Container {
           : new GeminiCompVerifier(geminiApiKey),
         COMP_DEALER_PHOTOS,
       ),
+      // Sonnet researches each pick from the Lens leads. Backtest on 23 Oct 2026
+      // (59 voted ads): 73% 👍 among its margins ≥ 100 € vs 51% for the Lens
+      // median, at about 0.07 $ an ad.
+      anthropicApiKey && env.APPRAISAL_AGENT_ENABLED ? new ClaudeAppraisalAgent(anthropicApiKey) : undefined,
     )
 
     this.runListingScrapingUseCase = new RunListingScrapingUseCase(
