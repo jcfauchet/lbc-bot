@@ -250,6 +250,20 @@ export class RunCompAnalysisUseCase {
         (b.triageScore ?? 0) - (a.triageScore ?? 0) ||
         b.createdAt.getTime() - a.createdAt.getTime())
 
+    // Nothing reached TRIAGED since the last ranking: the ranker would see the
+    // shortlist it already judged, so the Opus call is skipped and the window left
+    // unmarked — a listing triaged later in the window still gets ranked.
+    if (this.ranker && this.rankingWindowRepository) {
+      try {
+        const lastRankedAt = await this.rankingWindowRepository.lastRankedAt()
+        if (lastRankedAt && candidates.every((l) => l.updatedAt <= lastRankedAt)) {
+          return { processed: 0, analyzed: 0, ignored: 0, expired, deferred: 0 }
+        }
+      } catch (err) {
+        console.error('Last ranking lookup failed, ranking anyway:', err)
+      }
+    }
+
     let ignored = 0
 
     // Pass one: walk the sorted candidates applying the filters that cost nothing,

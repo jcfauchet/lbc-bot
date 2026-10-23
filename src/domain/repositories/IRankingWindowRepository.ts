@@ -11,4 +11,6 @@ export interface IRankingWindowRepository {
   wasRanked(windowKey: string): Promise<boolean>
   /** Records that the ranker was consulted for the window identified by `windowKey`. */
   markRanked(windowKey: string): Promise<void>
+  /** When the ranker was last consulted, in any window; null if never. */
+  lastRankedAt(): Promise<Date | null>
 }

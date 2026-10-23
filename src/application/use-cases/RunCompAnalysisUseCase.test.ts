@@ -704,6 +704,45 @@ describe('RunCompAnalysisUseCase', () => {
     }
   })
 
+  it('skips the ranker when nothing was triaged since the last ranking', async () => {
+    const old = mk('a', 9)
+    ;(old as any).props.updatedAt = new Date(Date.now() - 2 * 3600_000)
+    const d = deps({ listings: [old] })
+    const r = ranker([{ listingId: 'a', rank: 1, worthCredit: true }])
+    const rankingWindowRepository = {
+      wasRanked: vi.fn(async () => false),
+      markRanked: vi.fn(async () => {}),
+      lastRankedAt: vi.fn(async () => new Date(Date.now() - 3600_000)),
+    }
+    const useCase = new RunCompAnalysisUseCase(
+      d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
+      { dailyBudget: 2, monthlyBudget: 250, resaleFactor: 1 },
+      undefined, undefined, undefined, r as any, undefined, rankingWindowRepository as any,
+    )
+    await useCase.execute()
+
+    expect(r.rank).not.toHaveBeenCalled()
+    expect(rankingWindowRepository.markRanked).not.toHaveBeenCalled()
+  })
+
+  it('ranks again once a listing was triaged after the last ranking', async () => {
+    const d = deps({ listings: [mk('a', 9)] })
+    const r = ranker([{ listingId: 'a', rank: 1, worthCredit: true }])
+    const rankingWindowRepository = {
+      wasRanked: vi.fn(async () => false),
+      markRanked: vi.fn(async () => {}),
+      lastRankedAt: vi.fn(async () => new Date(Date.now() - 3600_000)),
+    }
+    const useCase = new RunCompAnalysisUseCase(
+      d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
+      { dailyBudget: 2, monthlyBudget: 250, resaleFactor: 1 },
+      undefined, undefined, undefined, r as any, undefined, rankingWindowRepository as any,
+    )
+    await useCase.execute()
+
+    expect(r.rank).toHaveBeenCalledOnce()
+  })
+
   it('does not mark the window when the ranker throws and falls back', async () => {
     const d = deps({ listings: [mk('a', 9)] })
     const rankingWindowRepository = {

@@ -18,4 +18,9 @@ export class PrismaRankingWindowRepository implements IRankingWindowRepository {
       update: {},
     })
   }
+
+  async lastRankedAt(): Promise<Date | null> {
+    const row = await this.prisma.rankingWindow.findFirst({ orderBy: { createdAt: 'desc' }, select: { createdAt: true } })
+    return row?.createdAt ?? null
+  }
 }
