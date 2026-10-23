@@ -204,4 +204,24 @@ describe('RunListingScrapingUseCase', () => {
     expect(d.searchRepository.markScraped).toHaveBeenCalledWith('search-1')
     expect(result.newListings).toBe(0)
   })
+
+  it('records one attempt per search, telling a DataDome block from a success', async () => {
+    const d = deps([ad('a'), ad('b')], [], 2)
+    d.listingSourceApi.search = vi.fn()
+      .mockResolvedValueOnce([ad('a'), ad('b')])
+      .mockRejectedValueOnce(new DataDomeBlockedError())
+    const tracking = { recordScrapeAttempt: vi.fn(async () => {}), recordAppraisalRun: vi.fn() }
+    const useCase = new RunListingScrapingUseCase(
+      d.searchRepository, d.listingRepository, d.imageRepository, d.listingSourceApi, d.listingSourceScraper,
+      100, undefined, tracking,
+    )
+    const executing = useCase.execute()
+    await vi.runAllTimersAsync()
+    await executing
+
+    expect(tracking.recordScrapeAttempt.mock.calls.map((c: any[]) => [c[0].searchId, c[0].outcome, c[0].newListings])).toEqual([
+      ['search-1', 'ok', 2],
+      ['search-2', 'blocked', 0],
+    ])
+  })
 })

@@ -13,6 +13,7 @@ import type { IRankingWindowRepository } from '@/domain/repositories/IRankingWin
 import type { Listing } from '@/domain/entities/Listing'
 import { scoreComps, isMassMarketCommon, toEur } from '@/domain/services/comp-scoring'
 import type { Appraisal, IAppraisalAgent } from '@/domain/services/IAppraisalAgent'
+import type { IPipelineTrackingRepository } from '@/domain/repositories/IPipelineTrackingRepository'
 import { hasReplicaSignal, hasKnownDesignerAttribution } from '@/domain/services/listing-signals'
 import { AiAnalysis } from '@/domain/entities/AiAnalysis'
 import { Money } from '@/domain/value-objects/Money'
@@ -186,6 +187,9 @@ export class RunCompAnalysisUseCase {
     // wired it replaces the Lens-median estimate and the comp check; it falls back
     // to them only when it fails outright.
     private appraisalAgent?: IAppraisalAgent,
+    // Optional: one row per agent run, kept even when the listing is then ignored,
+    // so the weekly report can show cost per email and the zero-comp rate.
+    private trackingRepository?: IPipelineTrackingRepository,
   ) {}
 
   private async checkComps(listingImageUrls: string[], listingTitle: string, matches: CompMatch[]): Promise<CompCheck | undefined> {
@@ -462,6 +466,9 @@ export class RunCompAnalysisUseCase {
       const { turns, webSearches, pagesInspected, usd } = appraisal.cost
       console.log(`Appraisal "${listing.title}": ${appraisal.comps.length} same-model comps`
         + ` (${turns} turns, ${webSearches} searches, ${pagesInspected} pages, ${usd.toFixed(3)} $) — ${appraisal.identification}`)
+      await this.trackingRepository?.recordAppraisalRun({
+        listingId: listing.id, compCount: appraisal.comps.length, turns, costUsd: usd,
+      }).catch((err) => console.error(`Appraisal run tracking failed for ${listing.id}:`, err))
       return appraisal
     } catch (err) {
       console.error(`Appraisal agent failed for ${listing.id}, falling back to Lens scoring:`, err)

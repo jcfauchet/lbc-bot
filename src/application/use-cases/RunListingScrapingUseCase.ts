@@ -8,6 +8,7 @@ import { Money } from '@/domain/value-objects/Money'
 import { ListingStatus } from '@/domain/value-objects/ListingStatus'
 import { Search } from '@/domain/entities/Search'
 import { ScrapedListing } from '@/infrastructure/scraping/types'
+import type { IPipelineTrackingRepository, ScrapeOutcome } from '@/domain/repositories/IPipelineTrackingRepository'
 
 export class RunListingScrapingUseCase {
   constructor(
@@ -27,7 +28,10 @@ export class RunListingScrapingUseCase {
     // 599s still lands under the ceiling with room to write the response.
     // Without this the function was just killed: a 504, and the search it died
     // on never got its lastScrapedAt stamped.
-    private maxRunMillis: number = 600_000
+    private maxRunMillis: number = 600_000,
+    // Optional: one row per search attempt, to measure DataDome blocking by hour
+    // and search. Best-effort, a failed write never fails the run.
+    private trackingRepository?: IPipelineTrackingRepository,
   ) {}
 
   private async getListings(search: Search): Promise<ScrapedListing[]> {
@@ -80,6 +84,9 @@ export class RunListingScrapingUseCase {
         break
       }
 
+      const searchStartedAt = Date.now()
+      let outcome: ScrapeOutcome = 'ok'
+      let searchNewListings = 0
       try {
         console.log(`Scraping search: ${search.name}`)
         const scrapedListings = await this.getListings(search)
@@ -128,6 +135,7 @@ export class RunListingScrapingUseCase {
         )
 
         newListings += saved.length
+        searchNewListings = saved.length
         console.log(
           `${search.name}: ${saved.length} new, ${uniqueScraped.length - fresh.length} already known`
         )
@@ -137,12 +145,19 @@ export class RunListingScrapingUseCase {
         await this.delay(randomDelay)
       } catch (error) {
         console.error(`Error scraping ${search.name}:`, error)
+        outcome = error instanceof DataDomeBlockedError ? 'blocked' : 'error'
         const randomDelay = Math.floor(Math.random() * 10000) + 8000
         console.log(`⚠️ Error occurred, waiting ${randomDelay}ms before next search...`)
         await this.delay(randomDelay)
       } finally {
         searchesScraped++
         await this.searchRepository.markScraped(search.id)
+        await this.trackingRepository?.recordScrapeAttempt({
+          searchId: search.id,
+          outcome,
+          newListings: searchNewListings,
+          durationMs: Date.now() - searchStartedAt,
+        }).catch((err) => console.error(`Scrape attempt tracking failed for ${search.name}:`, err))
       }
     }
 

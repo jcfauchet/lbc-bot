@@ -123,6 +123,32 @@ model ListingFeedback {
   @@map("listing_feedbacks")
 }
 
+/// One row per search attempted by the scrape cron: outcome is ok, blocked (DataDome) or error.
+model ScrapeAttempt {
+  id          String   @id @default(cuid())
+  searchId    String
+  outcome     String
+  newListings Int      @default(0)
+  durationMs  Int
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("scrape_attempts")
+}
+
+/// One row per appraisal agent run, including the ones that found no comparable.
+model AppraisalRun {
+  id        String   @id @default(cuid())
+  listingId String
+  compCount Int
+  turns     Int
+  costUsd   Float
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("appraisal_runs")
+}
+
 model LensCall {
   id        String   @id @default(cuid())
   listingId String?

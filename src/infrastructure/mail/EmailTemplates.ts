@@ -3,6 +3,7 @@ import { AiAnalysis } from '@/domain/entities/AiAnalysis'
 import { env } from '@/infrastructure/config/env'
 import type { PendingAlert } from '@/domain/repositories/IReferenceRepository'
 import { referencesPageUrl } from './references-link'
+import type { WeeklyReport } from '@/application/use-cases/RunWeeklyReportUseCase'
 
 export class EmailTemplates {
   /** The comp the estimate leans on, as a link she can open to judge it herself. */
@@ -179,5 +180,61 @@ export class EmailTemplates {
 </body>
 </html>`
     return { subject: `🎯 Ressemble à ta référence : ${alert.referenceName}`, html }
+  }
+
+  /** Sunday email: last week's emails waiting for a vote, then the funnel numbers. */
+  static weeklyReport(report: WeeklyReport): string {
+    const pct = (part: number, total: number) => (total ? `${Math.round((100 * part) / total)} %` : '—')
+    const usd = (v: number | null) => (v === null ? '—' : `${v.toFixed(2)} $`)
+    const hours = (v: number | null) => (v === null ? '—' : `${v.toFixed(1).replace('.', ',')} h`)
+    const row = (label: string, value: string) =>
+      `<tr><td style="padding: 6px 0; color: #666;">${label}</td><td style="padding: 6px 0; text-align: right; font-weight: bold;">${value}</td></tr>`
+
+    const unvotedRows = report.unvoted.map((m) => `
+      <tr style="border-bottom: 1px solid #eee;">
+        <td style="padding: 10px 0;">
+          <a href="${m.url}" style="color: #0066cc; text-decoration: none;">${m.title}</a>
+          <span style="color: #999;"> · ${Math.round(m.priceCents / 100)} €</span>
+        </td>
+        <td style="padding: 10px 0; text-align: right; white-space: nowrap;">
+          <a href="${env.APP_URL}/feedback?id=${m.listingId}&vote=good" style="color: #22c55e; text-decoration: none; font-weight: bold;">👍 Oui</a>
+          <a href="${env.APP_URL}/feedback?id=${m.listingId}&vote=bad" style="margin-left: 8px; color: #ef4444; text-decoration: none; font-weight: bold;">👎 Non</a>
+        </td>
+      </tr>`).join('')
+
+    const worstHours = report.worstScrapeHours
+      .map((h) => `${h.hour}h (${h.blocked}/${h.attempts})`)
+      .join(', ')
+
+    return `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Bilan de la semaine</title></head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 640px; margin: 0 auto; padding: 20px;">
+  <h1 style="margin: 0 0 4px 0; font-size: 24px;">📊 Bilan de la semaine</h1>
+  <p style="margin: 0 0 20px 0; color: #666;">Les 7 derniers jours du bot.</p>
+
+  <h2 style="font-size: 18px; margin: 0 0 8px 0;">🗳️ À noter (${report.unvoted.length})</h2>
+  ${report.unvoted.length
+    ? `<p style="margin: 0 0 8px 0; color: #666;">Chaque vote apprend au bot ce qui vous plaît.</p>
+  <table style="width: 100%; border-collapse: collapse;">${unvotedRows}</table>
+  <p style="margin: 12px 0 24px 0;"><a href="${env.APP_URL}/feedback/inbox" style="display: inline-block; background: #667eea; color: white; text-decoration: none; font-weight: bold; padding: 10px 20px; border-radius: 8px;">Tout noter sur une page</a></p>`
+    : '<p style="margin: 0 0 24px 0; color: #666;">Tout est noté, merci !</p>'}
+
+  <h2 style="font-size: 18px; margin: 0 0 8px 0;">Chiffres</h2>
+  <table style="width: 100%; border-collapse: collapse;">
+    ${row('Mails envoyés', String(report.mails))}
+    ${row('Mails notés', `${report.voted} (${pct(report.voted, report.mails)})`)}
+    ${row('👍 parmi les mails notés', report.precision === null ? '—' : `${report.good} (${pct(report.good, report.voted)})`)}
+    ${row('Délai médian publication → mail', hours(report.medianDelayHours))}
+    ${row('Estimations par l\'agent', String(report.appraisals))}
+    ${row('… sans aucun comparable', `${report.zeroCompAppraisals} (${pct(report.zeroCompAppraisals, report.appraisals)})`)}
+    ${row('Coût de l\'agent', usd(report.appraisalCostUsd))}
+    ${row('Coût de l\'agent par mail', usd(report.costPerMailUsd))}
+    ${row('Recherches Leboncoin bloquées', `${report.scrapeBlocked}/${report.scrapeAttempts} (${pct(report.scrapeBlocked, report.scrapeAttempts)})`)}
+    ${worstHours ? row('Heures les plus bloquées', worstHours) : ''}
+  </table>
+</body>
+</html>`
   }
 }

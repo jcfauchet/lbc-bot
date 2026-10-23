@@ -27,6 +27,8 @@ import { TextFilterService } from '@/infrastructure/filtering/TextFilterService'
 
 import { RunListingScrapingUseCase } from '@/application/use-cases/RunListingScrapingUseCase'
 import { RunNotificationUseCase } from '@/application/use-cases/RunNotificationUseCase'
+import { RunWeeklyReportUseCase } from '@/application/use-cases/RunWeeklyReportUseCase'
+import { PrismaPipelineTrackingRepository } from '@/infrastructure/prisma/repositories/PrismaPipelineTrackingRepository'
 import { RunCleanupUseCase } from '@/application/use-cases/RunCleanupUseCase'
 import { GetDashboardStatsUseCase } from '@/application/use-cases/GetDashboardStatsUseCase'
 import { GetNonNotifiedListingsUseCase } from '@/application/use-cases/GetNonNotifiedListingsUseCase'
@@ -94,6 +96,7 @@ export class Container {
   public readonly runListingScrapingUseCase: RunListingScrapingUseCase
   public readonly runNotificationUseCase: RunNotificationUseCase
   public readonly runCleanupUseCase: RunCleanupUseCase
+  public readonly runWeeklyReportUseCase: RunWeeklyReportUseCase
   public readonly getDashboardStatsUseCase: GetDashboardStatsUseCase
   public readonly getNonNotifiedListingsUseCase: GetNonNotifiedListingsUseCase
   public readonly getRecentNotifiedListingsUseCase: GetRecentNotifiedListingsUseCase
@@ -195,6 +198,7 @@ export class Container {
       : geminiThenOpenAi
     this.lensBudgetRepository = new PrismaLensBudgetRepository(this.prisma)
     this.rankingWindowRepository = new PrismaRankingWindowRepository(this.prisma)
+    const trackingRepository = new PrismaPipelineTrackingRepository(this.prisma)
 
     this.runPreFilterUseCase = new RunPreFilterUseCase(
       this.listingRepository,
@@ -248,6 +252,7 @@ export class Container {
       // (59 voted ads): 73% 👍 among its margins ≥ 100 € vs 51% for the Lens
       // median, at about 0.07 $ an ad.
       anthropicApiKey && env.APPRAISAL_AGENT_ENABLED ? new ClaudeAppraisalAgent(anthropicApiKey) : undefined,
+      trackingRepository,
     )
 
     this.runListingScrapingUseCase = new RunListingScrapingUseCase(
@@ -256,7 +261,9 @@ export class Container {
       this.listingImageRepository,
       this.listingSourceApi,
       this.listingSourceScraper,
-      env.SCRAPE_MAX_SEARCHES_PER_RUN
+      env.SCRAPE_MAX_SEARCHES_PER_RUN,
+      undefined,
+      trackingRepository,
     )
 
     this.runNotificationUseCase = new RunNotificationUseCase(
@@ -275,6 +282,13 @@ export class Container {
     this.runCleanupUseCase = new RunCleanupUseCase(
       this.listingRepository,
       14
+    )
+
+    this.runWeeklyReportUseCase = new RunWeeklyReportUseCase(
+      this.prisma,
+      this.mailer,
+      env.NOTIFICATION_EMAIL_TO,
+      env.NOTIFICATION_EMAIL_FROM ?? 'LBC Bot <bot@example.com>',
     )
 
     this.getDashboardStatsUseCase = new GetDashboardStatsUseCase(
