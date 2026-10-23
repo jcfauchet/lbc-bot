@@ -1,5 +1,3 @@
-import type { Sharp } from 'sharp'
-
 /** Long enough for a slow CDN, short enough that one stalled download cannot hold a cron stage. */
 export const IMAGE_FETCH_TIMEOUT_MS = 15_000
 
@@ -20,48 +18,42 @@ export function sniffImageType(bytes: Buffer): (typeof SUPPORTED_IMAGE_TYPES)[nu
 }
 
 /**
- * Longest edge sent to a model. Claude downsizes anything larger itself, but
- * rejects the whole request when an image passes 3000 px in a many-image call,
- * which dealer photos (often 3000-4000 px) did.
+ * Longest edge a model accepts here: Claude rejects the whole request when one
+ * image passes 3000 px in a many-image call, which dealer photos (often
+ * 3000-4000 px) did. Such a photo is refused, so callers drop it like a failed
+ * download. Resizing needs a native image library, which pushed the Vercel
+ * function past its 250 MB limit.
  */
-export const MAX_IMAGE_EDGE_PX = 1568
+export const MAX_IMAGE_EDGE_PX = 3000
 
-let sharpModule: Promise<((input: Buffer, options?: { animated?: boolean }) => Sharp) | null> | undefined
-
-/**
- * sharp is a native module, loaded on first use: when its binaries are missing
- * from a deployment (libvips was not bundled on Vercel on 23 Oct 2026), images go
- * out unresized instead of every route that imports this file crashing on load.
- */
-function loadSharp() {
-  sharpModule ??= import('sharp').then((m) => m.default).catch((err) => {
-    console.error('sharp unavailable, images are sent unresized:', err)
+/** Width and height read from the file header, or null when the header is not recognised. */
+export function imageDimensions(bytes: Buffer): { width: number; height: number } | null {
+  const type = sniffImageType(bytes)
+  if (type === 'image/png' && bytes.length >= 24) return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) }
+  if (type === 'image/gif' && bytes.length >= 10) return { width: bytes.readUInt16LE(6), height: bytes.readUInt16LE(8) }
+  if (type === 'image/webp' && bytes.length >= 30) {
+    const chunk = bytes.subarray(12, 16).toString('ascii')
+    if (chunk === 'VP8 ') return { width: bytes.readUInt16LE(26) & 0x3fff, height: bytes.readUInt16LE(28) & 0x3fff }
+    if (chunk === 'VP8L') {
+      const bits = bytes.readUInt32LE(21)
+      return { width: (bits & 0x3fff) + 1, height: ((bits >> 14) & 0x3fff) + 1 }
+    }
+    if (chunk === 'VP8X') return { width: bytes.readUIntLE(24, 3) + 1, height: bytes.readUIntLE(27, 3) + 1 }
     return null
-  })
-  return sharpModule
-}
-
-/**
- * The image, shrunk to fit MAX_IMAGE_EDGE_PX when it is larger; a GIF comes back
- * as PNG. Bytes sharp cannot decode pass through untouched: the model is the
- * judge of what it accepts, as before resizing existed.
- */
-export async function fitImage(bytes: Buffer, mimeType: string): Promise<{ mimeType: string; bytes: Buffer }> {
-  const sharp = await loadSharp()
-  if (!sharp) return { mimeType, bytes }
-  const image = sharp(bytes, { animated: false })
-  let width = 0
-  let height = 0
-  try {
-    ({ width = 0, height = 0 } = await image.metadata())
-  } catch {
-    return { mimeType, bytes }
   }
-  if (Math.max(width, height) <= MAX_IMAGE_EDGE_PX) return { mimeType, bytes }
-  const resized = image.resize({ width: MAX_IMAGE_EDGE_PX, height: MAX_IMAGE_EDGE_PX, fit: 'inside' })
-  if (mimeType === 'image/jpeg') return { mimeType, bytes: await resized.jpeg({ quality: 85 }).toBuffer() }
-  if (mimeType === 'image/webp') return { mimeType, bytes: await resized.webp({ quality: 85 }).toBuffer() }
-  return { mimeType: 'image/png', bytes: await resized.png().toBuffer() }
+  if (type === 'image/jpeg') {
+    // Walk the segments to the first start-of-frame marker, which holds the size.
+    let offset = 2
+    while (offset + 9 < bytes.length) {
+      if (bytes[offset] !== 0xff) return null
+      const marker = bytes[offset + 1]
+      if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+        return { width: bytes.readUInt16BE(offset + 7), height: bytes.readUInt16BE(offset + 5) }
+      }
+      offset += 2 + bytes.readUInt16BE(offset + 2)
+    }
+  }
+  return null
 }
 
 export async function fetchImage(url: string): Promise<{ mimeType: string; data: string }> {
@@ -72,6 +64,9 @@ export async function fetchImage(url: string): Promise<{ mimeType: string; data:
   const mimeType = sniffImageType(bytes)
     ?? (SUPPORTED_IMAGE_TYPES.find((t) => t === declared) ?? (declared ? null : 'image/jpeg'))
   if (!mimeType) throw new Error(`Unsupported image format (${declared}) for ${url}`)
-  const fitted = await fitImage(bytes, mimeType)
-  return { mimeType: fitted.mimeType, data: fitted.bytes.toString('base64') }
+  const size = imageDimensions(bytes)
+  if (size && Math.max(size.width, size.height) > MAX_IMAGE_EDGE_PX) {
+    throw new Error(`Image too large (${size.width}x${size.height}) for ${url}`)
+  }
+  return { mimeType, data: bytes.toString('base64') }
 }
