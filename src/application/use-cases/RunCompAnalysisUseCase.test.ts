@@ -212,6 +212,21 @@ describe('RunCompAnalysisUseCase', () => {
     expect(d.statuses['stale']).toBeUndefined()
   })
 
+  it('serves listings scraped in the last day before a higher-scored backlog', async () => {
+    const backlog = mk('backlog', 9, 80, { createdAt: new Date(Date.now() - 3 * 24 * 3600_000) })
+    const fresh = mk('fresh', 7, 80, { createdAt: new Date(Date.now() - 2 * 3600_000) })
+    const d = deps({ listings: [backlog, fresh] })
+    const r = ranker([])
+    const useCase = new RunCompAnalysisUseCase(
+      d.listingRepository, d.aiAnalysisRepository, d.imageRepository, d.compService, d.budgetRepository,
+      { dailyBudget: 8, monthlyBudget: 250, resaleFactor: 1, rankingShortlistSize: 1 },
+      undefined, undefined, undefined, r as any,
+    )
+    await useCase.execute()
+
+    expect(r.rank.mock.calls[0][0].map((c: any) => c.listingId)).toEqual(['fresh'])
+  })
+
   it('spends only the current window entitlement', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date(2026, 7, 2, 1, 0, 0))

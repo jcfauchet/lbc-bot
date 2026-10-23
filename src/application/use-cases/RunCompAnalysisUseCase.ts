@@ -18,6 +18,9 @@ import { AiAnalysis } from '@/domain/entities/AiAnalysis'
 import { Money } from '@/domain/value-objects/Money'
 import { ListingStatus } from '@/domain/value-objects/ListingStatus'
 
+/** Listings scraped within this window outrank the older backlog whatever their score. */
+const FRESH_PRIORITY_MS = 24 * 60 * 60 * 1000
+
 /** A candidate that survived the free filters, with the image both later stages need. */
 interface ShortlistEntry {
   listing: Listing
@@ -237,10 +240,13 @@ export class RunCompAnalysisUseCase {
       return { processed: 0, analyzed: 0, ignored: 0, expired, deferred: 0 }
     }
 
-    // Best score first; freshness breaks ties so a credit never goes to an old
-    // listing while an equally-scored fresh one — still buyable — waits.
+    // Listings scraped in the last day come first, then best score, then freshness.
+    // Scores saturate at 7-9, so score-first let the deferred backlog fill the
+    // shortlist: on 23 Oct 2026 the ranker picked 4-day-old ads, one already sold.
+    const freshSince = now.getTime() - FRESH_PRIORITY_MS
     const candidates = (await this.listingRepository.findByStatus(ListingStatus.TRIAGED))
       .sort((a, b) =>
+        Number(b.createdAt.getTime() >= freshSince) - Number(a.createdAt.getTime() >= freshSince) ||
         (b.triageScore ?? 0) - (a.triageScore ?? 0) ||
         b.createdAt.getTime() - a.createdAt.getTime())
 
