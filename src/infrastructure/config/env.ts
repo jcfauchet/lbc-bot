@@ -51,8 +51,10 @@ export const envSchema = z.object({
   // estimate and the Opus + Sonnet comp check. Explicit enum, as RANKING_ENABLED.
   APPRAISAL_AGENT_ENABLED: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
   // The day's comp budget accrues one share per window rather than being fully
-  // available at midnight. 4 windows = 6h, so a fresh find waits 6h at worst.
-  LENS_WINDOWS_PER_DAY: z.coerce.number().int().min(1).default(4),
+  // available at midnight. 8 windows = 3h, so a fresh find waits 3h at worst:
+  // at 6h the median listing-to-email delay was ~7h and good pieces sold first.
+  // Each window costs one Opus ranking call (~0.20 $), not more comp credits.
+  LENS_WINDOWS_PER_DAY: z.coerce.number().int().min(1).default(8),
   // Candidates submitted to the comparative ranker per window. Absolute triage
   // scoring saturates (967 of 1651 qualified listings scored exactly 9 over the
   // two weeks to 2 Aug 2026), so the ranker, not the score, picks the winners.
