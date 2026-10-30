@@ -102,6 +102,8 @@ export interface IReferenceRepository {
   setReferenceImageEmbedding(imageId: string, embedding: number[]): Promise<void>
   /** Unchecked listings scraped in the last `maxAgeDays`, newest first, not voted down. */
   findListingsToCheck(limit: number, maxAgeDays: number): Promise<ListingToCheck[]>
+  /** Listings created in the last `days` whose cover photo is embedded, not voted down, newest first. */
+  findRecentListingsWithEmbeddedCover(days: number, limit: number): Promise<ListingToCheck[]>
   setListingImageEmbedding(imageId: string, embedding: number[]): Promise<void>
   /**
    * Active references close to this listing's photos or named in its text, excluding pairs already judged.

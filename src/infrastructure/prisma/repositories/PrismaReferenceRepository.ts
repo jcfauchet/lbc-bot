@@ -98,6 +98,17 @@ export class PrismaReferenceRepository implements IReferenceRepository {
     return this.attachImages(listings)
   }
 
+  async findRecentListingsWithEmbeddedCover(days: number, limit: number): Promise<ListingToCheck[]> {
+    const listings = await this.prisma.$queryRaw<Array<{ id: string; title: string; priceCents: number }>>`
+      SELECT p."id", p."title", p."priceCents" FROM "lbc_product_listings" p
+      WHERE p."createdAt" >= NOW() - make_interval(days => ${days})
+        AND EXISTS (SELECT 1 FROM "listing_images" li WHERE li."listingId" = p."id" AND li."position" = 0 AND li."embedding" IS NOT NULL)
+        AND NOT EXISTS (SELECT 1 FROM "listing_feedbacks" f WHERE f."listingId" = p."id" AND f."isGood" = false)
+      ORDER BY p."createdAt" DESC LIMIT ${limit}
+    `
+    return this.attachImages(listings)
+  }
+
   async setListingImageEmbedding(imageId: string, embedding: number[]): Promise<void> {
     await this.prisma.$executeRaw`
       UPDATE "listing_images" SET "embedding" = ${toVector(embedding)}::vector WHERE "id" = ${imageId}

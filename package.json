@@ -24,6 +24,7 @@
     "eval:comps": "tsx src/cli/eval-comps.ts",
     "eval:comp-verify": "tsx src/cli/eval-comp-verify.ts",
     "artcurial:ingest": "tsx src/cli/artcurial-ingest.ts",
+    "eval:auction-references": "tsx src/cli/eval-auction-references.ts",
     "eval:appraisal": "tsx src/cli/eval-appraisal-agent.ts",
     "funnel": "pnpm scrape && pnpm prefilter && pnpm triage && pnpm analyze",
     "test": "vitest --run",
