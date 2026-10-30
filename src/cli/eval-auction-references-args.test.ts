@@ -9,4 +9,18 @@ describe('parseEvalAuctionReferencesArgs', () => {
     expect(parseEvalAuctionReferencesArgs(['--days', '7', '--verify', '20', '--thresholds', '0.76,0.8']))
       .toEqual({ days: 7, verify: 20, thresholds: [0.76, 0.8] })
   })
+  it('accepts --verify 0', () => {
+    expect(parseEvalAuctionReferencesArgs(['--verify', '0']).verify).toBe(0)
+  })
+  it.each([
+    [['--days', 'abc']],
+    [['--days', '0']],
+    [['--verify', '-3']],
+    [['--thresholds', '0.8,']],
+    [['--thresholds', '1.5']],
+    [['--thresholds', '0']],
+    [['--days']],
+  ])('rejects %j', (args) => {
+    expect(() => parseEvalAuctionReferencesArgs(args)).toThrow()
+  })
 })

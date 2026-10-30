@@ -6,6 +6,9 @@
  * Usage:
  *   npx tsx src/cli/eval-auction-references.ts [--days 14] [--thresholds 0.75,0.78,0.8] [--verify 0]
  *
+ * Pairs already judged by the matching stage (rows in reference_matches) are
+ * excluded by findCandidates, so they are missing from every count.
+ *
  * --verify N runs the Gemini verifier on the first N price-gated pairs at the
  * default threshold (one Gemini call each).
  */
@@ -29,6 +32,7 @@ async function main() {
   const { days, verify, thresholds } = parseEvalAuctionReferencesArgs(process.argv.slice(2))
   const repo = container.referenceRepository
   const listings = await repo.findRecentListingsWithEmbeddedCover(days, MAX_LISTINGS)
+  console.log('Note: pairs already judged by the matching stage are excluded from every count.')
   console.log(`${listings.length} listings from the last ${days} days with an embedded cover; ratio ${env.AUCTION_ALERT_RATIO}`)
 
   const defaultThreshold = env.REFERENCE_MATCH_MIN_SIMILARITY
