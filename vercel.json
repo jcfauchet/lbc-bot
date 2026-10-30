@@ -24,6 +24,10 @@
       "schedule": "0 3 * * *"
     },
     {
+      "path": "/api/cron/artcurial-ingest",
+      "schedule": "0 4 * * *"
+    },
+    {
       "path": "/api/cron/weekly-report",
       "schedule": "0 7 * * 0"
     }

@@ -13,6 +13,10 @@ export interface IngestOptions {
   limit?: number
   dryRun: boolean
   concurrency: number
+  /** Keeps only sales whose beginDate falls in [now - maxAgeDays, now - minAgeDays]; sales without a date are skipped. */
+  closedBetween?: { minAgeDays: number; maxAgeDays: number }
+  /** Stops starting new lots once this many milliseconds have elapsed. */
+  maxRunMs?: number
 }
 
 export interface IngestReport {
@@ -24,9 +28,11 @@ export interface IngestReport {
   lotsFailed: number
   imagesEmbedded: number
   imagesFailed: number
+  stoppedByBudget: boolean
 }
 
 const PROGRESS_EVERY = 25
+const DAY_MS = 86_400_000
 
 interface LotJob { url: string; sale: ArtcurialSale }
 
@@ -37,12 +43,14 @@ export class ArtcurialIngester {
     private readonly repo: IReferenceRepository,
     private readonly embedder: IImageEmbeddingService,
     private readonly log: (line: string) => void,
+    private readonly now: () => number = Date.now,
   ) {}
 
   async ingest(options: IngestOptions): Promise<IngestReport> {
     const report: IngestReport = {
-      salesKept: [], lotsSeen: 0, lotsCreated: 0, lotsSkippedExisting: 0, lotsSkippedUnsold: 0, lotsFailed: 0, imagesEmbedded: 0, imagesFailed: 0,
+      salesKept: [], lotsSeen: 0, lotsCreated: 0, lotsSkippedExisting: 0, lotsSkippedUnsold: 0, lotsFailed: 0, imagesEmbedded: 0, imagesFailed: 0, stoppedByBudget: false,
     }
+    const startedAt = this.now()
     const sitemap = await this.fetcher.fetchText(`https://www.artcurial.com/sitemap/sales-${options.year}-fr.xml`)
     const { lotUrlsBySale } = parseSitemap(sitemap)
     const jobs: LotJob[] = []
@@ -50,6 +58,7 @@ export class ArtcurialIngester {
       if (options.saleRef && saleRef !== options.saleRef) continue
       const sale = await this.loadWantedSale(saleRef)
       if (!sale) continue
+      if (options.closedBetween && !this.isInWindow(sale, options.closedBetween)) continue
       report.salesKept.push(saleRef)
       this.log(`kept ${saleRef} ${sale.name} ${sale.totalLots} lots ${sale.specialties.join(',')}`)
       for (const url of lotUrls) jobs.push({ url, sale })
@@ -60,6 +69,10 @@ export class ArtcurialIngester {
     let next = 0
     const worker = async () => {
       while (next < queue.length) {
+        if (options.maxRunMs !== undefined && this.now() - startedAt >= options.maxRunMs) {
+          report.stoppedByBudget = true
+          return
+        }
         const job = queue[next++]
         report.lotsSeen++
         await this.ingestLot(job, report)
@@ -68,6 +81,14 @@ export class ArtcurialIngester {
     }
     await Promise.all(Array.from({ length: Math.max(1, options.concurrency) }, worker))
     return report
+  }
+
+  private isInWindow(sale: ArtcurialSale, { minAgeDays, maxAgeDays }: { minAgeDays: number; maxAgeDays: number }): boolean {
+    if (!sale.beginDate) return false
+    const time = Date.parse(sale.beginDate)
+    if (Number.isNaN(time)) return false
+    const now = this.now()
+    return time >= now - maxAgeDays * DAY_MS && time <= now - minAgeDays * DAY_MS
   }
 
   private async loadWantedSale(saleRef: string): Promise<ArtcurialSale | null> {
