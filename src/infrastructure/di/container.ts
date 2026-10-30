@@ -160,7 +160,10 @@ export class Container {
     this.runReferenceMatchUseCase = new RunReferenceMatchUseCase(
       this.referenceRepository,
       this.imageEmbeddingService,
-      claudeFirst<IReferenceMatchVerifier>((key) => new ClaudeReferenceMatchVerifier(key), new GeminiReferenceMatchVerifier(geminiApiKey), 'Reference match'),
+      {
+        manual: claudeFirst<IReferenceMatchVerifier>((key) => new ClaudeReferenceMatchVerifier(key), new GeminiReferenceMatchVerifier(geminiApiKey), 'Reference match'),
+        auction: new GeminiReferenceMatchVerifier(geminiApiKey),
+      },
       this.mailer,
       {
         minSimilarity: env.REFERENCE_MATCH_MIN_SIMILARITY,
@@ -171,9 +174,13 @@ export class Container {
         emailFrom: env.NOTIFICATION_EMAIL_FROM ?? 'LBC Bot <bot@example.com>',
         // Leaves most of the 800s cron to the deal funnel that runs after it.
         maxRunMs: 120_000,
-        maxVerificationsPerRun: 20,
+        // About one auction candidate per ad at the 0.78 similarity gate.
+        maxVerificationsPerRun: 40,
         maxCandidatesPerListing: 3,
         maxBackfillPerReference: 15,
+        auctionEnabled: env.AUCTION_REFERENCES_ENABLED,
+        auctionAlertRatio: env.AUCTION_ALERT_RATIO,
+        auctionVerificationsPerDay: env.AUCTION_VERIFICATIONS_PER_DAY,
       },
     )
 

@@ -20,6 +20,7 @@ function ReferencesContent() {
   const [references, setReferences] = useState<Reference[] | null>(null)
   const [linkInvalid, setLinkInvalid] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [fund, setFund] = useState<{ lots: number; images: number; enabled: boolean } | null>(null)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [files, setFiles] = useState<File[]>([])
@@ -38,6 +39,12 @@ function ReferencesContent() {
       if (res.ok) setReferences(await res.json())
     } catch {
       setError('Pas de connexion, réessaie dans un instant.')
+    }
+    try {
+      const fundRes = await fetch(`/api/references/fund?k=${encodeURIComponent(key)}`)
+      if (fundRes.ok) setFund(await fundRes.json())
+    } catch {
+      // The fund line is optional; nothing is shown when it fails.
     }
   }, [key])
 
@@ -189,6 +196,11 @@ function ReferencesContent() {
       </form>
 
       <h2 className="mb-3 mt-8 text-lg font-bold">Mes références {references && references.length > 0 && `(${references.length})`}</h2>
+      {fund && (
+        <p className="mb-3 text-xs text-gray-500">
+          Fonds Artcurial : {fund.lots} lots, {fund.images} photos, {fund.enabled ? 'actif' : 'inactif'}
+        </p>
+      )}
       {references?.length === 0 && <p className="text-sm text-gray-500">Aucune référence pour l’instant.</p>}
       <ul className="flex flex-col gap-3">
         {references?.map((ref) => (
