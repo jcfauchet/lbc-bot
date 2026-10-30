@@ -86,7 +86,7 @@ cascade delete:
 - `createdAt`.
 
 `reference_images.urlRemote` for an auction lot points at Artcurial's image proxy
-(`https://www.artcurial.com/item-images/<blobName>?w=1024`, serves WebP ≤ 1024 px,
+(`https://www.artcurial.com/item-images/<path after the storage bucket, from servingUrl>?w=1024`, serves WebP ≤ 1024 px,
 within the 3000 px limit of `fetch-image`). No Cloudinary copy: 30 000 photos
 would cost more than the risk that Artcurial drops an image (the alert email then
 shows a broken thumbnail and the lot link). An HNSW index on
@@ -119,7 +119,7 @@ Reference fields for an auction lot, filled at ingest:
 3. For each lot URL of a kept sale: fetch the lot page, parse the lot object
    (`status`, `low`, `high`, `adjudicationPrice`, `finalPrice`, `adjudicationDate`,
    `artist.party.fullName`, `artist.yearOfBirth/yearOfDeath`,
-   `pictures[].document.blobName`, `descriptions.FRENCH.{titleWithHtml,
+   `pictures[].document.servingUrl`, `descriptions.FRENCH.{titleWithHtml,
    descriptionWithHtml}`). Skip unless `status === 'SOLD'` and
    `adjudicationPrice > 0`. Prices on the page are in euros, not cents.
 4. Upsert reference + `auction_lots` row + up to 3 `reference_images`
