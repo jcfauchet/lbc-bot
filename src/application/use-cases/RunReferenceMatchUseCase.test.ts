@@ -12,12 +12,12 @@ const listing = (id: string, priceCents = 12000, embedded = false, photos = 1): 
 })
 const candidate = (referenceId: string, overrides: Partial<ReferenceCandidate> = {}): ReferenceCandidate => ({
   referenceId, name: `ref ${referenceId}`, note: null, maxPriceCents: null, similarity: 0.8, textHit: false,
-  imageUrls: [`https://ref/${referenceId}.jpg`], ...overrides,
+  imageUrls: [`https://ref/${referenceId}.jpg`], source: 'MANUAL', auction: null, ...overrides,
 })
 const alert = (matchId: string): PendingAlert => ({
   matchId, referenceName: 'Desserte Jansen', referenceImageUrl: 'https://ref/a.jpg', listingId: 'l1',
   listingTitle: 'Table roulante', listingUrl: 'https://lbc/l1', priceCents: 12000, city: 'Lyon',
-  listingImageUrl: 'https://img/l1.jpg', reason: 'same frame',
+  listingImageUrl: 'https://img/l1.jpg', reason: 'same frame', source: 'MANUAL', similarity: 0.8, auction: null,
 })
 
 function setup(opts: {
@@ -152,7 +152,7 @@ describe('RunReferenceMatchUseCase', () => {
     const { repo, useCase } = setup({ listings: [listing('l1')] })
     await useCase.execute()
     expect(repo.findListingsToCheck).toHaveBeenCalledWith(60, 7)
-    expect(repo.findCandidates).toHaveBeenCalledWith('l1', 0.7, 3)
+    expect(repo.findCandidates).toHaveBeenCalledWith('l1', { minSimilarity: 0.7, keywordMinSimilarity: 0.7, auctionLimit: 3, includeAuction: true })
   })
 
   it('embeds only the cover when no reference comes close to it', async () => {

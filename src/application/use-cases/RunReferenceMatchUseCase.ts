@@ -147,7 +147,12 @@ export class RunReferenceMatchUseCase {
   }
 
   private findWideCandidates(listing: ListingToCheck): Promise<ReferenceCandidate[]> {
-    return this.repo.findCandidates(listing.id, this.config.widenSimilarity, this.config.maxCandidatesPerListing)
+    return this.repo.findCandidates(listing.id, {
+      minSimilarity: this.config.widenSimilarity,
+      keywordMinSimilarity: this.config.widenSimilarity,
+      auctionLimit: this.config.maxCandidatesPerListing,
+      includeAuction: true,
+    })
   }
 
   private async embedListingImages(images: ListingToCheck['images']): Promise<void> {
