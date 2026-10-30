@@ -22,7 +22,9 @@ export function isWantedSale(sale: ArtcurialSale): boolean {
  */
 export function lotImageUrl(servingUrl: string): string {
   const path = servingUrl.startsWith(STORAGE_PREFIX) ? servingUrl.slice(STORAGE_PREFIX.length) : servingUrl
-  return `https://www.artcurial.com/item-images/${path}?w=1024`
+  // fit=inside keeps the longest edge at 1024 px: with w=1024 alone a tall vase photo
+  // came back 1024x5563 and was refused by the 3000 px limit of fetch-image.
+  return `https://www.artcurial.com/item-images/${path}?w=1024&h=1024&fit=inside`
 }
 
 function formatDate(date: Date): string {

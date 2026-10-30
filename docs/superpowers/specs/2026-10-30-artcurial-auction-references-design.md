@@ -86,7 +86,7 @@ cascade delete:
 - `createdAt`.
 
 `reference_images.urlRemote` for an auction lot points at Artcurial's image proxy
-(`https://www.artcurial.com/item-images/<path after the storage bucket, from servingUrl>?w=1024`, serves WebP ≤ 1024 px,
+(`https://www.artcurial.com/item-images/<path after the storage bucket, from servingUrl>?w=1024&h=1024&fit=inside`, serves WebP with the longest edge at 1024 px,
 within the 3000 px limit of `fetch-image`). No Cloudinary copy: 30 000 photos
 would cost more than the risk that Artcurial drops an image (the alert email then
 shows a broken thumbnail and the lot link). An HNSW index on

@@ -29,7 +29,7 @@ describe('isWantedSale', () => {
 
 describe('lotImageUrl', () => {
   it('maps the serving url onto the item-images proxy', () => {
-    expect(lotImageUrl(bucket + 'FR/611/x.jpg')).toBe('https://www.artcurial.com/item-images/FR/611/x.jpg?w=1024')
+    expect(lotImageUrl(bucket + 'FR/611/x.jpg')).toBe('https://www.artcurial.com/item-images/FR/611/x.jpg?w=1024&h=1024&fit=inside')
   })
 })
 
@@ -38,7 +38,7 @@ describe('toAuctionReference', () => {
     const ref = toAuctionReference(lot({ artist: 'Poul KJAERHOLM', pictureUrls: ['a', 'b', 'c', 'd'].map((p) => bucket + p) }), sale(), url)!
     expect(ref.name).toBe('Poul KJAERHOLM — Suite de dix chaises mod. PK9 - 1960')
     expect(ref.keywords).toEqual(['poul kjaerholm'])
-    expect(ref.imageUrls).toEqual(['a', 'b', 'c', 'd'].map((p) => `https://www.artcurial.com/item-images/${p}?w=1024`))
+    expect(ref.imageUrls).toEqual(['a', 'b', 'c', 'd'].map((p) => `https://www.artcurial.com/item-images/${p}?w=1024&h=1024&fit=inside`))
     expect(ref.lot).toMatchObject({ hammerCents: 1100000, quantity: 10, hammerPerUnitCents: 110000, house: 'ARTCURIAL', saleRef: 'IT6064', lotRef: '278-a', lotUrl: url, finalCents: 1300000, estimateLowCents: 800000 })
     expect(ref.note).toMatch(/Adjugé 11000 € le \d{2}\/\d{2}\/\d{4}, Artcurial /)
   })
