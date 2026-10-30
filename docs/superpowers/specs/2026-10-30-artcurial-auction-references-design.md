@@ -247,3 +247,20 @@ the existing evals.
 - French number-word parsing for quantities (un … vingt, digits).
 - How the CLI reports progress and failures.
 - Email layout for the multi-lot case.
+
+## Addendum (30 Oct 2026): keeping the fund current
+
+The reseller asked for a routine that picks up future sales. Decisions (mine,
+stated during execution):
+
+- A daily Vercel cron `/api/cron/artcurial-ingest` at 04:00, like the other
+  routines, runs the same ingester as the CLI on the current year's sitemap
+  with two extra filters: the sale's date is at least 2 days in the past
+  (results are published) and at most 45 days in the past (older sales were
+  ingested by an earlier run or by the yearly CLI). In January it also scans
+  the previous year, so a sale closed on 30 December is not missed.
+- The run has a time budget (`maxRunMs`, 600 s) and stops cleanly when it is
+  spent; since existing lots are skipped, the next run continues where it left
+  off. Embedding failures are mopped up by the matching stage's retry path.
+- The run report (sales kept, lots created, failures) is logged.
+- Protected like the other crons and registered in `vercel.json`.

@@ -689,3 +689,49 @@ After deploy (push to main), look at the next `analyze-and-notify` run log for t
 - [ ] **Step 5: Full ingest, in the background**
 
 Run: `pnpm artcurial:ingest --year 2025`, then 2024, then 2026. Resumable; expect a few hours each. Report the final counts and the fund line on `/feedback/references`.
+
+---
+
+### Task 10: Daily cron that keeps the fund current
+
+**Files:**
+- Modify: `src/infrastructure/artcurial/ArtcurialIngester.ts` (date window + time budget options)
+- Create: `src/app/api/cron/artcurial-ingest/route.ts`
+- Modify: `vercel.json` (cron entry), `src/infrastructure/di/container.ts` (an `artcurialIngester` instance)
+- Test: `src/infrastructure/artcurial/ArtcurialIngester.test.ts`, `src/app/api/cron/artcurial-ingest/route.test.ts`
+
+**Interfaces:**
+- Consumes: Task 7 `ArtcurialIngester.ingest(options)`, `IngestReport`, `ArtcurialSale.beginDate`; the existing cron auth pattern (read `src/app/api/cron/analyze-and-notify/route.ts` for the secret check).
+- Produces: `IngestOptions` gains `closedBetween?: { minAgeDays: number; maxAgeDays: number }` (the sale's `beginDate` must fall in `[now - maxAgeDays, now - minAgeDays]`; sales without a date are skipped) and `maxRunMs?: number` (the lot loop stops starting new lots once spent; the report gains `stoppedByBudget: boolean`); the ingester takes an injectable `now: () => number`. `GET /api/cron/artcurial-ingest` runs `ingest({ year: currentYear, closedBetween: { minAgeDays: 2, maxAgeDays: 45 }, maxRunMs: 600_000, dryRun: false, concurrency: 3 })`, plus the previous year first when the current month is January, and returns the report(s) as JSON.
+
+- [ ] **Step 1: Write the failing ingester tests**
+
+```ts
+it('keeps only sales closed between minAgeDays and maxAgeDays ago', async () => {
+  // three wanted sales dated now-1d, now-10d, now-60d with closedBetween {2,45} → only the 10-day-old sale's lots are fetched
+})
+it('stops starting new lots once maxRunMs is spent and says so in the report', async () => {
+  // fake clock advancing 400 ms per lot, maxRunMs 1000 → lotsSeen ≤ 3, report.stoppedByBudget === true
+})
+```
+
+- [ ] **Step 2: Write the failing route test** (missing/wrong secret → 401 like the sibling crons; valid secret → ingester called with `closedBetween: { minAgeDays: 2, maxAgeDays: 45 }` and `maxRunMs: 600_000` for the current year; in January, called twice, previous year first; the ingester mocked through the container module).
+
+- [ ] **Step 3: Run both test files to verify they fail**
+
+Run: `node_modules/.bin/vitest --run src/infrastructure/artcurial/ArtcurialIngester.test.ts src/app/api/cron/artcurial-ingest`
+Expected: FAIL.
+
+- [ ] **Step 4: Implement the options and the route**
+
+Date window and budget in the ingester. Route: `maxDuration` as the sibling crons, secret check, call the ingester, `console.log` the report, return it as JSON, HTTP 200 even when `lotsFailed > 0`. `vercel.json`: `{ "path": "/api/cron/artcurial-ingest", "schedule": "0 4 * * *" }`.
+
+- [ ] **Step 5: Run the suite, type-check, commit**
+
+Run: `node_modules/.bin/vitest --run && node_modules/.bin/tsc --noEmit`
+Expected: PASS.
+
+```bash
+git add src/infrastructure/artcurial src/app/api/cron/artcurial-ingest src/infrastructure/di/container.ts vercel.json
+git commit -m "feat(artcurial): daily cron ingesting newly closed sales into the fund"
+```
