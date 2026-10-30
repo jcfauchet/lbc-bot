@@ -7,6 +7,8 @@ export interface ArtcurialSale {
   specialties: string[]
   /** ISO date */
   beginDate: string | null
+  /** ISO date; an online sale closes one to two weeks after it begins */
+  endDate: string | null
 }
 
 export interface ArtcurialLot {

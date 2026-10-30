@@ -108,3 +108,39 @@ describe('EmailTemplates.auctionMatch', () => {
     expect(html.indexOf('https://lot/2')).toBeLessThan(html.indexOf('https://lot/1'))
   })
 })
+
+describe('EmailTemplates match emails escape scraped text', () => {
+  const hostile = alertWithAuction(
+    { title: 'Lot <i>x</i>', artist: 'A "B"', saleName: "Vente l'été <script>", lotUrl: 'https://lot/1?a=1&b=2' },
+    {
+      listingTitle: 'Chaise <b>Plia</b> & co', city: '<Lyon>', reason: 'same <frame>', referenceName: 'Ref <u>1</u>',
+      listingUrl: 'https://lbc/l1?a=1&b="2"', listingImageUrl: 'https://img/l1.jpg?w=1&h=2',
+    },
+  )
+  const escapedTitle = 'Chaise &lt;b&gt;Plia&lt;/b&gt; &amp; co'
+
+  it('escapes every text slot of the auction email and keeps URLs with & working', () => {
+    const { subject, html } = EmailTemplates.auctionMatch([hostile])
+    expect(html).toContain(escapedTitle)
+    expect(html).not.toContain('<b>Plia</b>')
+    expect(html).toContain('&lt;Lyon&gt;')
+    expect(html).toContain('same &lt;frame&gt;')
+    expect(html).toContain('A &quot;B&quot;, Lot &lt;i&gt;x&lt;/i&gt;')
+    expect(html).toContain('Vente l&#39;été &lt;script&gt;')
+    expect(html).not.toContain('<script>')
+    expect(html).toContain('href="https://lot/1?a=1&amp;b=2"')
+    expect(html).toContain('href="https://lbc/l1?a=1&amp;b=&quot;2&quot;"')
+    expect(html).toContain('src="https://img/l1.jpg?w=1&amp;h=2"')
+    // The subject is plain text, not HTML.
+    expect(subject).toContain('Chaise <b>Plia</b> & co')
+  })
+
+  it('escapes every text slot of the manual reference email', () => {
+    const { html } = EmailTemplates.referenceMatch({ ...hostile, source: 'MANUAL', auction: null })
+    expect(html).toContain(escapedTitle)
+    expect(html).not.toContain('<b>Plia</b>')
+    expect(html).toContain('Ref &lt;u&gt;1&lt;/u&gt;')
+    expect(html).toContain('same &lt;frame&gt;')
+    expect(html).toContain('href="https://lbc/l1?a=1&amp;b=&quot;2&quot;"')
+  })
+})

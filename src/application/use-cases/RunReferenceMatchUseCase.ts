@@ -1,6 +1,6 @@
 import type { IReferenceRepository, ListingToCheck, PendingAlert, ReferenceCandidate } from '@/domain/repositories/IReferenceRepository'
 import type { IImageEmbeddingService } from '@/domain/services/IImageEmbeddingService'
-import type { IReferenceMatchVerifier } from '@/domain/services/IReferenceMatchVerifier'
+import type { IReferenceMatchVerifier, ReferenceVerdict } from '@/domain/services/IReferenceMatchVerifier'
 import type { IMailer } from '@/infrastructure/mail/IMailer'
 import { EmailTemplates } from '@/infrastructure/mail/EmailTemplates'
 
@@ -47,7 +47,9 @@ export interface ReferenceMatchResult { checked: number; failed: number; judged:
 /** Reference photos whose embedding failed at upload, retried per run. */
 const REFERENCE_IMAGE_RETRY_BATCH = 20
 /** Cover plus three: enough angles to decide, bounded vision tokens per call. */
-const VERIFIER_LISTING_PHOTOS = 4
+export const VERIFIER_LISTING_PHOTOS = 4
+/** Every reference photo is inlined in the vision call: an auction lot can carry a dozen. */
+const VERIFIER_REFERENCE_PHOTOS = 4
 
 /** A 4xx on the photo means the ad (or its image) is gone: retrying cannot help. */
 function isPermanentImageError(err: unknown): boolean {
@@ -83,7 +85,7 @@ export class RunReferenceMatchUseCase {
 
   async execute(): Promise<ReferenceMatchResult> {
     const result: ReferenceMatchResult = { checked: 0, failed: 0, judged: 0, confirmed: 0, alerted: 0 }
-    if (!(await this.repo.hasActiveReferences())) return result
+    if (!(await this.repo.hasActiveReferences(this.config.auctionEnabled))) return result
 
     const budget: RunBudget = {
       deadline: this.now() + this.config.maxRunMs,
@@ -219,13 +221,21 @@ export class RunReferenceMatchUseCase {
     }
 
     budget.verificationsLeft--
-    const verdict = await verifier.verify({
-      listingImageUrls: listing.images.slice(0, VERIFIER_LISTING_PHOTOS).map((i) => i.url),
-      listingTitle: listing.title,
-      referenceImageUrls: candidate.imageUrls,
-      referenceName: candidate.name,
-      referenceNote: candidate.note,
-    })
+    let verdict: ReferenceVerdict
+    try {
+      verdict = await verifier.verify({
+        listingImageUrls: listing.images.slice(0, VERIFIER_LISTING_PHOTOS).map((i) => i.url),
+        listingTitle: listing.title,
+        referenceImageUrls: candidate.imageUrls.slice(0, VERIFIER_REFERENCE_PHOTOS),
+        referenceName: candidate.name,
+        referenceNote: candidate.note,
+      })
+    } catch (err) {
+      // A dead reference photo would fail this listing on every run and block
+      // its other candidates: settle the pair as unconfirmed instead.
+      if (!isPermanentImageError(err)) throw err
+      verdict = { same: false, reason: 'reference image unavailable' }
+    }
     await this.repo.recordMatch({
       referenceId: candidate.referenceId,
       listingId: listing.id,

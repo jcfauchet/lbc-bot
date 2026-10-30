@@ -18,7 +18,9 @@ async function main() {
   const ingester = new ArtcurialIngester(new ArtcurialFetcher(), container.referenceRepository, container.imageEmbeddingService, console.log)
   const report = await ingester.ingest(options)
   console.log(JSON.stringify(report, null, 2))
-  if (report.lotsFailed > 0) process.exit(1)
+  if (report.lotsFailed > 0) process.exitCode = 1
 }
 
-main().catch((e) => { console.error(e); process.exit(1) })
+main()
+  .catch((e) => { console.error(e); process.exitCode = 1 })
+  .finally(() => container.cleanup())

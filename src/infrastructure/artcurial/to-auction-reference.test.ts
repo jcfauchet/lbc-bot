@@ -5,7 +5,7 @@ import type { ArtcurialLot, ArtcurialSale } from './types'
 const bucket = 'https://storage.googleapis.com/art-fr-maya-prod-inventory/'
 
 function sale(overrides: Partial<ArtcurialSale> = {}): ArtcurialSale {
-  return { ref: 'IT6064', name: 'Design', status: 'DONE', totalLots: 303, specialties: ['DESIGN'], beginDate: '2025-06-10T08:00:00.000Z', ...overrides }
+  return { ref: 'IT6064', name: 'Design', status: 'DONE', totalLots: 303, specialties: ['DESIGN'], beginDate: '2025-06-10T08:00:00.000Z', endDate: '2025-06-10T08:00:00.000Z', ...overrides }
 }
 function lot(overrides: Partial<ArtcurialLot> = {}): ArtcurialLot {
   return {

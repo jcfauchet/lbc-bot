@@ -44,7 +44,7 @@ function setup(opts: {
 } = {}) {
   const recorded: any[] = []
   const repo = {
-    hasActiveReferences: vi.fn(async () => opts.active ?? true),
+    hasActiveReferences: vi.fn(async (_includeAuction: boolean) => opts.active ?? true),
     findReferenceImagesMissingEmbedding: vi.fn(async () => opts.missingRefImages ?? []),
     setReferenceImageEmbedding: vi.fn(async () => {}),
     findListingsToCheck: vi.fn(async () => opts.listings ?? []),
@@ -78,6 +78,15 @@ describe('RunReferenceMatchUseCase', () => {
     const res = await useCase.execute()
     expect(repo.findListingsToCheck).not.toHaveBeenCalled()
     expect(res).toEqual({ checked: 0, failed: 0, judged: 0, confirmed: 0, alerted: 0 })
+  })
+
+  it('asks whether references are active counting auction lots only when the fund is enabled', async () => {
+    const on = setup()
+    await on.useCase.execute()
+    expect(on.repo.hasActiveReferences).toHaveBeenCalledWith(true)
+    const off = setup({ config: { auctionEnabled: false } })
+    await off.useCase.execute()
+    expect(off.repo.hasActiveReferences).toHaveBeenCalledWith(false)
   })
 
   it('embeds reference images that failed at upload before matching', async () => {
@@ -213,6 +222,39 @@ describe('RunReferenceMatchUseCase', () => {
     expect(verifier.verify.mock.calls[0][0].listingImageUrls).toEqual([
       'https://img/l1.jpg', 'https://img/l1-2.jpg', 'https://img/l1-3.jpg', 'https://img/l1-4.jpg',
     ])
+  })
+
+  it('shows the verifier at most four reference photos', async () => {
+    const imageUrls = Array.from({ length: 6 }, (_, i) => `https://ref/a-${i + 1}.jpg`)
+    const { verifier, useCase } = setup({ listings: [listing('l1')], candidates: { l1: [candidate('a', { imageUrls })] } })
+    await useCase.execute()
+    expect(verifier.verify.mock.calls[0][0].referenceImageUrls).toEqual(imageUrls.slice(0, 4))
+  })
+
+  it('settles a pair as unconfirmed when the reference photo is gone (4xx) and judges the next candidate', async () => {
+    const { repo, verifier, mailer, recorded, useCase } = setup({ listings: [listing('l1')], candidates: { l1: [candidate('a'), candidate('b')] } })
+    verifier.verify.mockRejectedValueOnce(new Error('Image download failed (404) for https://ref/a.jpg'))
+    const res = await useCase.execute()
+    expect(recorded).toEqual([
+      { referenceId: 'a', listingId: 'l1', similarity: 0.8, confirmed: false, reason: 'reference image unavailable' },
+      { referenceId: 'b', listingId: 'l1', similarity: 0.8, confirmed: true, reason: 'same' },
+    ])
+    expect(verifier.verify).toHaveBeenCalledTimes(2)
+    expect(repo.markListingChecked).toHaveBeenCalledWith('l1')
+    expect(mailer.send).not.toHaveBeenCalled()
+    expect(res).toMatchObject({ checked: 1, failed: 0, judged: 2, confirmed: 1 })
+  })
+
+  it('still fails the listing on a transient verifier error', async () => {
+    const { repo, verifier, recorded, useCase } = setup({ listings: [listing('l1')], candidates: { l1: [candidate('a')] } })
+    verifier.verify.mockRejectedValueOnce(new Error('Image download failed (503) for https://ref/a.jpg'))
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const res = await useCase.execute()
+    expect(logged).toHaveBeenCalledWith('Reference matching failed for l1:', expect.any(Error))
+    logged.mockRestore()
+    expect(recorded).toEqual([])
+    expect(repo.markListingChecked).not.toHaveBeenCalled()
+    expect(res.failed).toBe(1)
   })
 
   it('stops taking listings once the run deadline has passed, leaving them unchecked', async () => {

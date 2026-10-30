@@ -116,24 +116,34 @@ describe('ArtcurialIngester', () => {
 describe('ArtcurialIngester cron options', () => {
   const NOW = Date.parse('2026-10-30T04:00:00.000Z')
   const DAY = 86_400_000
-  const fixtureBeginDate = parseSalePage(saleHtml)!.beginDate!
+  const fixtureSale = parseSalePage(saleHtml)!
+  const fixtureBeginDate = fixtureSale.beginDate!
+  const fixtureEndDate = fixtureSale.endDate!
   const iso = (daysAgo: number) => new Date(NOW - daysAgo * DAY).toISOString()
   const lotUrl = (sale: string, n: number) => `https://www.artcurial.com/ventes/${sale}/lots/${n}-a`
-  const sales: Record<string, string | null> = { NEW1: iso(1), MID10: iso(10), OLD60: iso(60) }
+  /** A plain date (or null) stands for both the begin and the end date of a finished sale. */
+  type SaleSpec = string | null | { begin: string | null; end: string | null; status?: string }
+  const sales: Record<string, SaleSpec> = { NEW1: iso(1), MID10: iso(10), OLD60: iso(60) }
   const year = 2026
-  const multiSitemap = `<urlset>${Object.keys(sales).flatMap((s) => [1, 2].map((n) => `<url><loc>${lotUrl(s, n)}</loc></url>`)).join('')}</urlset>`
+  const sitemapOf = (refs: string[]) => `<urlset>${refs.flatMap((s) => [1, 2].map((n) => `<url><loc>${lotUrl(s, n)}</loc></url>`)).join('')}</urlset>`
+  const withDate = (html: string, fixtureDate: string, date: string | null) =>
+    date ? html.replaceAll(fixtureDate, date) : html.replaceAll(`"${fixtureDate}"`, 'null')
+  function saleHtmlFor(spec: SaleSpec): string {
+    const { begin, end, status } = spec !== null && typeof spec === 'object' ? spec : { begin: spec, end: spec, status: undefined }
+    const html = withDate(withDate(saleHtml, fixtureBeginDate, begin), fixtureEndDate, end)
+    return status ? html.replaceAll(`"${fixtureSale.status}"`, `"${status}"`) : html
+  }
 
-  function build(salesByRef: Record<string, string | null>, clock: () => number, onLot?: () => void, onSale?: () => void) {
+  function build(salesByRef: Record<string, SaleSpec>, clock: () => number, onLot?: () => void, onSale?: () => void) {
     const fetched: string[] = []
     const fetcher: PageFetcher = {
       fetchText: async (url) => {
         fetched.push(url)
-        if (url === `https://www.artcurial.com/sitemap/sales-${year}-fr.xml`) return multiSitemap
+        if (url === `https://www.artcurial.com/sitemap/sales-${year}-fr.xml`) return sitemapOf(Object.keys(salesByRef))
         const saleRef = Object.keys(salesByRef).find((ref) => url === `https://www.artcurial.com/ventes/${ref}`)
         if (saleRef) {
           onSale?.()
-          const date = salesByRef[saleRef]
-          return date ? saleHtml.replaceAll(fixtureBeginDate, date) : saleHtml.replaceAll(`"${fixtureBeginDate}"`, 'null')
+          return saleHtmlFor(salesByRef[saleRef])
         }
         if (url.includes('/lots/')) { onLot?.(); return lotHtml }
         throw new Error(`unexpected ${url}`)
@@ -158,6 +168,16 @@ describe('ArtcurialIngester cron options', () => {
     const { ingester } = build({ NEW1: null, MID10: iso(10), OLD60: iso(60) }, () => NOW)
     const report = await ingester.ingest({ year, dryRun: false, concurrency: 1, closedBetween: { minAgeDays: 2, maxAgeDays: 45 } })
     expect(report.salesKept).toEqual(['MID10'])
+  })
+  it('judges the window on the end date and skips sales still open or not finished', async () => {
+    const { ingester, fetched } = build({
+      OPEN: { begin: iso(10), end: iso(-3) },
+      LIVE: { begin: iso(12), end: iso(10), status: 'IN_PROGRESS' },
+      DONE: { begin: iso(60), end: iso(10) },
+    }, () => NOW)
+    const report = await ingester.ingest({ year, dryRun: false, concurrency: 1, closedBetween: { minAgeDays: 2, maxAgeDays: 45 } })
+    expect(report.salesKept).toEqual(['DONE'])
+    expect(fetched.filter((u) => u.includes('/lots/'))).toEqual([lotUrl('DONE', 1), lotUrl('DONE', 2)])
   })
   it('keeps every wanted sale when no window is given', async () => {
     const { ingester } = build(sales, () => NOW)

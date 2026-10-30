@@ -5,6 +5,21 @@ import type { PendingAlert } from '@/domain/repositories/IReferenceRepository'
 import { referencesPageUrl } from './references-link'
 import type { WeeklyReport } from '@/application/use-cases/RunWeeklyReportUseCase'
 
+/** Scraped and model-written text goes into the HTML as text, never as markup. */
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+/** A URL inside a double-quoted href/src attribute: the browser decodes '&amp;' back to '&'. */
+function escapeUrl(url: string): string {
+  return url.replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+}
+
 export class EmailTemplates {
   /** The comp the estimate leans on, as a link she can open to judge it herself. */
   /** The visual check verdict: a count the reader can trust, and the confirmed links. */
@@ -147,13 +162,14 @@ export class EmailTemplates {
   private static matchPhoto(url: string | null, caption: string): string {
     return url
       ? `<td style="width: 50%; padding: 6px; vertical-align: top; text-align: center;">
-           <img src="${url}" alt="${caption}" style="width: 100%; max-width: 280px; border-radius: 8px; border: 1px solid #ddd;" />
-           <div style="font-size: 12px; color: #666; margin-top: 4px;">${caption}</div>
+           <img src="${escapeUrl(url)}" alt="${escapeHtml(caption)}" style="width: 100%; max-width: 280px; border-radius: 8px; border: 1px solid #ddd;" />
+           <div style="font-size: 12px; color: #666; margin-top: 4px;">${escapeHtml(caption)}</div>
          </td>`
       : ''
   }
 
-  private static matchVoteLine(listingId: string): string {
+  private static matchVoteLine(rawListingId: string): string {
+    const listingId = escapeUrl(rawListingId)
     return `<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #eee; font-size: 13px; color: #999;">
     C'est bien la même pièce ?
     <a href="${env.APP_URL}/feedback?id=${listingId}&vote=good" style="margin-left: 8px; color: #22c55e; text-decoration: none; font-weight: bold;">👍 Oui</a>
@@ -173,11 +189,11 @@ export class EmailTemplates {
       const perUnit = lot.quantity > 1 ? ` (${euros(lot.hammerPerUnitCents)} la pièce, lot de ${lot.quantity})` : ''
       return `
   <div style="margin: 12px 0; padding: 12px; border: 1px solid #eee; border-radius: 8px;">
-    <p style="margin: 0; font-weight: bold;">${lot.artist ? `${lot.artist}, ${lot.title}` : lot.title}</p>
+    <p style="margin: 0; font-weight: bold;">${escapeHtml(lot.artist ? `${lot.artist}, ${lot.title}` : lot.title)}</p>
     <p style="margin: 2px 0;">Adjugé ${euros(lot.hammerCents)} le ${day(lot.soldAt)}${perUnit}</p>
-    <p style="margin: 2px 0; color: #666;">${lot.saleName}</p>
-    <p style="margin: 2px 0;"><a href="${lot.lotUrl}" style="color: #0066cc; text-decoration: none;">Voir le lot</a></p>
-    ${alert.reason ? `<p style="margin: 6px 0 0 0; color: #333;"><strong>Pourquoi :</strong> ${alert.reason}</p>` : ''}
+    <p style="margin: 2px 0; color: #666;">${escapeHtml(lot.saleName)}</p>
+    <p style="margin: 2px 0;"><a href="${escapeUrl(lot.lotUrl)}" style="color: #0066cc; text-decoration: none;">Voir le lot</a></p>
+    ${alert.reason ? `<p style="margin: 6px 0 0 0; color: #333;"><strong>Pourquoi :</strong> ${escapeHtml(alert.reason)}</p>` : ''}
   </div>`
     }).join('')
     const html = `
@@ -191,13 +207,13 @@ export class EmailTemplates {
     ${EmailTemplates.matchPhoto(best.referenceImageUrl, 'Lot Artcurial')}
   </tr></table>
   <h2 style="font-size: 18px; margin: 16px 0 4px 0;">
-    <a href="${best.listingUrl}" style="color: #0066cc; text-decoration: none;">${best.listingTitle}</a>
+    <a href="${escapeUrl(best.listingUrl)}" style="color: #0066cc; text-decoration: none;">${escapeHtml(best.listingTitle)}</a>
   </h2>
   <p style="margin: 0; font-size: 22px; font-weight: bold; color: #ff6b00;">${euros(best.priceCents)}</p>
-  ${best.city ? `<p style="margin: 2px 0; color: #666;">${best.city}</p>` : ''}
+  ${best.city ? `<p style="margin: 2px 0; color: #666;">${escapeHtml(best.city)}</p>` : ''}
   ${lots}
   <p style="margin: 16px 0;">
-    <a href="${best.listingUrl}" style="display: inline-block; background: #ff6b00; color: white; text-decoration: none; font-weight: bold; padding: 12px 22px; border-radius: 8px;">Voir l'annonce</a>
+    <a href="${escapeUrl(best.listingUrl)}" style="display: inline-block; background: #ff6b00; color: white; text-decoration: none; font-weight: bold; padding: 12px 22px; border-radius: 8px;">Voir l'annonce</a>
   </p>
   <p style="margin: 0 0 16px 0;">${EmailTemplates.referencesButton()}</p>
   ${EmailTemplates.matchVoteLine(best.listingId)}
@@ -216,19 +232,19 @@ export class EmailTemplates {
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
 <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 640px; margin: 0 auto; padding: 20px;">
   <h1 style="font-size: 22px; margin: 0 0 6px 0;">🎯 Ça ressemble à ta référence</h1>
-  <p style="margin: 0 0 16px 0; color: #666;">${alert.referenceName}</p>
+  <p style="margin: 0 0 16px 0; color: #666;">${escapeHtml(alert.referenceName)}</p>
   <table style="width: 100%; border-collapse: collapse;"><tr>
     ${photo(alert.listingImageUrl, 'Annonce')}
     ${photo(alert.referenceImageUrl, 'Ta référence')}
   </tr></table>
   <h2 style="font-size: 18px; margin: 16px 0 4px 0;">
-    <a href="${alert.listingUrl}" style="color: #0066cc; text-decoration: none;">${alert.listingTitle}</a>
+    <a href="${escapeUrl(alert.listingUrl)}" style="color: #0066cc; text-decoration: none;">${escapeHtml(alert.listingTitle)}</a>
   </h2>
   <p style="margin: 0; font-size: 22px; font-weight: bold; color: #ff6b00;">${price}</p>
-  ${alert.city ? `<p style="margin: 2px 0; color: #666;">${alert.city}</p>` : ''}
-  ${alert.reason ? `<p style="margin: 10px 0; color: #333;"><strong>Pourquoi :</strong> ${alert.reason}</p>` : ''}
+  ${alert.city ? `<p style="margin: 2px 0; color: #666;">${escapeHtml(alert.city)}</p>` : ''}
+  ${alert.reason ? `<p style="margin: 10px 0; color: #333;"><strong>Pourquoi :</strong> ${escapeHtml(alert.reason)}</p>` : ''}
   <p style="margin: 16px 0;">
-    <a href="${alert.listingUrl}" style="display: inline-block; background: #ff6b00; color: white; text-decoration: none; font-weight: bold; padding: 12px 22px; border-radius: 8px;">Voir l'annonce</a>
+    <a href="${escapeUrl(alert.listingUrl)}" style="display: inline-block; background: #ff6b00; color: white; text-decoration: none; font-weight: bold; padding: 12px 22px; border-radius: 8px;">Voir l'annonce</a>
   </p>
   <p style="margin: 0 0 16px 0;">${EmailTemplates.referencesButton()}</p>
   ${EmailTemplates.matchVoteLine(alert.listingId)}

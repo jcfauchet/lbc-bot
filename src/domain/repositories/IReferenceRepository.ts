@@ -92,7 +92,8 @@ export interface PendingAlert {
   auction: AuctionLotSummary | null
 }
 export interface IReferenceRepository {
-  hasActiveReferences(): Promise<boolean>
+  /** Auction lots count only when `includeAuction` is set, i.e. when the fund is switched on. */
+  hasActiveReferences(includeAuction: boolean): Promise<boolean>
   create(reference: NewPhotoReference, imageUrls: string[]): Promise<{ id: string; images: ImageToEmbed[] }>
   /** Manual references only. */
   list(): Promise<PhotoReferenceSummary[]>

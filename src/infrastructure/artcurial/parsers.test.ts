@@ -39,14 +39,29 @@ describe('artcurial parsers', () => {
     }
   })
   it('strips tags and decodes entities', () => {
-    expect(stripHtml('<p>L&#39;art &amp; la mani&egrave;re&nbsp;!</p>')).toBe("L'art & la mani&egrave;re !")
+    expect(stripHtml('<p>L&#39;art &amp; la mani&egrave;re&nbsp;!</p>')).toBe("L'art & la manière !")
     expect(stripHtml('&quot;a&quot; &lt;b&gt; &#x41;&#66; &apos;c&apos;')).toBe('"a" <b> AB \'c\'')
     expect(stripHtml('&amp;#39;')).toBe('&#39;')
+    expect(stripHtml('&#38;amp;')).toBe('&amp;')
+  })
+  it('decodes the common French named entities', () => {
+    expect(stripHtml('&Eacute;b&eacute;niste &agrave; Gen&egrave;ve, fa&ccedil;ade &oelig;uvre &laquo;&nbsp;Plia&nbsp;&raquo;'))
+      .toBe('Ébéniste à Genève, façade œuvre « Plia »')
+    expect(stripHtml('l&rsquo;&ecirc;tre&hellip; 1960&ndash;1970 &mdash; 20&deg; 3 m&sup2; &frac12;'))
+      .toBe('l’être… 1960–1970 — 20° 3 m² ½')
+    expect(stripHtml('&unknown; &AMP;')).toBe('&unknown; &AMP;')
   })
   it('parses the sale page', () => {
     // The payload's totalLots is 303, while the sitemap lists 314 lot URLs for this sale
     expect(parseSalePage(saleHtml)).toMatchObject({ ref: 'IT6064', totalLots: 303 })
     expect(parseSalePage(saleHtml)!.specialties).toContain('DESIGN')
+  })
+  it('parses the sale status and the online sale end date', () => {
+    expect(parseSalePage(saleHtml)).toMatchObject({
+      status: 'FINISHED',
+      beginDate: '2025-03-11T13:00:00Z',
+      endDate: '2025-03-18T09:00:00Z',
+    })
   })
   it('groups sitemap lot urls by sale', () => {
     const { lotUrlsBySale } = parseSitemap(sitemap)

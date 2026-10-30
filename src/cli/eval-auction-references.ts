@@ -17,11 +17,11 @@ import { prisma } from '@/infrastructure/prisma/client'
 import { env } from '@/infrastructure/config/env'
 import { GeminiReferenceMatchVerifier } from '@/infrastructure/ai/Gemini/GeminiReferenceMatchVerifier'
 import type { ListingToCheck, ReferenceCandidate } from '@/domain/repositories/IReferenceRepository'
+import { VERIFIER_LISTING_PHOTOS } from '@/application/use-cases/RunReferenceMatchUseCase'
 import { parseEvalAuctionReferencesArgs } from './eval-auction-references-args'
 
 const MAX_LISTINGS = 500
 const AUCTION_LIMIT = 3
-const VERIFIER_LISTING_PHOTOS = 3
 const eur = (cents: number) => `${Math.round(cents / 100)}EUR`
 
 /** Same price gate as the production use case. */

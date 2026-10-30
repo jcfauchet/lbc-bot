@@ -56,6 +56,16 @@ describe('PrismaReferenceRepository', () => {
     expect(findMany).toHaveBeenCalledWith({ where: { house: 'ARTCURIAL', saleRef: 'IT6064' }, select: { lotRef: true } })
   })
 
+  it('hasActiveReferences counts auction lots only when asked to', async () => {
+    const count = vi.fn(async (_args: any) => 0)
+    const repo = new PrismaReferenceRepository({ photoReference: { count } } as any)
+    expect(await repo.hasActiveReferences(false)).toBe(false)
+    expect(count.mock.calls[0][0]).toEqual({ where: { isActive: true, source: 'MANUAL' } })
+    count.mockResolvedValueOnce(3)
+    expect(await repo.hasActiveReferences(true)).toBe(true)
+    expect(count.mock.calls[1][0]).toEqual({ where: { isActive: true } })
+  })
+
   it('list only returns manual references', async () => {
     const findMany = vi.fn(async (_args: any) => [])
     await new PrismaReferenceRepository({ photoReference: { findMany } } as any).list()

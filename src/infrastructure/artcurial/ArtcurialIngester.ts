@@ -13,7 +13,10 @@ export interface IngestOptions {
   limit?: number
   dryRun: boolean
   concurrency: number
-  /** Keeps only sales whose beginDate falls in [now - maxAgeDays, now - minAgeDays]; sales without a date are skipped. */
+  /**
+   * Keeps only FINISHED sales whose end date (begin date when absent) falls in
+   * [now - maxAgeDays, now - minAgeDays]; sales without a date are skipped.
+   */
   closedBetween?: { minAgeDays: number; maxAgeDays: number }
   /** Stops starting new lots once this many milliseconds have elapsed. */
   maxRunMs?: number
@@ -98,8 +101,11 @@ export class ArtcurialIngester {
   }
 
   private isInWindow(sale: ArtcurialSale, { minAgeDays, maxAgeDays }: { minAgeDays: number; maxAgeDays: number }): boolean {
-    if (!sale.beginDate) return false
-    const time = Date.parse(sale.beginDate)
+    // An online sale runs for one to two weeks: until it is finished its lots are not sold yet.
+    if (sale.status !== 'FINISHED') return false
+    const closedAt = sale.endDate ?? sale.beginDate
+    if (!closedAt) return false
+    const time = Date.parse(closedAt)
     if (Number.isNaN(time)) return false
     const now = this.now()
     return time >= now - maxAgeDays * DAY_MS && time <= now - minAgeDays * DAY_MS

@@ -41,8 +41,9 @@ const toAuctionSummary = (lot: AuctionLotSummary): AuctionLotSummary => ({
 export class PrismaReferenceRepository implements IReferenceRepository {
   constructor(private prisma: PrismaClient) {}
 
-  async hasActiveReferences(): Promise<boolean> {
-    return (await this.prisma.photoReference.count({ where: { isActive: true } })) > 0
+  async hasActiveReferences(includeAuction: boolean): Promise<boolean> {
+    const where = includeAuction ? { isActive: true } : { isActive: true, source: 'MANUAL' as const }
+    return (await this.prisma.photoReference.count({ where })) > 0
   }
 
   async create(reference: NewPhotoReference, imageUrls: string[]) {

@@ -7,7 +7,7 @@ interface RawSale {
   status?: string
   totalLots?: number
   specialties?: Array<{ specialty?: { ref?: string } }>
-  vacations?: Array<{ validity?: { beginDate?: string } }>
+  vacations?: Array<{ validity?: { beginDate?: string; endDate?: string } }>
 }
 
 export function parseSalePage(html: string): ArtcurialSale | null {
@@ -26,5 +26,6 @@ export function parseSalePage(html: string): ArtcurialSale | null {
       .map((s) => s.specialty?.ref)
       .filter((ref): ref is string => typeof ref === 'string'),
     beginDate: raw.vacations?.[0]?.validity?.beginDate ?? null,
+    endDate: raw.vacations?.[0]?.validity?.endDate ?? null,
   }
 }
