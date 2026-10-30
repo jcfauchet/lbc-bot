@@ -107,6 +107,12 @@ export const envSchema = z.object({
   REFERENCE_MATCH_WIDEN_SIMILARITY: z.coerce.number().min(0).max(1).default(0.7),
   // ~500 new ads/day over 96 runs/day; 60 also drains the 7-day backlog in a day.
   REFERENCE_MATCH_MAX_PER_RUN: z.coerce.number().int().min(1).default(60),
+  // Spike finding: the reseller decides the ratio (hammer price vs ad price) worth an alert.
+  AUCTION_ALERT_RATIO: z.coerce.number().min(1).default(1.5),
+  // Spike finding: with ~15k lots a 0.78 similarity yields about 1 candidate per ad, so verifier cost stays bounded.
+  AUCTION_REFERENCES_ENABLED: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
+  // Spike finding: ~1 candidate per ad at 0.78, so 300 verifications a day covers the strong matches of ~500 daily ads.
+  AUCTION_VERIFICATIONS_PER_DAY: z.coerce.number().int().min(0).default(300),
 }).transform((e) => ({
   ...e,
   LENS_DAILY_BUDGET: e.LENS_DAILY_BUDGET ?? (e.APIFY_TOKEN ? 24 : 8),

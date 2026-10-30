@@ -190,11 +190,41 @@ model PhotoReference {
   backfilledAt  DateTime?
   /// Lower-case words; an ad whose text holds one goes to the verifier regardless of photo similarity.
   keywords      String[]         @default([])
+  /// MANUAL (added by hand) | ARTCURIAL (sold auction lot).
+  source        String           @default("MANUAL")
   createdAt     DateTime         @default(now())
   images        ReferenceImage[]
   matches       ReferenceMatch[]
+  auctionLot    AuctionLot?
 
+  @@index([source, isActive])
   @@map("photo_references")
+}
+
+model AuctionLot {
+  id                 String         @id @default(cuid())
+  referenceId        String         @unique
+  house              String
+  saleRef            String
+  lotRef             String
+  lotUrl             String
+  saleName           String
+  soldAt             DateTime
+  title              String
+  artist             String?
+  artistYears        String?
+  description        String         @db.Text
+  estimateLowCents   Int?
+  estimateHighCents  Int?
+  hammerCents        Int
+  finalCents         Int?
+  quantity           Int            @default(1)
+  hammerPerUnitCents Int
+  createdAt          DateTime       @default(now())
+  reference          PhotoReference @relation(fields: [referenceId], references: [id], onDelete: Cascade)
+
+  @@unique([house, saleRef, lotRef])
+  @@map("auction_lots")
 }
 
 model ReferenceImage {

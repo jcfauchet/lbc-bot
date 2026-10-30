@@ -52,3 +52,18 @@ describe('envSchema APPRAISAL_AGENT_ENABLED', () => {
     expect(envSchema.parse({ ...baseEnv, APPRAISAL_AGENT_ENABLED: 'false' }).APPRAISAL_AGENT_ENABLED).toBe(false)
   })
 })
+
+describe('envSchema auction references', () => {
+  it('defaults the alert ratio, the switch and the daily cap', () => {
+    const parsed = envSchema.parse(baseEnv)
+    expect(parsed.AUCTION_ALERT_RATIO).toBe(1.5)
+    expect(parsed.AUCTION_REFERENCES_ENABLED).toBe(true)
+    expect(parsed.AUCTION_VERIFICATIONS_PER_DAY).toBe(300)
+  })
+  it('parses "false" as disabled', () => {
+    expect(envSchema.parse({ ...baseEnv, AUCTION_REFERENCES_ENABLED: 'false' }).AUCTION_REFERENCES_ENABLED).toBe(false)
+  })
+  it('rejects a ratio below 1', () => {
+    expect(() => envSchema.parse({ ...baseEnv, AUCTION_ALERT_RATIO: '0.9' })).toThrow()
+  })
+})
