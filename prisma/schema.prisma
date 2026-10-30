@@ -190,7 +190,7 @@ model PhotoReference {
   backfilledAt  DateTime?
   /// Lower-case words; an ad whose text holds one goes to the verifier regardless of photo similarity.
   keywords      String[]         @default([])
-  /// MANUAL (added by hand) | ARTCURIAL (sold auction lot).
+  /// MANUAL (added by hand) | AUCTION (sold auction lot; the house is auction_lots.house).
   source        String           @default("MANUAL")
   createdAt     DateTime         @default(now())
   images        ReferenceImage[]

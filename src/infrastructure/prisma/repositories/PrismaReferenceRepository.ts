@@ -1,6 +1,6 @@
 import { Prisma, PrismaClient } from '@prisma/client'
 import type {
-  AuctionFundStats, AuctionLotSummary, CandidateGates, IReferenceRepository, ImageToEmbed, ListingToCheck,
+  AuctionFundStats, AuctionHouse, AuctionLotSummary, CandidateGates, IReferenceRepository, ImageToEmbed, ListingToCheck,
   NewAuctionLot, NewPhotoReference, PendingAlert, PhotoReferenceSummary, RecordedMatch, ReferenceCandidate,
   ReferenceSource,
 } from '@/domain/repositories/IReferenceRepository'
@@ -25,15 +25,16 @@ const toCandidate = (row: CandidateRow): ReferenceCandidate => ({
 })
 const toAuctionCandidate = (row: AuctionCandidateRow): ReferenceCandidate => ({
   ...toCandidate(row),
-  source: 'ARTCURIAL',
+  source: 'AUCTION',
   auction: {
     house: row.house, saleRef: row.saleRef, lotRef: row.lotRef, lotUrl: row.lotUrl, saleName: row.saleName,
     soldAt: row.soldAt, title: row.title, artist: row.artist, hammerCents: row.hammerCents,
     quantity: row.quantity, hammerPerUnitCents: row.hammerPerUnitCents,
   },
 })
-const toAuctionSummary = (lot: AuctionLotSummary): AuctionLotSummary => ({
-  house: lot.house, saleRef: lot.saleRef, lotRef: lot.lotRef, lotUrl: lot.lotUrl, saleName: lot.saleName,
+/** `house` is a plain string column; only known houses are ever written to it. */
+const toAuctionSummary = (lot: Omit<AuctionLotSummary, 'house'> & { house: string }): AuctionLotSummary => ({
+  house: lot.house as AuctionHouse, saleRef: lot.saleRef, lotRef: lot.lotRef, lotUrl: lot.lotUrl, saleName: lot.saleName,
   soldAt: lot.soldAt, title: lot.title, artist: lot.artist, hammerCents: lot.hammerCents,
   quantity: lot.quantity, hammerPerUnitCents: lot.hammerPerUnitCents,
 })
@@ -161,7 +162,7 @@ export class PrismaReferenceRepository implements IReferenceRepository {
         WHERE li."listingId" = ${listingId} AND li."embedding" IS NOT NULL
         GROUP BY ri."referenceId"
       )
-      SELECT r."id" AS "referenceId", r."name", r."note", r."maxPriceCents", 'ARTCURIAL' AS "source",
+      SELECT r."id" AS "referenceId", r."name", r."note", r."maxPriceCents", 'AUCTION' AS "source",
              COALESCE(nn.sim, 0) AS "similarity", ${KEYWORD_HIT_SQL} AS "textHit",
              (SELECT ARRAY_AGG("urlRemote" ORDER BY "createdAt", "id") FROM "reference_images" WHERE "referenceId" = r."id") AS "imageUrls",
              a."house", a."saleRef", a."lotRef", a."lotUrl", a."saleName", a."soldAt", a."title", a."artist",
@@ -170,7 +171,7 @@ export class PrismaReferenceRepository implements IReferenceRepository {
       CROSS JOIN "photo_references" r
       JOIN "auction_lots" a ON a."referenceId" = r."id"
       LEFT JOIN nn ON nn."referenceId" = r."id"
-      WHERE p."id" = ${listingId} AND r."isActive" AND r."source" = 'ARTCURIAL'
+      WHERE p."id" = ${listingId} AND r."isActive" AND r."source" <> 'MANUAL'
         AND NOT EXISTS (SELECT 1 FROM "reference_matches" m WHERE m."referenceId" = r."id" AND m."listingId" = p."id")
         AND (COALESCE(nn.sim, 0) >= ${gates.minSimilarity} OR (${KEYWORD_HIT_SQL} AND COALESCE(nn.sim, 0) >= ${gates.keywordMinSimilarity}))
       ORDER BY "textHit" DESC, "similarity" DESC
@@ -252,7 +253,7 @@ export class PrismaReferenceRepository implements IReferenceRepository {
       city: m.listing.city,
       listingImageUrl: m.listing.images[0]?.urlRemote ?? null,
       reason: m.reason,
-      source: m.reference.source as ReferenceSource,
+      source: (m.reference.source === 'MANUAL' ? 'MANUAL' : 'AUCTION') satisfies ReferenceSource,
       similarity: m.similarity,
       auction: m.reference.auctionLot ? toAuctionSummary(m.reference.auctionLot) : null,
     }))
@@ -275,7 +276,7 @@ export class PrismaReferenceRepository implements IReferenceRepository {
         note: input.note,
         keywords: input.keywords,
         maxPriceCents: null,
-        source: 'ARTCURIAL',
+        source: 'AUCTION',
         backfilledAt: new Date(),
         auctionLot: { create: input.lot },
         images: { create: input.imageUrls.map((urlRemote) => ({ urlRemote })) },
@@ -285,7 +286,7 @@ export class PrismaReferenceRepository implements IReferenceRepository {
     return { id: created.id, images: created.images.map((i) => ({ id: i.id, url: i.urlRemote })) }
   }
 
-  async findExistingLotRefs(house: string, saleRef: string): Promise<Set<string>> {
+  async findExistingLotRefs(house: AuctionHouse, saleRef: string): Promise<Set<string>> {
     const rows = await this.prisma.auctionLot.findMany({ where: { house, saleRef }, select: { lotRef: true } })
     return new Set(rows.map((r) => r.lotRef))
   }
@@ -294,24 +295,30 @@ export class PrismaReferenceRepository implements IReferenceRepository {
     const [row] = await this.prisma.$queryRaw<Array<{ count: bigint }>>`
       SELECT COUNT(*) AS "count" FROM "reference_matches" m
       JOIN "photo_references" r ON r."id" = m."referenceId"
-      WHERE r."source" = 'ARTCURIAL' AND m."createdAt" >= ${since}
+      WHERE r."source" <> 'MANUAL' AND m."createdAt" >= ${since}
     `
     return Number(row?.count ?? 0)
   }
 
   async auctionFundStats(): Promise<AuctionFundStats> {
-    const lots = await this.prisma.photoReference.count({ where: { source: 'ARTCURIAL' } })
+    const lots = await this.prisma.photoReference.count({ where: { source: { not: 'MANUAL' } } })
     const [images] = await this.prisma.$queryRaw<Array<{ count: bigint }>>`
       SELECT COUNT(*) AS "count" FROM "reference_images" ri
       JOIN "photo_references" r ON r."id" = ri."referenceId"
-      WHERE r."source" = 'ARTCURIAL'
+      WHERE r."source" <> 'MANUAL'
     `
     const [embedded] = await this.prisma.$queryRaw<Array<{ count: bigint }>>`
       SELECT COUNT(*) AS "count" FROM "reference_images" ri
       JOIN "photo_references" r ON r."id" = ri."referenceId"
-      WHERE r."source" = 'ARTCURIAL' AND ri."embedding" IS NOT NULL
+      WHERE r."source" <> 'MANUAL' AND ri."embedding" IS NOT NULL
     `
-    return { lots, images: Number(images?.count ?? 0), embedded: Number(embedded?.count ?? 0) }
+    const houses = await this.prisma.auctionLot.groupBy({ by: ['house'], _count: true })
+    return {
+      lots,
+      images: Number(images?.count ?? 0),
+      embedded: Number(embedded?.count ?? 0),
+      byHouse: houses.map((h) => ({ house: h.house as AuctionHouse, lots: h._count })),
+    }
   }
 
   private async attachImages(listings: Array<{ id: string; title: string; priceCents: number }>): Promise<ListingToCheck[]> {

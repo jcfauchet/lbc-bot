@@ -5,6 +5,16 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { resizeImage } from './resize-image'
 import { isUploadTooHeavy, TOO_HEAVY_MESSAGE, uploadErrorMessage } from './upload-error'
 import { addPhotos, removePhoto, MAX_PHOTOS } from './photo-selection'
+import { HOUSE_LABELS, type AuctionHouse } from '@/domain/auction-houses'
+
+/** French thousands grouping with a plain space: 4909 -> "4 909". */
+const formatCount = (n: number) => n.toLocaleString('fr-FR').replace(/\s/g, ' ')
+
+/** Every known house, in HOUSE_LABELS order, 0 when it has no lot yet: "Artcurial 4 909, Rossini 0". */
+const houseCounts = (byHouse: Array<{ house: AuctionHouse; lots: number }>) =>
+  (Object.keys(HOUSE_LABELS) as AuctionHouse[])
+    .map((house) => `${HOUSE_LABELS[house]} ${formatCount(byHouse.find((h) => h.house === house)?.lots ?? 0)}`)
+    .join(', ')
 
 type Reference = {
   id: string; name: string; note: string | null; maxPriceCents: number | null; isActive: boolean
@@ -20,7 +30,9 @@ function ReferencesContent() {
   const [references, setReferences] = useState<Reference[] | null>(null)
   const [linkInvalid, setLinkInvalid] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [fund, setFund] = useState<{ lots: number; images: number; enabled: boolean } | null>(null)
+  const [fund, setFund] = useState<{
+    lots: number; images: number; enabled: boolean; byHouse: Array<{ house: AuctionHouse; lots: number }>
+  } | null>(null)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [files, setFiles] = useState<File[]>([])
@@ -198,7 +210,7 @@ function ReferencesContent() {
       <h2 className="mb-3 mt-8 text-lg font-bold">Mes références {references && references.length > 0 && `(${references.length})`}</h2>
       {fund && (
         <p className="mb-3 text-xs text-gray-500">
-          Fonds Artcurial : {fund.lots} lots, {fund.images} photos, {fund.enabled ? 'actif' : 'inactif'}
+          Fonds enchères : {formatCount(fund.lots)} lots ({houseCounts(fund.byHouse)}), {formatCount(fund.images)} photos, {fund.enabled ? 'actif' : 'inactif'}
         </p>
       )}
       {references?.length === 0 && <p className="text-sm text-gray-500">Aucune référence pour l’instant.</p>}

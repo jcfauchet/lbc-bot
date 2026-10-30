@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Replays recent ads against the Artcurial fund to calibrate the similarity
+ * Replays recent ads against the auction fund to calibrate the similarity
  * threshold and the price ratio on real data. Read-only: nothing is recorded.
  *
  * Usage:
@@ -50,7 +50,7 @@ async function main() {
         keywordMinSimilarity: env.REFERENCE_MATCH_WIDEN_SIMILARITY,
         auctionLimit: AUCTION_LIMIT,
         includeAuction: true,
-      })).filter((c) => c.source === 'ARTCURIAL')
+      })).filter((c) => c.source !== 'MANUAL')
       timings.push(Date.now() - started)
       if (candidates.length > 0) withCandidate++
       total += candidates.length
@@ -82,11 +82,11 @@ async function main() {
           referenceNote: candidate.note,
         })
         console.log([
-          verdict.same ? 'SAME' : 'DIFFERENT', candidate.similarity.toFixed(3), `ad ${eur(listing.priceCents)}`,
+          verdict.same ? 'SAME' : 'DIFFERENT', auction.house, candidate.similarity.toFixed(3), `ad ${eur(listing.priceCents)}`,
           `hammer/unit ${eur(auction.hammerPerUnitCents)}`, row?.url ?? listing.id, auction.lotUrl,
         ].join(' | '))
       } catch (err) {
-        console.log(`ERROR | ${candidate.similarity.toFixed(3)} | ${row?.url ?? listing.id} | ${auction.lotUrl} | ${err instanceof Error ? err.message : err}`)
+        console.log(`ERROR | ${auction.house} | ${candidate.similarity.toFixed(3)} | ${row?.url ?? listing.id} | ${auction.lotUrl} | ${err instanceof Error ? err.message : err}`)
       }
     }
   }

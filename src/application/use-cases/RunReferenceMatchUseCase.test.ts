@@ -20,9 +20,9 @@ const auctionSummary = (lotRef: string, hammerPerUnitCents: number): AuctionLotS
   hammerCents: hammerPerUnitCents, quantity: 1, hammerPerUnitCents,
 })
 const auctionCandidate = (referenceId: string, hammerPerUnitCents: number, overrides: Partial<ReferenceCandidate> = {}): ReferenceCandidate =>
-  candidate(referenceId, { source: 'ARTCURIAL', auction: auctionSummary(referenceId, hammerPerUnitCents), ...overrides })
+  candidate(referenceId, { source: 'AUCTION', auction: auctionSummary(referenceId, hammerPerUnitCents), ...overrides })
 const auctionAlert = (matchId: string, similarity: number): PendingAlert => ({
-  ...alert(matchId), referenceName: `lot ${matchId}`, source: 'ARTCURIAL', similarity, auction: auctionSummary(matchId, 30000),
+  ...alert(matchId), referenceName: `lot ${matchId}`, source: 'AUCTION', similarity, auction: auctionSummary(matchId, 30000),
 })
 const alert = (matchId: string): PendingAlert => ({
   matchId, referenceName: 'Desserte Jansen', referenceImageUrl: 'https://ref/a.jpg', listingId: 'l1',
@@ -353,6 +353,18 @@ describe('RunReferenceMatchUseCase', () => {
       expect(verifier.verify).not.toHaveBeenCalled()
       expect(recorded).toEqual([{ referenceId: 'a1', listingId: 'l1', similarity: 0.8, confirmed: true, reason: 'same lot' }])
       expect(repo.markListingChecked).toHaveBeenCalledWith('l1')
+    })
+
+    it('verifies a Rossini lot with the auction verifier like any auction lot', async () => {
+      const rossini = auctionCandidate('r1', 30000)
+      rossini.auction = { ...rossini.auction!, house: 'ROSSINI' }
+      const { verifier, auctionVerifier, recorded, useCase } = setup({
+        listings: [listing('l1', 20000)], candidates: { l1: [rossini] },
+      })
+      await useCase.execute()
+      expect(auctionVerifier.verify).toHaveBeenCalledOnce()
+      expect(verifier.verify).not.toHaveBeenCalled()
+      expect(recorded).toEqual([{ referenceId: 'r1', listingId: 'l1', similarity: 0.8, confirmed: true, reason: 'same lot' }])
     })
 
     it('passes the auction gates to findCandidates', async () => {

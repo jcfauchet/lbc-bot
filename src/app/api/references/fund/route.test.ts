@@ -4,7 +4,10 @@ import { NextRequest } from 'next/server'
 vi.mock('@/infrastructure/di/container', () => ({
   container: {
     referenceRepository: {
-      auctionFundStats: async () => ({ lots: 311, images: 740, embedded: 740 }),
+      auctionFundStats: async () => ({
+        lots: 311, images: 740, embedded: 740,
+        byHouse: [{ house: 'ARTCURIAL', lots: 300 }, { house: 'ROSSINI', lots: 11 }],
+      }),
     },
   },
 }))
@@ -27,9 +30,12 @@ describe('GET /api/references/fund', () => {
     expect(res.status).toBe(401)
   })
 
-  it('returns the fund size and the switch with the right key', async () => {
+  it('returns the fund size per house and the switch with the right key', async () => {
     const res = await GET(request('?k=test-references-key-123'))
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ lots: 311, images: 740, embedded: 740, enabled: true })
+    expect(await res.json()).toEqual({
+      lots: 311, images: 740, embedded: 740, enabled: true,
+      byHouse: [{ house: 'ARTCURIAL', lots: 300 }, { house: 'ROSSINI', lots: 11 }],
+    })
   })
 })

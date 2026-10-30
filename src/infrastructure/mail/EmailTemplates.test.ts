@@ -70,7 +70,7 @@ describe('EmailTemplates.goodDealsDigest comp check badge', () => {
 const alertWithAuction = (lot: Partial<AuctionLotSummary> = {}, overrides: Partial<PendingAlert> = {}): PendingAlert => ({
   matchId: 'm1', referenceName: 'Chaise pliante Plia', referenceImageUrl: 'https://ref/plia.jpg', listingId: 'l1',
   listingTitle: 'Chaise pliante Plia', listingUrl: 'https://lbc/l1', priceCents: 12000, city: 'Lyon',
-  listingImageUrl: 'https://img/l1.jpg', reason: 'same chrome frame', source: 'ARTCURIAL', similarity: 0.82,
+  listingImageUrl: 'https://img/l1.jpg', reason: 'same chrome frame', source: 'AUCTION', similarity: 0.82,
   auction: {
     house: 'ARTCURIAL', saleRef: 'IT6064', lotRef: '415-a', lotUrl: 'https://www.artcurial.com/ventes/IT6064/lots/415-a',
     saleName: 'Design italien', soldAt: new Date('2025-03-07T00:00:00Z'), title: 'Chaise pliante Plia', artist: 'Giancarlo Piretti',
@@ -106,6 +106,18 @@ describe('EmailTemplates.auctionMatch', () => {
     ])
     expect(subject).toBe('🔨 Vu chez Artcurial à 500 € : Chaise pliante Plia')
     expect(html.indexOf('https://lot/2')).toBeLessThan(html.indexOf('https://lot/1'))
+  })
+
+  it('names the auction house of the best lot in the title, the photo caption and the subject', () => {
+    const rossini = EmailTemplates.auctionMatch([alertWithAuction({ house: 'ROSSINI' })])
+    expect(rossini.subject.startsWith('🔨 Vu chez Rossini à')).toBe(true)
+    expect(rossini.html).toContain('🔨 Vu chez Rossini')
+    expect(rossini.html).toContain('Lot Rossini')
+    expect(rossini.html).not.toContain('Artcurial')
+    const artcurial = EmailTemplates.auctionMatch([alertWithAuction({ house: 'ARTCURIAL' })])
+    expect(artcurial.subject).toBe('🔨 Vu chez Artcurial à 170 € : Chaise pliante Plia')
+    expect(artcurial.html).toContain('🔨 Vu chez Artcurial')
+    expect(artcurial.html).toContain('Lot Artcurial')
   })
 })
 

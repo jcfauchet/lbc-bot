@@ -1,6 +1,10 @@
-export type ReferenceSource = 'MANUAL' | 'ARTCURIAL'
+import type { AuctionHouse } from '@/domain/auction-houses'
+
+export type { AuctionHouse }
+/** MANUAL: added by hand. AUCTION: a sold auction lot; its house is in `auction.house`. */
+export type ReferenceSource = 'MANUAL' | 'AUCTION'
 export interface AuctionLotSummary {
-  house: string
+  house: AuctionHouse
   saleRef: string
   lotRef: string
   lotUrl: string
@@ -49,7 +53,7 @@ export interface ReferenceCandidate {
   textHit: boolean
   imageUrls: string[]
   source: ReferenceSource
-  /** Set when source === 'ARTCURIAL'. */
+  /** Set when source === 'AUCTION'. */
   auction: AuctionLotSummary | null
 }
 export interface CandidateGates {
@@ -74,7 +78,12 @@ export interface NewAuctionLot {
     finalCents: number | null
   }
 }
-export interface AuctionFundStats { lots: number; images: number; embedded: number }
+export interface AuctionFundStats {
+  lots: number
+  images: number
+  embedded: number
+  byHouse: Array<{ house: AuctionHouse; lots: number }>
+}
 export interface RecordedMatch { referenceId: string; listingId: string; similarity: number; confirmed: boolean; reason: string | null }
 export interface PendingAlert {
   matchId: string
@@ -123,7 +132,7 @@ export interface IReferenceRepository {
   /** Null when a lot with the same (house, saleRef, lotRef) already exists. */
   createAuctionLot(input: NewAuctionLot): Promise<{ id: string; images: ImageToEmbed[] } | null>
   /** Lot refs already stored for one sale of an auction house. */
-  findExistingLotRefs(house: string, saleRef: string): Promise<Set<string>>
+  findExistingLotRefs(house: AuctionHouse, saleRef: string): Promise<Set<string>>
   /** Verifications (recorded matches) of auction references since `since`. */
   countAuctionVerificationsSince(since: Date): Promise<number>
   auctionFundStats(): Promise<AuctionFundStats>

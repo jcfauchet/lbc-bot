@@ -2,6 +2,7 @@ import { Listing } from '@/domain/entities/Listing'
 import { AiAnalysis } from '@/domain/entities/AiAnalysis'
 import { env } from '@/infrastructure/config/env'
 import type { PendingAlert } from '@/domain/repositories/IReferenceRepository'
+import { HOUSE_LABELS } from '@/domain/auction-houses'
 import { referencesPageUrl } from './references-link'
 import type { WeeklyReport } from '@/application/use-cases/RunWeeklyReportUseCase'
 
@@ -180,6 +181,7 @@ export class EmailTemplates {
   /** One email per ad for every auction lot confirmed on it, closest lot first (sorted by the caller). */
   static auctionMatch(alerts: PendingAlert[]): { subject: string; html: string } {
     const [best] = alerts
+    const house = best.auction ? HOUSE_LABELS[best.auction.house] : ''
     const euros = (cents: number) => `${Math.round(cents / 100)} €`
     const day = (d: Date) =>
       `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${d.getUTCFullYear()}`
@@ -201,10 +203,10 @@ export class EmailTemplates {
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
 <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 640px; margin: 0 auto; padding: 20px;">
-  <h1 style="font-size: 22px; margin: 0 0 16px 0;">🔨 Vu chez Artcurial</h1>
+  <h1 style="font-size: 22px; margin: 0 0 16px 0;">🔨 Vu chez ${house}</h1>
   <table style="width: 100%; border-collapse: collapse;"><tr>
     ${EmailTemplates.matchPhoto(best.listingImageUrl, 'Annonce')}
-    ${EmailTemplates.matchPhoto(best.referenceImageUrl, 'Lot Artcurial')}
+    ${EmailTemplates.matchPhoto(best.referenceImageUrl, `Lot ${house}`)}
   </tr></table>
   <h2 style="font-size: 18px; margin: 16px 0 4px 0;">
     <a href="${escapeUrl(best.listingUrl)}" style="color: #0066cc; text-decoration: none;">${escapeHtml(best.listingTitle)}</a>
@@ -220,7 +222,7 @@ export class EmailTemplates {
 </body>
 </html>`
     const hammer = best.auction ? euros(best.auction.hammerCents) : ''
-    return { subject: `🔨 Vu chez Artcurial à ${hammer} : ${best.listingTitle}`, html }
+    return { subject: `🔨 Vu chez ${house} à ${hammer} : ${best.listingTitle}`, html }
   }
 
   static referenceMatch(alert: PendingAlert): { subject: string; html: string } {

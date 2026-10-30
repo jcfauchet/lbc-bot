@@ -22,7 +22,7 @@ const manualRow = {
   similarity: 0.81, textHit: false, imageUrls: ['https://ref/m1.jpg'],
 }
 const auctionRow = {
-  referenceId: 'a1', name: 'Royère armchairs', note: 'note', maxPriceCents: null, source: 'ARTCURIAL',
+  referenceId: 'a1', name: 'Royère armchairs', note: 'note', maxPriceCents: null, source: 'AUCTION',
   similarity: 0.74, textHit: true, imageUrls: ['https://ref/a1.jpg'],
   house: 'ARTCURIAL', saleRef: 'IT6064', lotRef: '278-a', lotUrl: 'https://lot', saleName: 'Design',
   soldAt: new Date('2026-05-12T00:00:00Z'), title: 'Paire de fauteuils', artist: 'Jean Royère',
@@ -45,7 +45,7 @@ describe('PrismaReferenceRepository', () => {
     const res = await new PrismaReferenceRepository(prisma).createAuctionLot(newLot({ imageUrls: ['u1', 'u2', 'u3', 'u4'] }))
     expect(res).toEqual({ id: 'r1', images: [{ id: 'i0', url: 'u1' }, { id: 'i1', url: 'u2' }, { id: 'i2', url: 'u3' }, { id: 'i3', url: 'u4' }] })
     const data = (create.mock.calls[0] as any[])[0].data
-    expect(data.source).toBe('ARTCURIAL'); expect(data.maxPriceCents).toBeNull(); expect(data.backfilledAt).toBeInstanceOf(Date)
+    expect(data.source).toBe('AUCTION'); expect(data.maxPriceCents).toBeNull(); expect(data.backfilledAt).toBeInstanceOf(Date)
     expect(data.auctionLot.create).toMatchObject({ house: 'ARTCURIAL', saleRef: 'IT6064', lotRef: '278-a', hammerPerUnitCents: 110000 })
   })
 
@@ -84,7 +84,11 @@ describe('PrismaReferenceRepository', () => {
       .mockResolvedValueOnce([auctionRow])
     const res = await new PrismaReferenceRepository({ $queryRaw: queryRaw } as any).findCandidates('l1', { minSimilarity: 0.78, keywordMinSimilarity: 0.7, auctionLimit: 3, includeAuction: true })
     expect(queryRaw).toHaveBeenCalledTimes(2)
-    expect(res.map((c) => [c.referenceId, c.source])).toEqual([['m1', 'MANUAL'], ['a1', 'ARTCURIAL']])
+    expect(res.map((c) => [c.referenceId, c.source])).toEqual([['m1', 'MANUAL'], ['a1', 'AUCTION']])
+    const auctionSql = (queryRaw.mock.calls[1][0] as string[]).join('?')
+    expect(auctionSql).toContain(`r."source" <> 'MANUAL'`)
+    expect(auctionSql).toContain(`'AUCTION' AS "source"`)
+    expect(auctionSql).not.toContain(`'ARTCURIAL'`)
     expect(res[0].auction).toBeNull()
     expect(res[1].auction).toEqual({
       house: 'ARTCURIAL', saleRef: 'IT6064', lotRef: '278-a', lotUrl: 'https://lot', saleName: 'Design',
@@ -94,17 +98,27 @@ describe('PrismaReferenceRepository', () => {
     expect(res[1].similarity).toBe(0.74)
   })
 
-  it('countAuctionVerificationsSince counts matches of ARTCURIAL references', async () => {
-    const queryRaw = vi.fn(async () => [{ count: 7n }])
+  it('countAuctionVerificationsSince counts matches of every non-manual reference', async () => {
+    const queryRaw = vi.fn(async (..._args: any[]) => [{ count: 7n }])
     const n = await new PrismaReferenceRepository({ $queryRaw: queryRaw } as any).countAuctionVerificationsSince(new Date('2026-10-30T00:00:00Z'))
     expect(n).toBe(7)
+    const sql = (queryRaw.mock.calls[0][0] as string[]).join('?')
+    expect(sql).toContain(`r."source" <> 'MANUAL'`)
+    expect(sql).not.toContain(`'ARTCURIAL'`)
   })
 
-  it('auctionFundStats reports lots, images and embedded images', async () => {
+  it('auctionFundStats reports lots, images, embedded images and lots per house', async () => {
     const count = vi.fn(async () => 12)
+    const groupBy = vi.fn(async (_args: any) => [{ house: 'ARTCURIAL', _count: 12 }])
     const queryRaw = vi.fn().mockResolvedValueOnce([{ count: 40n }]).mockResolvedValueOnce([{ count: 31n }])
-    const stats = await new PrismaReferenceRepository({ photoReference: { count }, $queryRaw: queryRaw } as any).auctionFundStats()
-    expect(stats).toEqual({ lots: 12, images: 40, embedded: 31 })
-    expect(count).toHaveBeenCalledWith({ where: { source: 'ARTCURIAL' } })
+    const stats = await new PrismaReferenceRepository({ photoReference: { count }, auctionLot: { groupBy }, $queryRaw: queryRaw } as any).auctionFundStats()
+    expect(stats).toEqual({ lots: 12, images: 40, embedded: 31, byHouse: [{ house: 'ARTCURIAL', lots: 12 }] })
+    expect(count).toHaveBeenCalledWith({ where: { source: { not: 'MANUAL' } } })
+    expect(groupBy).toHaveBeenCalledWith({ by: ['house'], _count: true })
+    for (const call of queryRaw.mock.calls) {
+      const sql = (call[0] as string[]).join('?')
+      expect(sql).toContain(`r."source" <> 'MANUAL'`)
+      expect(sql).not.toContain(`'ARTCURIAL'`)
+    }
   })
 })

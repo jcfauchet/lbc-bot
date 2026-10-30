@@ -181,7 +181,7 @@ export class RunReferenceMatchUseCase {
       candidates = await this.findWideCandidates(listing)
     }
     const { minSimilarity, widenSimilarity, auctionMinSimilarity } = this.config
-    return candidates.filter((c) => c.source === 'ARTCURIAL'
+    return candidates.filter((c) => c.source === 'AUCTION'
       // Thousands of lots share generic words: a keyword alone is not enough.
       ? c.similarity >= auctionMinSimilarity || (c.textHit && c.similarity >= widenSimilarity)
       : c.textHit || c.similarity >= minSimilarity)
@@ -211,7 +211,7 @@ export class RunReferenceMatchUseCase {
   /** False when the candidate was left unjudged because today's auction cap is spent. */
   private async judge(listing: ListingToCheck, candidate: ReferenceCandidate, budget: RunBudget, result: ReferenceMatchResult): Promise<boolean> {
     let verifier: IReferenceMatchVerifier
-    if (candidate.source === 'ARTCURIAL') {
+    if (candidate.source === 'AUCTION') {
       // Never handed to the manual verifier: that one may call Claude.
       if (!candidate.auction) return true
       // Rounded to whole cents so a ratio like 1.1 cannot tip the boundary by a float error.
@@ -258,7 +258,7 @@ export class RunReferenceMatchUseCase {
     let sent = 0
     const auctionByListing = new Map<string, PendingAlert[]>()
     for (const alert of await this.repo.findPendingAlerts()) {
-      if (alert.source === 'ARTCURIAL') {
+      if (alert.source === 'AUCTION') {
         auctionByListing.set(alert.listingId, [...(auctionByListing.get(alert.listingId) ?? []), alert])
         continue
       }
