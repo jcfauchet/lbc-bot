@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { RunReferenceMatchUseCase, type ReferenceMatchConfig } from './RunReferenceMatchUseCase'
-import type { ListingToCheck, PendingAlert, ReferenceCandidate } from '@/domain/repositories/IReferenceRepository'
+import type { AuctionLotSummary, ListingToCheck, PendingAlert, ReferenceCandidate } from '@/domain/repositories/IReferenceRepository'
 
 const listing = (id: string, priceCents = 12000, embedded = false, photos = 1): ListingToCheck => ({
   id, title: `title ${id}`, priceCents,
@@ -13,6 +13,16 @@ const listing = (id: string, priceCents = 12000, embedded = false, photos = 1): 
 const candidate = (referenceId: string, overrides: Partial<ReferenceCandidate> = {}): ReferenceCandidate => ({
   referenceId, name: `ref ${referenceId}`, note: null, maxPriceCents: null, similarity: 0.8, textHit: false,
   imageUrls: [`https://ref/${referenceId}.jpg`], source: 'MANUAL', auction: null, ...overrides,
+})
+const auctionSummary = (lotRef: string, hammerPerUnitCents: number): AuctionLotSummary => ({
+  house: 'ARTCURIAL', saleRef: 'IT6064', lotRef, lotUrl: `https://www.artcurial.com/ventes/IT6064/lots/${lotRef}`,
+  saleName: 'Design', soldAt: new Date('2025-03-12T00:00:00Z'), title: `lot ${lotRef}`, artist: null,
+  hammerCents: hammerPerUnitCents, quantity: 1, hammerPerUnitCents,
+})
+const auctionCandidate = (referenceId: string, hammerPerUnitCents: number, overrides: Partial<ReferenceCandidate> = {}): ReferenceCandidate =>
+  candidate(referenceId, { source: 'ARTCURIAL', auction: auctionSummary(referenceId, hammerPerUnitCents), ...overrides })
+const auctionAlert = (matchId: string, similarity: number): PendingAlert => ({
+  ...alert(matchId), referenceName: `lot ${matchId}`, source: 'ARTCURIAL', similarity, auction: auctionSummary(matchId, 30000),
 })
 const alert = (matchId: string): PendingAlert => ({
   matchId, referenceName: 'Desserte Jansen', referenceImageUrl: 'https://ref/a.jpg', listingId: 'l1',
@@ -30,6 +40,7 @@ function setup(opts: {
   toBackfill?: string[]
   config?: Partial<ReferenceMatchConfig>
   now?: () => number
+  auctionCount?: number
 } = {}) {
   const recorded: any[] = []
   const repo = {
@@ -46,16 +57,19 @@ function setup(opts: {
     markListingChecked: vi.fn(async () => {}),
     findPendingAlerts: vi.fn(async () => opts.pending ?? []),
     markNotified: vi.fn(async () => {}),
+    countAuctionVerificationsSince: vi.fn(async (_since: Date) => opts.auctionCount ?? 0),
   }
   const embedder = { embedImage: vi.fn(async () => [0.1, 0.2]) }
   const verifier = { verify: vi.fn(async (input: any) => (opts.verdict ?? (() => ({ same: true, reason: 'same' })))(input.referenceName.replace('ref ', ''))) }
+  const auctionVerifier = { verify: vi.fn(async (_input: any) => ({ same: true, reason: 'same lot' })) }
   const mailer = { send: vi.fn(async (_data: any) => {}) }
-  const useCase = new RunReferenceMatchUseCase(repo as any, embedder, verifier, mailer, {
+  const useCase = new RunReferenceMatchUseCase(repo as any, embedder, { manual: verifier, auction: auctionVerifier }, mailer, {
     minSimilarity: 0.78, widenSimilarity: 0.7, maxListingsPerRun: 60, backfillDays: 7, emailTo: ['her@example.com'], emailFrom: 'bot@example.com',
     maxRunMs: 120_000, maxVerificationsPerRun: 20, maxCandidatesPerListing: 3, maxBackfillPerReference: 15,
+    auctionEnabled: true, auctionAlertRatio: 1.5, auctionVerificationsPerDay: 300,
     ...opts.config,
   }, opts.now)
-  return { repo, embedder, verifier, mailer, useCase, recorded }
+  return { repo, embedder, verifier, auctionVerifier, mailer, useCase, recorded }
 }
 
 describe('RunReferenceMatchUseCase', () => {
@@ -262,5 +276,118 @@ describe('RunReferenceMatchUseCase', () => {
     await useCase.execute()
     expect(verifier.verify).toHaveBeenCalledTimes(1)
     expect(repo.markBackfilled).not.toHaveBeenCalled()
+  })
+
+  describe('auction lots', () => {
+    it('skips an auction lot whose per-unit hammer is under the ratio, before any verifier call', async () => {
+      // 20 000 × 1.5 = 30 000 > 29 999
+      const { repo, verifier, auctionVerifier, recorded, useCase } = setup({
+        listings: [listing('l1', 20000)], candidates: { l1: [auctionCandidate('a1', 29999)] },
+      })
+      await useCase.execute()
+      expect(auctionVerifier.verify).not.toHaveBeenCalled()
+      expect(verifier.verify).not.toHaveBeenCalled()
+      expect(recorded).toEqual([])
+      expect(repo.markListingChecked).toHaveBeenCalledWith('l1')
+    })
+
+    it('verifies an auction lot exactly at the ratio with the auction verifier only', async () => {
+      const { repo, verifier, auctionVerifier, recorded, useCase } = setup({
+        listings: [listing('l1', 20000)], candidates: { l1: [auctionCandidate('a1', 30000)] },
+      })
+      await useCase.execute()
+      expect(auctionVerifier.verify).toHaveBeenCalledOnce()
+      expect(verifier.verify).not.toHaveBeenCalled()
+      expect(recorded).toEqual([{ referenceId: 'a1', listingId: 'l1', similarity: 0.8, confirmed: true, reason: 'same lot' }])
+      expect(repo.markListingChecked).toHaveBeenCalledWith('l1')
+    })
+
+    it('passes the auction gates to findCandidates', async () => {
+      const { repo, useCase } = setup({ listings: [listing('l1')] })
+      await useCase.execute()
+      expect(repo.findCandidates).toHaveBeenLastCalledWith('l1', { minSimilarity: 0.7, keywordMinSimilarity: 0.7, auctionLimit: 3, includeAuction: true })
+    })
+
+    it('asks for no auction candidates when the fund is disabled', async () => {
+      const { repo, useCase } = setup({ listings: [listing('l1')], config: { auctionEnabled: false } })
+      await useCase.execute()
+      expect(repo.findCandidates).toHaveBeenLastCalledWith('l1', { minSimilarity: 0.7, keywordMinSimilarity: 0.7, auctionLimit: 3, includeAuction: false })
+    })
+
+    it('verifies an auction keyword hit only from the widen similarity', async () => {
+      const { auctionVerifier, recorded, useCase } = setup({
+        listings: [listing('l1', 10000, true)],
+        candidates: { l1: [
+          auctionCandidate('low', 30000, { similarity: 0.5, textHit: true }),
+          auctionCandidate('wide', 30000, { similarity: 0.72, textHit: true }),
+          auctionCandidate('plain', 30000, { similarity: 0.72 }),
+        ] },
+      })
+      await useCase.execute()
+      expect(auctionVerifier.verify).toHaveBeenCalledOnce()
+      expect(recorded.map((m) => m.referenceId)).toEqual(['wide'])
+    })
+
+    it('counts the auction verifications of the current UTC day', async () => {
+      const now = Date.parse('2026-10-30T15:42:00Z')
+      const { repo, useCase } = setup({ now: () => now })
+      await useCase.execute()
+      expect(repo.countAuctionVerificationsSince).toHaveBeenCalledWith(new Date('2026-10-30T00:00:00Z'))
+    })
+
+    it('leaves auction candidates unjudged and the listing unchecked once the daily cap is reached, but still judges manual ones', async () => {
+      const { repo, verifier, auctionVerifier, recorded, useCase } = setup({
+        auctionCount: 300,
+        listings: [listing('l1', 10000)], candidates: { l1: [candidate('m1'), auctionCandidate('a1', 30000)] },
+      })
+      await useCase.execute()
+      expect(verifier.verify).toHaveBeenCalledOnce()
+      expect(auctionVerifier.verify).not.toHaveBeenCalled()
+      expect(recorded.map((m) => m.referenceId)).toEqual(['m1'])
+      expect(repo.markListingChecked).not.toHaveBeenCalled()
+    })
+
+    it('stops verifying auction lots mid-run once the daily cap is spent', async () => {
+      const { repo, auctionVerifier, useCase } = setup({
+        auctionCount: 299,
+        listings: [listing('l1', 10000), listing('l2', 10000)],
+        candidates: { l1: [auctionCandidate('a1', 30000)], l2: [auctionCandidate('a2', 30000)] },
+      })
+      await useCase.execute()
+      expect(auctionVerifier.verify).toHaveBeenCalledOnce()
+      expect(repo.markListingChecked).toHaveBeenCalledWith('l1')
+      expect(repo.markListingChecked).not.toHaveBeenCalledWith('l2')
+    })
+
+    it('sends one email for two confirmed lots on the same ad, closest first, and marks both notified', async () => {
+      const { mailer, repo, useCase } = setup({ pending: [auctionAlert('a1', 0.8), auctionAlert('a2', 0.85)] })
+      const res = await useCase.execute()
+      expect(mailer.send).toHaveBeenCalledOnce()
+      const { subject, html } = mailer.send.mock.calls[0][0]
+      expect(subject.startsWith('🔨')).toBe(true)
+      expect(html.indexOf('lots/a2')).toBeGreaterThan(-1)
+      expect(html.indexOf('lots/a2')).toBeLessThan(html.indexOf('lots/a1'))
+      expect(repo.markNotified).toHaveBeenCalledWith('a1')
+      expect(repo.markNotified).toHaveBeenCalledWith('a2')
+      expect(res.alerted).toBe(1)
+    })
+
+    it('marks neither match notified when the grouped send fails', async () => {
+      const { mailer, repo, useCase } = setup({ pending: [auctionAlert('a1', 0.8), auctionAlert('a2', 0.85)] })
+      mailer.send.mockRejectedValueOnce(new Error('resend down'))
+      const res = await useCase.execute()
+      expect(repo.markNotified).not.toHaveBeenCalled()
+      expect(res.alerted).toBe(0)
+    })
+
+    it('still sends the manual alert email unchanged', async () => {
+      const { mailer, repo, useCase } = setup({ pending: [alert('m1'), auctionAlert('a1', 0.8)] })
+      await useCase.execute()
+      expect(mailer.send).toHaveBeenCalledTimes(2)
+      const subjects = mailer.send.mock.calls.map((c) => c[0].subject as string)
+      expect(subjects).toContain('🎯 Ressemble à ta référence : Desserte Jansen')
+      expect(subjects.some((s) => s.startsWith('🔨'))).toBe(true)
+      expect(repo.markNotified).toHaveBeenCalledWith('m1')
+    })
   })
 })

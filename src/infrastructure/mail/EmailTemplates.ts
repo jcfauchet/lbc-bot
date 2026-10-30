@@ -143,14 +143,73 @@ export class EmailTemplates {
     `
   }
 
-  static referenceMatch(alert: PendingAlert): { subject: string; html: string } {
-    const price = `${(alert.priceCents / 100).toFixed(0)} €`
-    const photo = (url: string | null, caption: string) => url
+  /** One half of the side-by-side photo row of a match email. */
+  private static matchPhoto(url: string | null, caption: string): string {
+    return url
       ? `<td style="width: 50%; padding: 6px; vertical-align: top; text-align: center;">
            <img src="${url}" alt="${caption}" style="width: 100%; max-width: 280px; border-radius: 8px; border: 1px solid #ddd;" />
            <div style="font-size: 12px; color: #666; margin-top: 4px;">${caption}</div>
          </td>`
       : ''
+  }
+
+  private static matchVoteLine(listingId: string): string {
+    return `<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #eee; font-size: 13px; color: #999;">
+    C'est bien la même pièce ?
+    <a href="${env.APP_URL}/feedback?id=${listingId}&vote=good" style="margin-left: 8px; color: #22c55e; text-decoration: none; font-weight: bold;">👍 Oui</a>
+    <a href="${env.APP_URL}/feedback?id=${listingId}&vote=bad" style="margin-left: 8px; color: #ef4444; text-decoration: none; font-weight: bold;">👎 Non</a>
+  </div>`
+  }
+
+  /** One email per ad for every auction lot confirmed on it, closest lot first (sorted by the caller). */
+  static auctionMatch(alerts: PendingAlert[]): { subject: string; html: string } {
+    const [best] = alerts
+    const euros = (cents: number) => `${Math.round(cents / 100)} €`
+    const day = (d: Date) =>
+      `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${d.getUTCFullYear()}`
+    const lots = alerts.map((alert) => {
+      const lot = alert.auction
+      if (!lot) return ''
+      const perUnit = lot.quantity > 1 ? ` (${euros(lot.hammerPerUnitCents)} la pièce, lot de ${lot.quantity})` : ''
+      return `
+  <div style="margin: 12px 0; padding: 12px; border: 1px solid #eee; border-radius: 8px;">
+    <p style="margin: 0; font-weight: bold;">${lot.artist ? `${lot.artist}, ${lot.title}` : lot.title}</p>
+    <p style="margin: 2px 0;">Adjugé ${euros(lot.hammerCents)} le ${day(lot.soldAt)}${perUnit}</p>
+    <p style="margin: 2px 0; color: #666;">${lot.saleName}</p>
+    <p style="margin: 2px 0;"><a href="${lot.lotUrl}" style="color: #0066cc; text-decoration: none;">Voir le lot</a></p>
+    ${alert.reason ? `<p style="margin: 6px 0 0 0; color: #333;"><strong>Pourquoi :</strong> ${alert.reason}</p>` : ''}
+  </div>`
+    }).join('')
+    const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 640px; margin: 0 auto; padding: 20px;">
+  <h1 style="font-size: 22px; margin: 0 0 16px 0;">🔨 Vu chez Artcurial</h1>
+  <table style="width: 100%; border-collapse: collapse;"><tr>
+    ${EmailTemplates.matchPhoto(best.listingImageUrl, 'Annonce')}
+    ${EmailTemplates.matchPhoto(best.referenceImageUrl, 'Lot Artcurial')}
+  </tr></table>
+  <h2 style="font-size: 18px; margin: 16px 0 4px 0;">
+    <a href="${best.listingUrl}" style="color: #0066cc; text-decoration: none;">${best.listingTitle}</a>
+  </h2>
+  <p style="margin: 0; font-size: 22px; font-weight: bold; color: #ff6b00;">${euros(best.priceCents)}</p>
+  ${best.city ? `<p style="margin: 2px 0; color: #666;">${best.city}</p>` : ''}
+  ${lots}
+  <p style="margin: 16px 0;">
+    <a href="${best.listingUrl}" style="display: inline-block; background: #ff6b00; color: white; text-decoration: none; font-weight: bold; padding: 12px 22px; border-radius: 8px;">Voir l'annonce</a>
+  </p>
+  <p style="margin: 0 0 16px 0;">${EmailTemplates.referencesButton()}</p>
+  ${EmailTemplates.matchVoteLine(best.listingId)}
+</body>
+</html>`
+    const hammer = best.auction ? euros(best.auction.hammerCents) : ''
+    return { subject: `🔨 Vu chez Artcurial à ${hammer} : ${best.listingTitle}`, html }
+  }
+
+  static referenceMatch(alert: PendingAlert): { subject: string; html: string } {
+    const price = `${(alert.priceCents / 100).toFixed(0)} €`
+    const photo = EmailTemplates.matchPhoto
     const html = `
 <!DOCTYPE html>
 <html>
@@ -172,11 +231,7 @@ export class EmailTemplates {
     <a href="${alert.listingUrl}" style="display: inline-block; background: #ff6b00; color: white; text-decoration: none; font-weight: bold; padding: 12px 22px; border-radius: 8px;">Voir l'annonce</a>
   </p>
   <p style="margin: 0 0 16px 0;">${EmailTemplates.referencesButton()}</p>
-  <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #eee; font-size: 13px; color: #999;">
-    C'est bien la même pièce ?
-    <a href="${env.APP_URL}/feedback?id=${alert.listingId}&vote=good" style="margin-left: 8px; color: #22c55e; text-decoration: none; font-weight: bold;">👍 Oui</a>
-    <a href="${env.APP_URL}/feedback?id=${alert.listingId}&vote=bad" style="margin-left: 8px; color: #ef4444; text-decoration: none; font-weight: bold;">👎 Non</a>
-  </div>
+  ${EmailTemplates.matchVoteLine(alert.listingId)}
 </body>
 </html>`
     return { subject: `🎯 Ressemble à ta référence : ${alert.referenceName}`, html }

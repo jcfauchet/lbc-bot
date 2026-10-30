@@ -4,6 +4,7 @@ import { Listing } from '@/domain/entities/Listing'
 import { AiAnalysis } from '@/domain/entities/AiAnalysis'
 import { ListingStatus } from '@/domain/value-objects/ListingStatus'
 import { Money } from '@/domain/value-objects/Money'
+import type { AuctionLotSummary, PendingAlert } from '@/domain/repositories/IReferenceRepository'
 
 const deal = (bestMatchSource?: string) => ({
   listing: Listing.create({ lbcId: '1', searchId: 's', url: 'https://lbc/1', title: 'Desserte laiton', price: Money.fromEuros(120), status: ListingStatus.ANALYZED }),
@@ -63,5 +64,47 @@ describe('EmailTemplates.goodDealsDigest comp check badge', () => {
 
   it('shows nothing about verification when the analysis was not checked', () => {
     expect(EmailTemplates.goodDealsDigest([deal()])).not.toContain('comparable confirmé')
+  })
+})
+
+const alertWithAuction = (lot: Partial<AuctionLotSummary> = {}, overrides: Partial<PendingAlert> = {}): PendingAlert => ({
+  matchId: 'm1', referenceName: 'Chaise pliante Plia', referenceImageUrl: 'https://ref/plia.jpg', listingId: 'l1',
+  listingTitle: 'Chaise pliante Plia', listingUrl: 'https://lbc/l1', priceCents: 12000, city: 'Lyon',
+  listingImageUrl: 'https://img/l1.jpg', reason: 'same chrome frame', source: 'ARTCURIAL', similarity: 0.82,
+  auction: {
+    house: 'ARTCURIAL', saleRef: 'IT6064', lotRef: '415-a', lotUrl: 'https://www.artcurial.com/ventes/IT6064/lots/415-a',
+    saleName: 'Design italien', soldAt: new Date('2025-03-07T00:00:00Z'), title: 'Chaise pliante Plia', artist: 'Giancarlo Piretti',
+    hammerCents: 17000, quantity: 1, hammerPerUnitCents: 17000, ...lot,
+  },
+  ...overrides,
+})
+
+describe('EmailTemplates.auctionMatch', () => {
+  it('auctionMatch shows the ad price, the hammer price and the per-unit price when the lot is a set', () => {
+    const { subject, html } = EmailTemplates.auctionMatch([alertWithAuction({ hammerCents: 170000, quantity: 10, hammerPerUnitCents: 17000 })])
+    expect(subject).toBe('🔨 Vu chez Artcurial à 1700 € : Chaise pliante Plia')
+    expect(html).toContain('120 €')
+    expect(html).toContain('170 €')
+    expect(html).toContain('la pièce')
+    expect(html).toContain('lot de 10')
+    expect(html).toContain('https://www.artcurial.com/ventes/IT6064/lots/415-a')
+  })
+
+  it('shows the artist first, the sale date and the reason, without a per-unit line for a single piece', () => {
+    const { html } = EmailTemplates.auctionMatch([alertWithAuction()])
+    expect(html).toContain('Giancarlo Piretti, Chaise pliante Plia')
+    expect(html).toContain('Adjugé 170 € le 07/03/2025')
+    expect(html).toContain('Design italien')
+    expect(html).toContain('same chrome frame')
+    expect(html).not.toContain('la pièce')
+  })
+
+  it('lists every lot in the given order and takes the subject price from the first', () => {
+    const { subject, html } = EmailTemplates.auctionMatch([
+      alertWithAuction({ lotRef: '2', lotUrl: 'https://lot/2', hammerCents: 50000 }, { matchId: 'm2' }),
+      alertWithAuction({ lotRef: '1', lotUrl: 'https://lot/1', hammerCents: 30000 }),
+    ])
+    expect(subject).toBe('🔨 Vu chez Artcurial à 500 € : Chaise pliante Plia')
+    expect(html.indexOf('https://lot/2')).toBeLessThan(html.indexOf('https://lot/1'))
   })
 })

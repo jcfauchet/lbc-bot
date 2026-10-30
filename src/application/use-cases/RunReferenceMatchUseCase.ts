@@ -1,4 +1,4 @@
-import type { IReferenceRepository, ListingToCheck, ReferenceCandidate } from '@/domain/repositories/IReferenceRepository'
+import type { IReferenceRepository, ListingToCheck, PendingAlert, ReferenceCandidate } from '@/domain/repositories/IReferenceRepository'
 import type { IImageEmbeddingService } from '@/domain/services/IImageEmbeddingService'
 import type { IReferenceMatchVerifier } from '@/domain/services/IReferenceMatchVerifier'
 import type { IMailer } from '@/infrastructure/mail/IMailer'
@@ -27,6 +27,19 @@ export interface ReferenceMatchConfig {
   maxCandidatesPerListing: number
   /** Close recent listings judged when a reference is first backfilled. */
   maxBackfillPerReference: number
+  /** Auction lots are offered as candidates only when this is on. */
+  auctionEnabled: boolean
+  /** An auction lot is worth checking only when its per-unit hammer is at least the ad price times this. */
+  auctionAlertRatio: number
+  /** Auction verifications per UTC day, across runs: the fund must not eat the Gemini budget. */
+  auctionVerificationsPerDay: number
+}
+
+export interface ReferenceMatchVerifiers {
+  /** The reseller's own references. */
+  manual: IReferenceMatchVerifier
+  /** Auction lots: Gemini only, never Claude. */
+  auction: IReferenceMatchVerifier
 }
 
 export interface ReferenceMatchResult { checked: number; failed: number; judged: number; confirmed: number; alerted: number }
@@ -41,9 +54,16 @@ function isPermanentImageError(err: unknown): boolean {
   return err instanceof Error && /Image download failed \(4\d\d\)/.test(err.message)
 }
 
+function startOfUtcDay(ms: number): Date {
+  const d = new Date(ms)
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()))
+}
+
 interface RunBudget {
   deadline: number
   verificationsLeft: number
+  /** What remains of today's auction cap. */
+  auctionLeft: number
 }
 
 /**
@@ -55,7 +75,7 @@ export class RunReferenceMatchUseCase {
   constructor(
     private repo: IReferenceRepository,
     private embedder: IImageEmbeddingService,
-    private verifier: IReferenceMatchVerifier,
+    private verifiers: ReferenceMatchVerifiers,
     private mailer: IMailer,
     private config: ReferenceMatchConfig,
     private now: () => number = Date.now,
@@ -68,6 +88,10 @@ export class RunReferenceMatchUseCase {
     const budget: RunBudget = {
       deadline: this.now() + this.config.maxRunMs,
       verificationsLeft: this.config.maxVerificationsPerRun,
+      auctionLeft: this.config.auctionEnabled
+        ? Math.max(0, this.config.auctionVerificationsPerDay
+          - await this.repo.countAuctionVerificationsSince(startOfUtcDay(this.now())))
+        : 0,
     }
 
     for (const image of await this.repo.findReferenceImagesMissingEmbedding(REFERENCE_IMAGE_RETRY_BATCH)) {
@@ -95,7 +119,13 @@ export class RunReferenceMatchUseCase {
         // Not enough verifications left to judge this listing completely: keep it
         // for the next run (its photo embeddings are already stored).
         if (candidates.length > budget.verificationsLeft) break
-        for (const candidate of candidates) await this.judge(listing, candidate, budget, result)
+        let complete = true
+        for (const candidate of candidates) {
+          if (!(await this.judge(listing, candidate, budget, result))) complete = false
+        }
+        // Today's auction cap is spent with lots still unjudged: the manual ones
+        // are done, the listing stays unchecked so tomorrow's runs judge the lots.
+        if (!complete) continue
         await this.repo.markListingChecked(listing.id)
         result.checked++
       } catch (err) {
@@ -115,7 +145,7 @@ export class RunReferenceMatchUseCase {
     for (const { listing, candidate } of close) {
       if (this.isSpent(budget)) return false
       try {
-        await this.judge(listing, candidate, budget, result)
+        if (!(await this.judge(listing, candidate, budget, result))) return false
       } catch (err) {
         console.error(`Reference backfill failed for ${listing.id}:`, err)
         result.failed++
@@ -143,7 +173,11 @@ export class RunReferenceMatchUseCase {
       await this.embedListingImages(others)
       candidates = await this.findWideCandidates(listing)
     }
-    return candidates.filter((c) => c.textHit || c.similarity >= this.config.minSimilarity)
+    const { minSimilarity, widenSimilarity } = this.config
+    return candidates.filter((c) => c.source === 'ARTCURIAL'
+      // Thousands of lots share generic words: a keyword alone is not enough.
+      ? c.similarity >= minSimilarity || (c.textHit && c.similarity >= widenSimilarity)
+      : c.textHit || c.similarity >= minSimilarity)
   }
 
   private findWideCandidates(listing: ListingToCheck): Promise<ReferenceCandidate[]> {
@@ -151,7 +185,7 @@ export class RunReferenceMatchUseCase {
       minSimilarity: this.config.widenSimilarity,
       keywordMinSimilarity: this.config.widenSimilarity,
       auctionLimit: this.config.maxCandidatesPerListing,
-      includeAuction: true,
+      includeAuction: this.config.auctionEnabled,
     })
   }
 
@@ -167,11 +201,25 @@ export class RunReferenceMatchUseCase {
     if (transient) throw transient.reason
   }
 
-  private async judge(listing: ListingToCheck, candidate: ReferenceCandidate, budget: RunBudget, result: ReferenceMatchResult): Promise<void> {
-    if (candidate.maxPriceCents !== null && listing.priceCents > candidate.maxPriceCents) return
+  /** False when the candidate was left unjudged because today's auction cap is spent. */
+  private async judge(listing: ListingToCheck, candidate: ReferenceCandidate, budget: RunBudget, result: ReferenceMatchResult): Promise<boolean> {
+    let verifier: IReferenceMatchVerifier
+    if (candidate.source === 'ARTCURIAL') {
+      // Never handed to the manual verifier: that one may call Claude.
+      if (!candidate.auction) return true
+      // Rounded to whole cents so a ratio like 1.1 cannot tip the boundary by a float error.
+      const minHammerCents = Math.round(listing.priceCents * this.config.auctionAlertRatio)
+      if (minHammerCents > candidate.auction.hammerPerUnitCents) return true
+      if (budget.auctionLeft <= 0) return false
+      budget.auctionLeft--
+      verifier = this.verifiers.auction
+    } else {
+      if (candidate.maxPriceCents !== null && listing.priceCents > candidate.maxPriceCents) return true
+      verifier = this.verifiers.manual
+    }
 
     budget.verificationsLeft--
-    const verdict = await this.verifier.verify({
+    const verdict = await verifier.verify({
       listingImageUrls: listing.images.slice(0, VERIFIER_LISTING_PHOTOS).map((i) => i.url),
       listingTitle: listing.title,
       referenceImageUrls: candidate.imageUrls,
@@ -187,11 +235,18 @@ export class RunReferenceMatchUseCase {
     })
     result.judged++
     if (verdict.same) result.confirmed++
+    return true
   }
 
+  /** Returns the number of emails sent: one per manual match, one per ad for auction lots. */
   private async sendPendingAlerts(): Promise<number> {
     let sent = 0
+    const auctionByListing = new Map<string, PendingAlert[]>()
     for (const alert of await this.repo.findPendingAlerts()) {
+      if (alert.source === 'ARTCURIAL') {
+        auctionByListing.set(alert.listingId, [...(auctionByListing.get(alert.listingId) ?? []), alert])
+        continue
+      }
       try {
         const { subject, html } = EmailTemplates.referenceMatch(alert)
         await this.mailer.send({ to: this.config.emailTo, from: this.config.emailFrom, subject, html })
@@ -199,6 +254,16 @@ export class RunReferenceMatchUseCase {
         sent++
       } catch (err) {
         console.error(`Reference alert failed for match ${alert.matchId}:`, err)
+      }
+    }
+    for (const [listingId, group] of auctionByListing) {
+      try {
+        const { subject, html } = EmailTemplates.auctionMatch([...group].sort((a, b) => b.similarity - a.similarity))
+        await this.mailer.send({ to: this.config.emailTo, from: this.config.emailFrom, subject, html })
+        for (const alert of group) await this.repo.markNotified(alert.matchId)
+        sent++
+      } catch (err) {
+        console.error(`Auction alert failed for listing ${listingId}:`, err)
       }
     }
     return sent
