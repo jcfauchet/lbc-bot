@@ -58,7 +58,8 @@ describe('envSchema auction references', () => {
     const parsed = envSchema.parse(baseEnv)
     expect(parsed.AUCTION_ALERT_RATIO).toBe(1.5)
     expect(parsed.AUCTION_REFERENCES_ENABLED).toBe(true)
-    expect(parsed.AUCTION_VERIFICATIONS_PER_DAY).toBe(300)
+    expect(parsed.AUCTION_VERIFICATIONS_PER_DAY).toBe(800)
+    expect(parsed.AUCTION_MIN_SIMILARITY).toBe(0.8)
   })
   it('parses "false" as disabled', () => {
     expect(envSchema.parse({ ...baseEnv, AUCTION_REFERENCES_ENABLED: 'false' }).AUCTION_REFERENCES_ENABLED).toBe(false)

@@ -111,8 +111,10 @@ export const envSchema = z.object({
   AUCTION_ALERT_RATIO: z.coerce.number().min(1).default(1.5),
   // Spike finding: with ~15k lots a 0.78 similarity yields about 1 candidate per ad, so verifier cost stays bounded.
   AUCTION_REFERENCES_ENABLED: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
-  // Spike finding: ~1 candidate per ad at 0.78, so 300 verifications a day covers the strong matches of ~500 daily ads.
-  AUCTION_VERIFICATIONS_PER_DAY: z.coerce.number().int().min(0).default(300),
+  // Eval of 30 Oct 2026 (500 ads vs one sale, scaled to ~15k lots): ~1 candidate per ad at 0.80, ~5 at 0.78.
+  AUCTION_MIN_SIMILARITY: z.coerce.number().min(0).max(1).default(0.8),
+  // ~720 ads/day and ~1 candidate per ad at 0.80: 800 a day covers them with margin (Gemini Flash, a few euros a day).
+  AUCTION_VERIFICATIONS_PER_DAY: z.coerce.number().int().min(0).default(800),
 }).transform((e) => ({
   ...e,
   LENS_DAILY_BUDGET: e.LENS_DAILY_BUDGET ?? (e.APIFY_TOKEN ? 24 : 8),

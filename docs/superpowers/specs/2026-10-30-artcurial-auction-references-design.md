@@ -264,3 +264,13 @@ stated during execution):
   off. Embedding failures are mopped up by the matching stage's retry path.
 - The run report (sales kept, lots created, failures) is logged.
 - Protected like the other crons and registered in `vercel.json`.
+
+## Addendum (30 Oct 2026, after the first eval): auction-specific similarity gate
+
+Replaying 500 ads of the last 14 days against the first ingested sale (311 lots)
+gave, at the manual gate of 0.78, 56 candidates for 37 ads; scaled to ~15k lots
+that is ~5 candidates per ad, far above the daily cap. Decision (reseller's go on
+my recommendation): auction lots have their own gate `AUCTION_MIN_SIMILARITY`
+(default 0.80, ~1 candidate per ad) and the daily cap
+`AUCTION_VERIFICATIONS_PER_DAY` defaults to 800; both to be re-read after a week of
+production matches. Manual references keep `REFERENCE_MATCH_MIN_SIMILARITY`.

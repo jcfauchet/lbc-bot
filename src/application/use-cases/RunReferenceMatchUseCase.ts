@@ -33,6 +33,11 @@ export interface ReferenceMatchConfig {
   auctionAlertRatio: number
   /** Auction verifications per UTC day, across runs: the fund must not eat the Gemini budget. */
   auctionVerificationsPerDay: number
+  /**
+   * Similarity from which an auction lot is verified. Higher than the manual gate:
+   * with ~15k lots the 0.78 gate gave ~5 candidates per ad in the 30 Oct 2026 eval.
+   */
+  auctionMinSimilarity: number
 }
 
 export interface ReferenceMatchVerifiers {
@@ -175,10 +180,10 @@ export class RunReferenceMatchUseCase {
       await this.embedListingImages(others)
       candidates = await this.findWideCandidates(listing)
     }
-    const { minSimilarity, widenSimilarity } = this.config
+    const { minSimilarity, widenSimilarity, auctionMinSimilarity } = this.config
     return candidates.filter((c) => c.source === 'ARTCURIAL'
       // Thousands of lots share generic words: a keyword alone is not enough.
-      ? c.similarity >= minSimilarity || (c.textHit && c.similarity >= widenSimilarity)
+      ? c.similarity >= auctionMinSimilarity || (c.textHit && c.similarity >= widenSimilarity)
       : c.textHit || c.similarity >= minSimilarity)
   }
 

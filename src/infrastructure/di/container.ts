@@ -185,6 +185,7 @@ export class Container {
         auctionEnabled: env.AUCTION_REFERENCES_ENABLED,
         auctionAlertRatio: env.AUCTION_ALERT_RATIO,
         auctionVerificationsPerDay: env.AUCTION_VERIFICATIONS_PER_DAY,
+        auctionMinSimilarity: env.AUCTION_MIN_SIMILARITY,
       },
     )
 

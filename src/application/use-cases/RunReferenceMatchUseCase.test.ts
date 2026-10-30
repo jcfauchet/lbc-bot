@@ -66,7 +66,7 @@ function setup(opts: {
   const useCase = new RunReferenceMatchUseCase(repo as any, embedder, { manual: verifier, auction: auctionVerifier }, mailer, {
     minSimilarity: 0.78, widenSimilarity: 0.7, maxListingsPerRun: 60, backfillDays: 7, emailTo: ['her@example.com'], emailFrom: 'bot@example.com',
     maxRunMs: 120_000, maxVerificationsPerRun: 20, maxCandidatesPerListing: 3, maxBackfillPerReference: 15,
-    auctionEnabled: true, auctionAlertRatio: 1.5, auctionVerificationsPerDay: 300,
+    auctionEnabled: true, auctionAlertRatio: 1.5, auctionVerificationsPerDay: 300, auctionMinSimilarity: 0.78,
     ...opts.config,
   }, opts.now)
   return { repo, embedder, verifier, auctionVerifier, mailer, useCase, recorded }
@@ -321,6 +321,17 @@ describe('RunReferenceMatchUseCase', () => {
   })
 
   describe('auction lots', () => {
+    it('holds auction lots to their own similarity gate while manual references keep theirs', async () => {
+      const { verifier, auctionVerifier, useCase } = setup({
+        listings: [listing('l1', 20000)],
+        candidates: { l1: [candidate('m1', { similarity: 0.79 }), auctionCandidate('a1', 30000, { similarity: 0.79 })] },
+        config: { minSimilarity: 0.78, auctionMinSimilarity: 0.8 },
+      })
+      await useCase.execute()
+      expect(verifier.verify).toHaveBeenCalledTimes(1)
+      expect(auctionVerifier.verify).not.toHaveBeenCalled()
+    })
+
     it('skips an auction lot whose per-unit hammer is under the ratio, before any verifier call', async () => {
       // 20 000 × 1.5 = 30 000 > 29 999
       const { repo, verifier, auctionVerifier, recorded, useCase } = setup({
