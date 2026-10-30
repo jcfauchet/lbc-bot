@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { parseLotPage } from './parse-lot-page'
+import { parseLotPage, stripHtml } from './parse-lot-page'
 import { parseSalePage } from './parse-sale-page'
 import { parseSitemap } from './parse-sitemap'
 
@@ -30,6 +30,18 @@ describe('artcurial parsers', () => {
       /^https:\/\/storage\.googleapis\.com\/art-fr-maya-prod-inventory\/.*PICTURE_CATALOG/,
     )
     expect(lot.soldAt).toMatch(/^2025-/)
+  })
+  it('leaves no HTML entity in the lot title and description', () => {
+    const lot = parseLotPage(lotHtml)!
+    for (const text of [lot.title, lot.description]) {
+      expect(text).not.toContain('&#')
+      expect(text).not.toContain('&amp;')
+    }
+  })
+  it('strips tags and decodes entities', () => {
+    expect(stripHtml('<p>L&#39;art &amp; la mani&egrave;re&nbsp;!</p>')).toBe("L'art & la mani&egrave;re !")
+    expect(stripHtml('&quot;a&quot; &lt;b&gt; &#x41;&#66; &apos;c&apos;')).toBe('"a" <b> AB \'c\'')
+    expect(stripHtml('&amp;#39;')).toBe('&#39;')
   })
   it('parses the sale page', () => {
     // The payload's totalLots is 303, while the sitemap lists 314 lot URLs for this sale

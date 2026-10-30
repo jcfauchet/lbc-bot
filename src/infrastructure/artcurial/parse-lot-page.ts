@@ -16,10 +16,28 @@ interface RawLot {
   descriptions?: { FRENCH?: { titleWithHtml?: string; descriptionWithHtml?: string } }
 }
 
-function stripHtml(html: string | undefined): string {
+const NAMED_ENTITIES: Record<string, string> = {
+  nbsp: ' ',
+  quot: '"',
+  apos: "'",
+  lt: '<',
+  gt: '>',
+}
+
+function decodeCodePoint(code: number, original: string): string {
+  try {
+    return String.fromCodePoint(code)
+  } catch {
+    return original
+  }
+}
+
+export function stripHtml(html: string | undefined): string {
   return (html ?? '')
     .replace(/<[^>]*>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
+    .replace(/&#x([0-9a-f]+);/gi, (m, hex: string) => decodeCodePoint(parseInt(hex, 16), m))
+    .replace(/&#(\d+);/g, (m, dec: string) => decodeCodePoint(parseInt(dec, 10), m))
+    .replace(/&(nbsp|quot|apos|lt|gt);/g, (_m, name: string) => NAMED_ENTITIES[name])
     .replace(/&amp;/g, '&')
     .replace(/\s+/g, ' ')
     .trim()
