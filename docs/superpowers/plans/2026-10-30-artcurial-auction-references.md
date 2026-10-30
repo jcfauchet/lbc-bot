@@ -330,11 +330,11 @@ it('createAuctionLot returns null when the lot already exists', async () => {
   expect(await new PrismaReferenceRepository(prisma).createAuctionLot(newLot())).toBeNull()
   expect(prisma.photoReference.create).not.toHaveBeenCalled()
 })
-it('createAuctionLot creates the reference, its lot and up to three images, backfilled at once', async () => {
+it('createAuctionLot creates the reference, its lot and every image, backfilled at once', async () => {
   const create = vi.fn(async (args: any) => ({ id: 'r1', images: args.data.images.create.map((i: any, n: number) => ({ id: `i${n}`, urlRemote: i.urlRemote })) }))
   const prisma = { auctionLot: { findUnique: vi.fn(async () => null) }, photoReference: { create } } as any
   const res = await new PrismaReferenceRepository(prisma).createAuctionLot(newLot({ imageUrls: ['u1', 'u2', 'u3', 'u4'] }))
-  expect(res).toEqual({ id: 'r1', images: [{ id: 'i0', url: 'u1' }, { id: 'i1', url: 'u2' }, { id: 'i2', url: 'u3' }] })
+  expect(res).toEqual({ id: 'r1', images: [{ id: 'i0', url: 'u1' }, { id: 'i1', url: 'u2' }, { id: 'i2', url: 'u3' }, { id: 'i3', url: 'u4' }] })
   const data = create.mock.calls[0][0].data
   expect(data.source).toBe('ARTCURIAL'); expect(data.maxPriceCents).toBeNull(); expect(data.backfilledAt).toBeInstanceOf(Date)
   expect(data.auctionLot.create).toMatchObject({ house: 'ARTCURIAL', saleRef: 'IT6064', lotRef: '278-a', hammerPerUnitCents: 110000 })
@@ -391,7 +391,7 @@ WHERE p."id" = $listingId AND r."isActive" AND r."source" = 'ARTCURIAL'
 ORDER BY "textHit" DESC, "similarity" DESC
 LIMIT $auctionLimit
 ```
-Map the `a.*` columns into `auction`. `findPendingAlerts` includes `reference.auctionLot` and `reference.source`, and `m.similarity`. `createAuctionLot`: `auctionLot.findUnique` on the compound unique, then one `photoReference.create` with nested `auctionLot: { create }` and `images: { create }` (first three `imageUrls`). `auctionFundStats`: three counts (`photoReference.count({ where: { source: 'ARTCURIAL' } })`, `$queryRaw` counts on `reference_images` joined to ARTCURIAL references, with and without embedding).
+Map the `a.*` columns into `auction`. `findPendingAlerts` includes `reference.auctionLot` and `reference.source`, and `m.similarity`. `createAuctionLot`: `auctionLot.findUnique` on the compound unique, then one `photoReference.create` with nested `auctionLot: { create }` and `images: { create }` (every `imageUrls` entry, catalogue order). `auctionFundStats`: three counts (`photoReference.count({ where: { source: 'ARTCURIAL' } })`, `$queryRaw` counts on `reference_images` joined to ARTCURIAL references, with and without embedding).
 
 - [ ] **Step 5: Fix the compile errors in callers**
 
@@ -574,7 +574,7 @@ it('builds the reference from a sold lot', () => {
   const ref = toAuctionReference(lot({ title: 'Suite de dix chaises mod. PK9 - 1960', artist: 'Poul KJAERHOLM', hammerEur: 11000, pictureUrls: [bucket + 'a', bucket + 'b', bucket + 'c', bucket + 'd'] }), sale(), 'https://www.artcurial.com/ventes/IT6064/lots/278-a')!
   expect(ref.name).toBe('Poul KJAERHOLM — Suite de dix chaises mod. PK9 - 1960')
   expect(ref.keywords).toEqual(['poul kjaerholm'])
-  expect(ref.imageUrls).toEqual(['https://www.artcurial.com/item-images/a?w=1024', 'https://www.artcurial.com/item-images/b?w=1024', 'https://www.artcurial.com/item-images/c?w=1024'])
+  expect(ref.imageUrls).toEqual(['https://www.artcurial.com/item-images/a?w=1024', 'https://www.artcurial.com/item-images/b?w=1024', 'https://www.artcurial.com/item-images/c?w=1024', 'https://www.artcurial.com/item-images/d?w=1024'])
   expect(ref.lot).toMatchObject({ hammerCents: 1100000, quantity: 10, hammerPerUnitCents: 110000, house: 'ARTCURIAL', saleRef: 'IT6064', lotRef: '278-a' })
   expect(ref.note).toMatch(/Adjugé 11000 € le \d{2}\/\d{2}\/\d{4}, Artcurial /)
 })

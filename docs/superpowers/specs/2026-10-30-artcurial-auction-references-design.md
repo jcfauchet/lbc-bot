@@ -122,7 +122,7 @@ Reference fields for an auction lot, filled at ingest:
    `pictures[].document.servingUrl`, `descriptions.FRENCH.{titleWithHtml,
    descriptionWithHtml}`). Skip unless `status === 'SOLD'` and
    `adjudicationPrice > 0`. Prices on the page are in euros, not cents.
-4. Upsert reference + `auction_lots` row + up to 3 `reference_images`
+4. Upsert reference + `auction_lots` row + every photo as a `reference_images` row
    (catalogue order). Existing (`house`, `saleRef`, `lotRef`) → skip, so a run can
    be interrupted and restarted.
 5. Embed the new images with the existing `GeminiImageEmbeddingService`
