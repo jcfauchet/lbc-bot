@@ -17,7 +17,7 @@ const uniqueLotUrls = [...new Set([...sitemap.matchAll(/<loc>(https:\/\/www\.art
 
 const options: IngestOptions = { year: 2025, saleRef: 'IT6064', limit: 5, dryRun: false, concurrency: 2 }
 
-function setup(opts: { fetchFail?: string; existing?: boolean; embedFailFirst?: boolean } = {}) {
+function setup(opts: { fetchFail?: string; existing?: boolean; embedFailFirst?: boolean; knownLotRefs?: string[] } = {}) {
   const fetched: string[] = []
   const fetcher: PageFetcher = {
     fetchText: async (url) => {
@@ -39,6 +39,7 @@ function setup(opts: { fetchFail?: string; existing?: boolean; embedFailFirst?: 
       return { id, images: input.imageUrls.slice(0, 2).map((url, i) => ({ id: `${id}-img${i}`, url })) }
     }),
     setReferenceImageEmbedding: vi.fn(async () => {}),
+    findExistingLotRefs: vi.fn(async () => new Set<string>(opts.knownLotRefs ?? [])),
   } as unknown as IReferenceRepository
   let calls = 0
   const embedder: IImageEmbeddingService = {
@@ -87,6 +88,15 @@ describe('ArtcurialIngester', () => {
     expect(report.lotsFailed).toBe(1)
     expect(report.lotsCreated).toBe(4)
   })
+  it('skips lots already stored without fetching their page', async () => {
+    const known = uniqueLotUrls[0].slice(uniqueLotUrls[0].lastIndexOf('/') + 1)
+    const { ingester, repo, fetched } = setup({ knownLotRefs: [known] })
+    const report = await ingester.ingest({ ...options, limit: undefined })
+    expect(repo.findExistingLotRefs).toHaveBeenCalledWith('ARTCURIAL', 'IT6064')
+    expect(fetched).not.toContain(uniqueLotUrls[0])
+    expect(report.lotsSkippedExisting).toBe(1)
+    expect(report.lotsSeen).toBe(uniqueLotUrls.length - 1)
+  })
   it('dry run lists the sales and creates nothing', async () => {
     const { ingester, repo, fetched } = setup()
     const report = await ingester.ingest({ ...options, dryRun: true })
@@ -113,7 +123,7 @@ describe('ArtcurialIngester cron options', () => {
   const year = 2026
   const multiSitemap = `<urlset>${Object.keys(sales).flatMap((s) => [1, 2].map((n) => `<url><loc>${lotUrl(s, n)}</loc></url>`)).join('')}</urlset>`
 
-  function build(salesByRef: Record<string, string | null>, clock: () => number, onLot?: () => void) {
+  function build(salesByRef: Record<string, string | null>, clock: () => number, onLot?: () => void, onSale?: () => void) {
     const fetched: string[] = []
     const fetcher: PageFetcher = {
       fetchText: async (url) => {
@@ -121,6 +131,7 @@ describe('ArtcurialIngester cron options', () => {
         if (url === `https://www.artcurial.com/sitemap/sales-${year}-fr.xml`) return multiSitemap
         const saleRef = Object.keys(salesByRef).find((ref) => url === `https://www.artcurial.com/ventes/${ref}`)
         if (saleRef) {
+          onSale?.()
           const date = salesByRef[saleRef]
           return date ? saleHtml.replaceAll(fixtureBeginDate, date) : saleHtml.replaceAll(`"${fixtureBeginDate}"`, 'null')
         }
@@ -131,6 +142,7 @@ describe('ArtcurialIngester cron options', () => {
     const repo = {
       createAuctionLot: vi.fn(async (input: NewAuctionLot) => ({ id: 'r', images: input.imageUrls.slice(0, 1).map((url) => ({ id: 'i', url })) })),
       setReferenceImageEmbedding: vi.fn(async () => {}),
+      findExistingLotRefs: vi.fn(async () => new Set<string>()),
     } as unknown as IReferenceRepository
     const embedder: IImageEmbeddingService = { embedImage: vi.fn(async () => [0.1]) }
     return { ingester: new ArtcurialIngester(fetcher, repo, embedder, () => {}, clock), fetched }
@@ -159,6 +171,14 @@ describe('ArtcurialIngester cron options', () => {
     const report = await ingester.ingest({ year, dryRun: false, concurrency: 1, maxRunMs: 1000 })
     expect(report.lotsSeen).toBe(3)
     expect(report.stoppedByBudget).toBe(true)
+  })
+  it('stops scanning sales when the budget is spent during the sale scan', async () => {
+    let clock = NOW
+    const { ingester, fetched } = build(sales, () => clock, undefined, () => { clock += 600 })
+    const report = await ingester.ingest({ year, dryRun: false, concurrency: 1, maxRunMs: 1000 })
+    expect(report.stoppedByBudget).toBe(true)
+    expect(report.lotsSeen).toBe(0)
+    expect(fetched.some((u) => u.includes('/lots/'))).toBe(false)
   })
   it('does not flag the budget when every lot was processed in time', async () => {
     const { ingester } = build(sales, () => NOW)

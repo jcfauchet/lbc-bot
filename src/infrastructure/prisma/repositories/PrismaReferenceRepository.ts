@@ -284,6 +284,11 @@ export class PrismaReferenceRepository implements IReferenceRepository {
     return { id: created.id, images: created.images.map((i) => ({ id: i.id, url: i.urlRemote })) }
   }
 
+  async findExistingLotRefs(house: string, saleRef: string): Promise<Set<string>> {
+    const rows = await this.prisma.auctionLot.findMany({ where: { house, saleRef }, select: { lotRef: true } })
+    return new Set(rows.map((r) => r.lotRef))
+  }
+
   async countAuctionVerificationsSince(since: Date): Promise<number> {
     const [row] = await this.prisma.$queryRaw<Array<{ count: bigint }>>`
       SELECT COUNT(*) AS "count" FROM "reference_matches" m

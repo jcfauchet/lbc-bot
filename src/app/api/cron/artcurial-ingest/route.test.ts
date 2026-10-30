@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const ingest = vi.fn()
+const logError = vi.fn()
+vi.mock('@/infrastructure/logger/logger', () => ({ logInfo: vi.fn(), logError: (...args: unknown[]) => logError(...args) }))
 vi.mock('@/infrastructure/di/container', () => ({ container: { artcurialIngester: { ingest: (...args: unknown[]) => ingest(...args) } } }))
 
 import { GET } from './route'
@@ -15,7 +17,7 @@ describe('GET /api/cron/artcurial-ingest', () => {
     process.env.CRON_SECRET = 'secret'
     ingest.mockReset()
     ingest.mockResolvedValue(report())
-    vi.spyOn(console, 'log').mockImplementation(() => {})
+    logError.mockReset()
     vi.useFakeTimers()
   })
   afterEach(() => {
@@ -42,6 +44,16 @@ describe('GET /api/cron/artcurial-ingest', () => {
     vi.setSystemTime(new Date('2026-01-10T04:00:00Z'))
     await GET(request('secret'))
     expect(ingest.mock.calls.map(([o]) => o.year)).toEqual([2025, 2026])
+  })
+
+  it('keeps going when a year throws, logs it and still answers 200', async () => {
+    vi.setSystemTime(new Date('2026-01-10T04:00:00Z'))
+    ingest.mockRejectedValueOnce(new Error('sitemap 404'))
+    const response = await GET(request('secret'))
+    expect(response.status).toBe(200)
+    expect(ingest).toHaveBeenCalledTimes(2)
+    expect(logError).toHaveBeenCalledWith('CRON:artcurial-ingest', expect.any(Error))
+    expect(await response.json()).toEqual({ reports: [{ year: 2025, error: 'Error: sitemap 404' }, report()] })
   })
 
   it('returns 200 with the reports even when lots failed', async () => {

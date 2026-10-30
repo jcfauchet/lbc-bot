@@ -121,6 +121,8 @@ export interface IReferenceRepository {
   markNotified(matchId: string): Promise<void>
   /** Null when a lot with the same (house, saleRef, lotRef) already exists. */
   createAuctionLot(input: NewAuctionLot): Promise<{ id: string; images: ImageToEmbed[] } | null>
+  /** Lot refs already stored for one sale of an auction house. */
+  findExistingLotRefs(house: string, saleRef: string): Promise<Set<string>>
   /** Verifications (recorded matches) of auction references since `since`. */
   countAuctionVerificationsSince(since: Date): Promise<number>
   auctionFundStats(): Promise<AuctionFundStats>

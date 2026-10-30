@@ -49,6 +49,13 @@ describe('PrismaReferenceRepository', () => {
     expect(data.auctionLot.create).toMatchObject({ house: 'ARTCURIAL', saleRef: 'IT6064', lotRef: '278-a', hammerPerUnitCents: 110000 })
   })
 
+  it('findExistingLotRefs returns the stored lot refs of one sale', async () => {
+    const findMany = vi.fn(async (_args: any) => [{ lotRef: '1-a' }, { lotRef: '278-a' }])
+    const refs = await new PrismaReferenceRepository({ auctionLot: { findMany } } as any).findExistingLotRefs('ARTCURIAL', 'IT6064')
+    expect(refs).toEqual(new Set(['1-a', '278-a']))
+    expect(findMany).toHaveBeenCalledWith({ where: { house: 'ARTCURIAL', saleRef: 'IT6064' }, select: { lotRef: true } })
+  })
+
   it('list only returns manual references', async () => {
     const findMany = vi.fn(async (_args: any) => [])
     await new PrismaReferenceRepository({ photoReference: { findMany } } as any).list()

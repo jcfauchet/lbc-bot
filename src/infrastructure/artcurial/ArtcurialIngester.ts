@@ -34,6 +34,12 @@ export interface IngestReport {
 const PROGRESS_EVERY = 25
 const DAY_MS = 86_400_000
 
+/** '.../lots/278-a' -> '278-a', the lotRef stored in auction_lots. */
+function lotRefFromUrl(url: string): string {
+  const tail = url.slice(url.lastIndexOf('/') + 1)
+  try { return decodeURIComponent(tail) } catch { return tail }
+}
+
 interface LotJob { url: string; sale: ArtcurialSale }
 
 /** Turns the sold lots of the wanted Artcurial sales into photo references. All I/O goes through the injected ports. */
@@ -56,12 +62,20 @@ export class ArtcurialIngester {
     const jobs: LotJob[] = []
     for (const [saleRef, lotUrls] of lotUrlsBySale) {
       if (options.saleRef && saleRef !== options.saleRef) continue
+      if (options.maxRunMs !== undefined && this.now() - startedAt >= options.maxRunMs) {
+        report.stoppedByBudget = true
+        return report
+      }
       const sale = await this.loadWantedSale(saleRef)
       if (!sale) continue
       if (options.closedBetween && !this.isInWindow(sale, options.closedBetween)) continue
       report.salesKept.push(saleRef)
       this.log(`kept ${saleRef} ${sale.name} ${sale.totalLots} lots ${sale.specialties.join(',')}`)
-      for (const url of lotUrls) jobs.push({ url, sale })
+      const existing = options.dryRun ? new Set<string>() : await this.repo.findExistingLotRefs('ARTCURIAL', saleRef)
+      for (const url of lotUrls) {
+        if (existing.has(lotRefFromUrl(url))) report.lotsSkippedExisting++
+        else jobs.push({ url, sale })
+      }
     }
     if (options.dryRun) return report
 
