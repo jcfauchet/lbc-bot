@@ -211,6 +211,8 @@ function ReferencesContent() {
       {fund && (
         <p className="mb-3 text-xs text-gray-500">
           Fonds enchères : {formatCount(fund.lots)} lots ({houseCounts(fund.byHouse)}), {formatCount(fund.images)} photos, {fund.enabled ? 'actif' : 'inactif'}
+          {' · '}
+          <a href={`/feedback/references/fund?k=${encodeURIComponent(key)}`} className="text-orange-600 underline">Parcourir les lots</a>
         </p>
       )}
       {references?.length === 0 && <p className="text-sm text-gray-500">Aucune référence pour l’instant.</p>}

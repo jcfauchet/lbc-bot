@@ -145,6 +145,24 @@ describe('PrismaReferenceRepository', () => {
     expect(sql).not.toContain(`'ARTCURIAL'`)
   })
 
+  it('listAuctionLots filters by house, category and text and returns the total', async () => {
+    const queryRaw = vi.fn()
+      .mockResolvedValueOnce([{ count: 7n }])
+      .mockResolvedValueOnce([{ house: 'OSENAT', title: 'Table basse', artist: null, hammerCents: 100000, finalCents: 128000, quantity: 1, saleName: 's', soldAt: new Date(), lotUrl: 'u', imageUrl: 'i' }])
+    const page = await new PrismaReferenceRepository({ $queryRaw: queryRaw } as any)
+      .listAuctionLots({ house: 'OSENAT', category: 'LIGHTING', search: 'prouvé', offset: 48, limit: 48 })
+    expect(page.total).toBe(7)
+    expect(page.lots).toHaveLength(1)
+    const where = queryRaw.mock.calls[0].find((arg: any) => typeof arg?.sql === 'string' && Array.isArray(arg?.values)) as { sql: string; values: unknown[] }
+    expect(where.sql).toContain('a."house" = ?')
+    expect(where.sql).toContain('ILIKE ?')
+    expect(where.sql).toContain('~* ?')
+    expect(where.sql).toContain('!~* ?') // furniture and mirrors come before lighting
+    expect(where.values).toContain('OSENAT')
+    expect(where.values).toContain('%prouvé%')
+    expect(where.values.some((v) => typeof v === 'string' && v.includes('lampes?'))).toBe(true)
+  })
+
   it('auctionFundStats reports lots, images, embedded images and lots per house', async () => {
     const count = vi.fn(async () => 12)
     const groupBy = vi.fn(async (_args: any) => [{ house: 'ARTCURIAL', _count: 12 }])

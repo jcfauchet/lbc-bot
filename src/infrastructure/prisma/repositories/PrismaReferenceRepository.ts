@@ -2,8 +2,9 @@ import { Prisma, PrismaClient } from '@prisma/client'
 import type {
   AuctionFundStats, AuctionHouse, AuctionLotSummary, CandidateGates, IReferenceRepository, ImageToEmbed, ListingToCheck,
   NewAuctionLot, NewPhotoReference, PendingAlert, PhotoReferenceSummary, RecordedMatch, ReferenceCandidate,
-  ReferenceSource,
+  ReferenceSource, AuctionLotQuery, AuctionLotListItem,
 } from '@/domain/repositories/IReferenceRepository'
+import { categorySqlConditions } from '@/domain/lot-category'
 
 const toVector = (embedding: number[]) => `[${embedding.join(',')}]`
 
@@ -310,6 +311,34 @@ export class PrismaReferenceRepository implements IReferenceRepository {
       WHERE r."source" <> 'MANUAL' AND m."createdAt" >= ${since}
     `
     return Number(row?.count ?? 0)
+  }
+
+  async listAuctionLots({ house, category, search, offset, limit }: AuctionLotQuery): Promise<{ total: number; lots: AuctionLotListItem[] }> {
+    const text = search?.trim()
+    const conditions: Prisma.Sql[] = [Prisma.sql`TRUE`]
+    if (house) conditions.push(Prisma.sql`a."house" = ${house}`)
+    if (text) conditions.push(Prisma.sql`(a."title" ILIKE ${`%${text}%`} OR a."artist" ILIKE ${`%${text}%`})`)
+    if (category) {
+      const { matches, excludes } = categorySqlConditions(category)
+      for (const pattern of matches) conditions.push(Prisma.sql`(a."title" || ' ' || left(a."description", 150)) ~* ${pattern}`)
+      for (const pattern of excludes) conditions.push(Prisma.sql`(a."title" || ' ' || left(a."description", 150)) !~* ${pattern}`)
+    }
+    const where = Prisma.join(conditions, ' AND ')
+    const [counted, rows] = await Promise.all([
+      this.prisma.$queryRaw<Array<{ count: bigint }>>`SELECT COUNT(*) AS "count" FROM "auction_lots" a WHERE ${where}`,
+      this.prisma.$queryRaw<Array<Omit<AuctionLotListItem, 'house'> & { house: string }>>`
+        SELECT a."house", a."title", a."artist", a."hammerCents", a."finalCents", a."quantity", a."saleName", a."soldAt", a."lotUrl",
+               (SELECT ri."urlRemote" FROM "reference_images" ri WHERE ri."referenceId" = a."referenceId"
+                 ORDER BY ri."createdAt", ri."id" LIMIT 1) AS "imageUrl"
+          FROM "auction_lots" a
+         WHERE ${where}
+         ORDER BY a."soldAt" DESC, a."id"
+         OFFSET ${offset} LIMIT ${limit}`,
+    ])
+    return {
+      total: Number(counted[0]?.count ?? 0),
+      lots: rows.map((r) => ({ ...r, house: r.house as AuctionHouse })),
+    }
   }
 
   async auctionFundStats(): Promise<AuctionFundStats> {

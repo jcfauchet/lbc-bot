@@ -1,3 +1,4 @@
+import type { LotCategory } from '@/domain/lot-category'
 import type { AuctionHouse } from '@/domain/auction-houses'
 
 export type { AuctionHouse }
@@ -142,4 +143,29 @@ export interface IReferenceRepository {
   /** Verifications (recorded matches) of auction references since `since`. */
   countAuctionVerificationsSince(since: Date): Promise<number>
   auctionFundStats(): Promise<AuctionFundStats>
+  /** One page of the auction fund, most recent sale first, with each lot's first photo. */
+  listAuctionLots(query: AuctionLotQuery): Promise<{ total: number; lots: AuctionLotListItem[] }>
+}
+
+export interface AuctionLotQuery {
+  house?: AuctionHouse
+  /** Object family read from the lot title (see `lot-category.ts`). */
+  category?: LotCategory
+  /** Case-insensitive search in the lot title and artist. */
+  search?: string
+  offset: number
+  limit: number
+}
+
+export interface AuctionLotListItem {
+  house: AuctionHouse
+  title: string
+  artist: string | null
+  hammerCents: number
+  finalCents: number | null
+  quantity: number
+  saleName: string
+  soldAt: Date
+  lotUrl: string
+  imageUrl: string | null
 }
