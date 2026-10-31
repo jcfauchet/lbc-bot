@@ -1,12 +1,12 @@
 import { stripHtml } from '../artcurial/parse-lot-page'
 import { parseFrenchDate } from './french-date'
-import type { RossiniSale } from './types'
+import type { DrouotSale } from './types'
 
 const CARD_START = /<div class="calendrier entry[^"]*\bVente(\d+)\b[^"]*"/g
 
-export function parseYearPage(html: string): RossiniSale[] {
+export function parseYearPage(html: string): DrouotSale[] {
   const starts = [...html.matchAll(CARD_START)]
-  const sales: RossiniSale[] = []
+  const sales: DrouotSale[] = []
   starts.forEach((start, i) => {
     const card = html.slice(start.index, starts[i + 1]?.index ?? html.length)
     const title = /<div class="entry-title">([\s\S]*?)<\/div>/.exec(card)

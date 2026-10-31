@@ -13,15 +13,30 @@ export function timeoutMsFor(url: string): number {
   return url.includes('/sitemap') ? SITEMAP_TIMEOUT_MS : PAGE_TIMEOUT_MS
 }
 
-class ClientError extends Error {}
+/** A 4xx other than 429: permanent, never retried. */
+export class ClientError extends Error {}
 
-/** Fetches SSR pages and sitemaps: per-URL timeout, one retry on 5xx or network error, throws on 4xx. */
+/** A 429: transient, retried once after a pause, and thrown as a plain error if it persists. */
+class RateLimitedError extends Error {}
+
+/** Pause before retrying a 429; the Drouot-platform sites rate-limit bursts. */
+const RATE_LIMIT_PAUSE_MS = 5_000
+
+const realSleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
+
+/**
+ * Fetches SSR pages and sitemaps for every auction house: per-URL timeout, one retry on 5xx
+ * or network error, one retry after 5 s on 429, throws on any other 4xx.
+ */
 export class ArtcurialFetcher implements PageFetcher {
+  constructor(private readonly sleep: (ms: number) => Promise<void> = realSleep) {}
+
   async fetchText(url: string): Promise<string> {
     try {
       return await this.fetchOnce(url)
     } catch (error) {
       if (error instanceof ClientError) throw error
+      if (error instanceof RateLimitedError) await this.sleep(RATE_LIMIT_PAUSE_MS)
       return this.fetchOnce(url)
     }
   }
@@ -31,6 +46,7 @@ export class ArtcurialFetcher implements PageFetcher {
       headers: { 'User-Agent': USER_AGENT },
       signal: AbortSignal.timeout(timeoutMsFor(url)),
     })
+    if (res.status === 429) throw new RateLimitedError(`HTTP 429 for ${url}`)
     if (res.status >= 400 && res.status < 500) throw new ClientError(`HTTP ${res.status} for ${url}`)
     if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`)
     return res.text()

@@ -3,9 +3,12 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { PageFetcher } from '@/infrastructure/artcurial/ArtcurialFetcher'
 import type { HouseSale } from '@/infrastructure/auction/HouseAdapter'
-import { RossiniAdapter } from './RossiniAdapter'
+import { DrouotPlatformAdapter } from './DrouotPlatformAdapter'
+import { DROUOT_HOUSES } from './house-configs'
 import { toAuctionReference } from './to-auction-reference'
-import type { RossiniLot, RossiniSale } from './types'
+import type { DrouotLot, DrouotSale } from './types'
+
+const ROSSINI = DROUOT_HOUSES.ROSSINI
 
 const read = (f: string) => readFileSync(join(__dirname, '__fixtures__', f), 'utf8')
 const lotHtml = read('lot-180689-34122319.html')
@@ -43,7 +46,7 @@ function setup(pages: Record<string, string> = {}) {
       throw new Error(`unexpected fetch ${url}`)
     },
   }
-  return { adapter: new RossiniAdapter(fetcher, (l) => logs.push(l), () => NOW), fetched, logs }
+  return { adapter: new DrouotPlatformAdapter(ROSSINI, fetcher, (l) => logs.push(l), () => NOW), fetched, logs }
 }
 
 /** listLotUrls reads only the sale ref. */
@@ -55,7 +58,7 @@ const collect = async (sales: AsyncIterable<HouseSale>) => {
   return out
 }
 
-describe('RossiniAdapter', () => {
+describe('DrouotPlatformAdapter (rossini)', () => {
   it('lists only the wanted sales of the year', async () => {
     const { adapter, fetched } = setup({ [YEAR_URL]: yearHtml })
     const sales = await collect(adapter.listSales(2025, {}))
@@ -124,7 +127,7 @@ describe('RossiniAdapter', () => {
         return `Lots ${offset + 1} à ${offset + 50} sur 100000 <a href="/lot/180689/${offset + 1}-x">l</a>`
       },
     }
-    const adapter = new RossiniAdapter(fetcher, (l) => logs.push(l), () => NOW)
+    const adapter = new DrouotPlatformAdapter(ROSSINI, fetcher, (l) => logs.push(l), () => NOW)
     const urls = await adapter.listLotUrls(catalogueSale('180689'))
     expect(fetched).toHaveLength(40)
     expect(urls).toHaveLength(40)
@@ -141,7 +144,7 @@ describe('RossiniAdapter', () => {
     expect(result!.lot.lotRef).toBe('34122319')
     expect(result!.imageUrls).toHaveLength(6)
     for (const url of result!.imageUrls) {
-      expect(url).toMatch(/^https:\/\/cdn\.drouot\.com\/d\/lot\/full\/62\/180689\/[0-9a-f]{32}$/)
+      expect(url).toMatch(/^https:\/\/cdn\.drouot\.com\/d\/lot\/fullHD\/62\/180689\/[0-9a-f]{32}$/)
     }
     expect(result!.note).toMatch(/Adjugé 555000 € le 31\/12\/2025, Rossini Mobilier et Objets d'Art$/)
   })
@@ -168,8 +171,8 @@ describe('RossiniAdapter', () => {
 })
 
 describe('toAuctionReference (rossini)', () => {
-  const sale: RossiniSale = { id: '9', title: 'Design', date: '2025-06-01', catalogueUrl: '/catalogue/9' }
-  const lot: RossiniLot = {
+  const sale: DrouotSale = { id: '9', title: 'Design', date: '2025-06-01', catalogueUrl: '/catalogue/9' }
+  const lot: DrouotLot = {
     saleId: '9',
     lotId: '5',
     lotNumber: '1',
@@ -179,10 +182,12 @@ describe('toAuctionReference (rossini)', () => {
     estimateHighEur: 200,
     resultEur: 150.25,
     photoHashes: [],
+    resultIncludesFees: false,
+    photoHostId: '62',
   }
 
   it('applies quantity, cents and the 400-char note', () => {
-    const ref = toAuctionReference(lot, sale)!
+    const ref = toAuctionReference(lot, sale, ROSSINI)!
     expect(ref.lot.quantity).toBe(2)
     expect(ref.lot.hammerCents).toBe(15025)
     expect(ref.lot.hammerPerUnitCents).toBe(7513)
@@ -194,8 +199,61 @@ describe('toAuctionReference (rossini)', () => {
   })
 
   it('skips unsold lots and sales without a date', () => {
-    expect(toAuctionReference({ ...lot, resultEur: null }, sale)).toBeNull()
-    expect(toAuctionReference({ ...lot, resultEur: 0 }, sale)).toBeNull()
-    expect(toAuctionReference(lot, { ...sale, date: null })).toBeNull()
+    expect(toAuctionReference({ ...lot, resultEur: null }, sale, ROSSINI)).toBeNull()
+    expect(toAuctionReference({ ...lot, resultEur: 0 }, sale, ROSSINI)).toBeNull()
+    expect(toAuctionReference(lot, { ...sale, date: null }, ROSSINI)).toBeNull()
+  })
+
+  it('builds fullHD photo URLs on the host id read from the page', () => {
+    const hash = 'a'.repeat(32)
+    const ref = toAuctionReference({ ...lot, photoHashes: [hash], photoHostId: '97' }, sale, ROSSINI)!
+    expect(ref.imageUrls).toEqual([`https://cdn.drouot.com/d/lot/fullHD/97/9/${hash}`])
+  })
+})
+
+describe('toAuctionReference (fee-inclusive results)', () => {
+  const osenat = DROUOT_HOUSES.OSENAT
+  const sale: DrouotSale = { id: '9', title: 'Mobilier & Objets d’art', date: '2025-06-01', catalogueUrl: '/catalogue/9' }
+  const lot: DrouotLot = {
+    saleId: '9',
+    lotId: '5',
+    lotNumber: '1',
+    title: 'Commode Louis XV',
+    description: '',
+    estimateLowEur: null,
+    estimateHighEur: null,
+    resultEur: 1280,
+    photoHashes: [],
+    resultIncludesFees: true,
+    photoHostId: null,
+  }
+
+  it('derives the hammer from a result labelled "avec frais"', () => {
+    const ref = toAuctionReference(lot, sale, osenat)!
+    expect(ref.lot.house).toBe('OSENAT')
+    expect(ref.lot.finalCents).toBe(128_000)
+    expect(ref.lot.hammerCents).toBe(100_000)
+    expect(ref.lot.hammerPerUnitCents).toBe(100_000)
+    expect(ref.lot.lotUrl).toBe('https://www.osenat.com/lot/9/5')
+    expect(ref.note).toBe('Résultat 1280 € frais compris (≈ 1000 € au marteau), Osenat Mobilier & Objets d’art')
+  })
+
+  it('uses the house default when the lot shows no fees label', () => {
+    const ref = toAuctionReference({ ...lot, resultIncludesFees: null }, sale, osenat)!
+    expect(ref.lot.finalCents).toBe(128_000)
+    expect(ref.lot.hammerCents).toBe(100_000)
+  })
+
+  it('keeps the shown price as the hammer for a result labelled "sans frais"', () => {
+    const ref = toAuctionReference({ ...lot, resultIncludesFees: false }, sale, osenat)!
+    expect(ref.lot.finalCents).toBeNull()
+    expect(ref.lot.hammerCents).toBe(128_000)
+    expect(ref.note).toBe('Adjugé 1280 € le 01/06/2025, Osenat Mobilier & Objets d’art')
+  })
+
+  it('keeps Rossini on hammer prices when the label is absent', () => {
+    const ref = toAuctionReference({ ...lot, resultIncludesFees: null }, sale, ROSSINI)!
+    expect(ref.lot.finalCents).toBeNull()
+    expect(ref.lot.hammerCents).toBe(128_000)
   })
 })

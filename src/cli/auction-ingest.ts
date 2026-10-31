@@ -14,7 +14,9 @@ import { parseAuctionIngestArgs } from './auction-ingest-args'
 
 async function main() {
   const { house, options } = parseAuctionIngestArgs(process.argv.slice(2))
-  const report = await container.auctionIngesters[house].ingest(options)
+  const ingester = container.auctionIngesters[house]
+  if (!ingester) throw new Error(`no ingester wired for ${house}`)
+  const report = await ingester.ingest(options)
   console.log(JSON.stringify(report, null, 2))
   if (report.lotsFailed > 0) process.exitCode = 1
 }

@@ -30,7 +30,9 @@ export async function GET(request: Request) {
     const remaining = Math.max(0, MAX_RUN_MS - (Date.now() - startedAt))
     const maxRunMs = Math.floor(remaining / (slots.length - index))
     try {
-      const report = await container.auctionIngesters[house].ingest({
+      const ingester = container.auctionIngesters[house]
+      if (!ingester) throw new Error(`no ingester wired for ${house}`)
+      const report = await ingester.ingest({
         year,
         closedBetween: { minAgeDays: 2, maxAgeDays: 45 },
         maxRunMs,
