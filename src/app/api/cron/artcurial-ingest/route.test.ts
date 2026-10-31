@@ -22,7 +22,7 @@ import { GET } from './route'
 const request = (secret?: string) =>
   new Request('http://localhost/api/cron/artcurial-ingest', { headers: secret ? { authorization: `Bearer ${secret}` } : {} })
 
-const report = (house: string, overrides = {}) => ({ house, salesKept: [], salesFailed: 0, lotsSeen: 0, lotsCreated: 0, lotsSkippedExisting: 0, lotsSkippedUnsold: 0, lotsFailed: 0, imagesEmbedded: 0, imagesFailed: 0, stoppedByBudget: false, ...overrides })
+const report = (house: string, overrides = {}) => ({ house, salesKept: [], salesFailed: 0, lotsSeen: 0, lotsCreated: 0, lotsSkippedExisting: 0, lotsSkippedUnsold: 0, lotsSkippedOutOfScope: 0, lotsFailed: 0, imagesEmbedded: 0, imagesFailed: 0, stoppedByBudget: false, ...overrides })
 
 /** Every ingest call in the order the route made them, with its house. */
 const calls = () =>

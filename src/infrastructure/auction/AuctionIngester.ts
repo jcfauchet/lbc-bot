@@ -1,3 +1,4 @@
+import { isUnwantedLot } from '@/domain/auction-lot-scope'
 import type { AuctionHouse } from '@/domain/auction-houses'
 import type { IReferenceRepository } from '@/domain/repositories/IReferenceRepository'
 import type { IImageEmbeddingService } from '@/domain/services/IImageEmbeddingService'
@@ -27,6 +28,8 @@ export interface IngestReport {
   lotsCreated: number
   lotsSkippedExisting: number
   lotsSkippedUnsold: number
+  /** Sold lots outside the fund's scope (paintings, prints, photographs, rugs, clocks). */
+  lotsSkippedOutOfScope: number
   lotsFailed: number
   imagesEmbedded: number
   imagesFailed: number
@@ -51,7 +54,7 @@ export class AuctionIngester {
   async ingest(options: IngestOptions): Promise<IngestReport> {
     const report: IngestReport = {
       house: this.adapter.house,
-      salesKept: [], salesFailed: 0, lotsSeen: 0, lotsCreated: 0, lotsSkippedExisting: 0, lotsSkippedUnsold: 0, lotsFailed: 0, imagesEmbedded: 0, imagesFailed: 0, stoppedByBudget: false,
+      salesKept: [], salesFailed: 0, lotsSeen: 0, lotsCreated: 0, lotsSkippedExisting: 0, lotsSkippedUnsold: 0, lotsSkippedOutOfScope: 0, lotsFailed: 0, imagesEmbedded: 0, imagesFailed: 0, stoppedByBudget: false,
     }
     const startedAt = this.now()
     const jobs: LotJob[] = []
@@ -121,6 +124,10 @@ export class AuctionIngester {
       const input = await this.adapter.fetchLot(url, sale)
       if (!input) {
         report.lotsSkippedUnsold++
+        return
+      }
+      if (isUnwantedLot({ title: input.lot.title, description: input.lot.description })) {
+        report.lotsSkippedOutOfScope++
         return
       }
       const created = await this.repo.createAuctionLot(input)

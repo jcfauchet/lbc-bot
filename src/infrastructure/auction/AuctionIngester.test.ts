@@ -17,6 +17,7 @@ interface FakeSale { closedAt: string | null; finished?: boolean; lots?: number;
  */
 function fakeAdapter(salesByRef: Record<string, FakeSale>, opts: {
   unsold?: string[]
+  paintings?: string[]
   failing?: string[]
   unreadableSales?: string[]
   onYieldSale?: () => void
@@ -56,7 +57,7 @@ function fakeAdapter(salesByRef: Record<string, FakeSale>, opts: {
         lot: {
           house: 'ARTCURIAL', saleRef: sale.ref, lotRef: url.slice(url.lastIndexOf('/') + 1), lotUrl: url, saleName: sale.name,
           soldAt: new Date(NOW), title: url, artist: null, hammerCents: 100, quantity: 1, hammerPerUnitCents: 100,
-          artistYears: null, description: '', estimateLowCents: null, estimateHighCents: null, finalCents: null,
+          artistYears: null, description: opts.paintings?.includes(url) ? 'Huile sur toile' : '', estimateLowCents: null, estimateHighCents: null, finalCents: null,
         },
       }
     }),
@@ -69,6 +70,7 @@ function setup(salesByRef: Record<string, FakeSale>, opts: {
   embedFailFirst?: boolean
   knownLotRefs?: string[]
   unsold?: string[]
+  paintings?: string[]
   failing?: string[]
   unreadableSales?: string[]
   clock?: () => number
@@ -147,6 +149,13 @@ describe('AuctionIngester', () => {
     expect(report.lotsFailed).toBe(1)
     expect(report.lotsCreated).toBe(4)
     expect(lines).toContain(`lot failed ${lotUrl('IT6064', 2)}: HTTP 404`)
+  })
+  it('skips a sold painting without storing it', async () => {
+    const { ingester, repo } = setup(ONE_SALE, { paintings: [lotUrl('IT6064', 3)] })
+    const report = await ingester.ingest(options)
+    expect(report.lotsSkippedOutOfScope).toBe(1)
+    expect(report.lotsCreated).toBe(4)
+    expect(repo.createAuctionLot).toHaveBeenCalledTimes(4)
   })
   it('counts a lot the house did not sell as unsold', async () => {
     const { ingester, repo } = setup(ONE_SALE, { unsold: [lotUrl('IT6064', 3)] })
