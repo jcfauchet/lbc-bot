@@ -1,4 +1,4 @@
-import type { IngestOptions } from '@/infrastructure/artcurial/ArtcurialIngester'
+import type { IngestOptions } from '@/infrastructure/auction/AuctionIngester'
 
 export function parseArtcurialIngestArgs(args: string[]): IngestOptions {
   const get = (flag: string): string | undefined => {

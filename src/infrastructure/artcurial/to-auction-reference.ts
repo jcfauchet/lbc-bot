@@ -1,5 +1,5 @@
 import type { NewAuctionLot } from '@/domain/repositories/IReferenceRepository'
-import { parseQuantity } from './quantity'
+import { parseQuantity } from '@/infrastructure/auction/quantity'
 import type { ArtcurialLot, ArtcurialSale } from './types'
 
 export const WANTED_SPECIALTIES = ['DESIGN', 'ART_DECO', 'ITALIAN_DESIGN', 'FURNITURE_ART_OBJECTS', 'LIMITED_EDITION']

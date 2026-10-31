@@ -1,11 +1,7 @@
+import type { AuctionHouse } from '@/domain/auction-houses'
 import type { IReferenceRepository } from '@/domain/repositories/IReferenceRepository'
 import type { IImageEmbeddingService } from '@/domain/services/IImageEmbeddingService'
-import type { PageFetcher } from './ArtcurialFetcher'
-import { parseLotPage } from './parse-lot-page'
-import { parseSalePage } from './parse-sale-page'
-import { parseSitemap } from './parse-sitemap'
-import { isWantedSale, toAuctionReference } from './to-auction-reference'
-import type { ArtcurialSale } from './types'
+import type { HouseAdapter, HouseSale } from './HouseAdapter'
 
 export interface IngestOptions {
   year: number
@@ -14,7 +10,7 @@ export interface IngestOptions {
   dryRun: boolean
   concurrency: number
   /**
-   * Keeps only FINISHED sales whose end date (begin date when absent) falls in
+   * Keeps only finished sales whose closing date falls in
    * [now - maxAgeDays, now - minAgeDays]; sales without a date are skipped.
    */
   closedBetween?: { minAgeDays: number; maxAgeDays: number }
@@ -23,6 +19,7 @@ export interface IngestOptions {
 }
 
 export interface IngestReport {
+  house: AuctionHouse
   salesKept: string[]
   lotsSeen: number
   lotsCreated: number
@@ -37,18 +34,12 @@ export interface IngestReport {
 const PROGRESS_EVERY = 25
 const DAY_MS = 86_400_000
 
-/** '.../lots/278-a' -> '278-a', the lotRef stored in auction_lots. */
-function lotRefFromUrl(url: string): string {
-  const tail = url.slice(url.lastIndexOf('/') + 1)
-  try { return decodeURIComponent(tail) } catch { return tail }
-}
+interface LotJob { url: string; sale: HouseSale }
 
-interface LotJob { url: string; sale: ArtcurialSale }
-
-/** Turns the sold lots of the wanted Artcurial sales into photo references. All I/O goes through the injected ports. */
-export class ArtcurialIngester {
+/** Turns the sold lots of one auction house's wanted sales into photo references. All I/O goes through the injected ports. */
+export class AuctionIngester {
   constructor(
-    private readonly fetcher: PageFetcher,
+    private readonly adapter: HouseAdapter,
     private readonly repo: IReferenceRepository,
     private readonly embedder: IImageEmbeddingService,
     private readonly log: (line: string) => void,
@@ -57,26 +48,31 @@ export class ArtcurialIngester {
 
   async ingest(options: IngestOptions): Promise<IngestReport> {
     const report: IngestReport = {
+      house: this.adapter.house,
       salesKept: [], lotsSeen: 0, lotsCreated: 0, lotsSkippedExisting: 0, lotsSkippedUnsold: 0, lotsFailed: 0, imagesEmbedded: 0, imagesFailed: 0, stoppedByBudget: false,
     }
     const startedAt = this.now()
-    const sitemap = await this.fetcher.fetchText(`https://www.artcurial.com/sitemap/sales-${options.year}-fr.xml`)
-    const { lotUrlsBySale } = parseSitemap(sitemap)
+    const sales = await this.adapter.listSales(options.year)
     const jobs: LotJob[] = []
-    for (const [saleRef, lotUrls] of lotUrlsBySale) {
-      if (options.saleRef && saleRef !== options.saleRef) continue
+    for (const sale of sales) {
+      if (options.saleRef && sale.ref !== options.saleRef) continue
       if (options.maxRunMs !== undefined && this.now() - startedAt >= options.maxRunMs) {
         report.stoppedByBudget = true
         return report
       }
-      const sale = await this.loadWantedSale(saleRef)
-      if (!sale) continue
       if (options.closedBetween && !this.isInWindow(sale, options.closedBetween)) continue
-      report.salesKept.push(saleRef)
-      this.log(`kept ${saleRef} ${sale.name} ${sale.totalLots} lots ${sale.specialties.join(',')}`)
-      const existing = options.dryRun ? new Set<string>() : await this.repo.findExistingLotRefs('ARTCURIAL', saleRef)
+      let lotUrls: string[]
+      try {
+        lotUrls = await this.adapter.listLotUrls(sale)
+      } catch (error) {
+        this.log(`sale ${sale.ref} skipped: ${(error as Error).message}`)
+        continue
+      }
+      report.salesKept.push(sale.ref)
+      this.log(`kept ${sale.ref} ${sale.name} ${sale.totalLots} lots`)
+      const existing = options.dryRun ? new Set<string>() : await this.repo.findExistingLotRefs(this.adapter.house, sale.ref)
       for (const url of lotUrls) {
-        if (existing.has(lotRefFromUrl(url))) report.lotsSkippedExisting++
+        if (existing.has(this.adapter.lotRefFromUrl(url))) report.lotsSkippedExisting++
         else jobs.push({ url, sale })
       }
     }
@@ -100,34 +96,21 @@ export class ArtcurialIngester {
     return report
   }
 
-  private isInWindow(sale: ArtcurialSale, { minAgeDays, maxAgeDays }: { minAgeDays: number; maxAgeDays: number }): boolean {
+  private isInWindow(sale: HouseSale, { minAgeDays, maxAgeDays }: { minAgeDays: number; maxAgeDays: number }): boolean {
     // An online sale runs for one to two weeks: until it is finished its lots are not sold yet.
-    if (sale.status !== 'FINISHED') return false
-    const closedAt = sale.endDate ?? sale.beginDate
-    if (!closedAt) return false
-    const time = Date.parse(closedAt)
+    if (!sale.finished) return false
+    if (!sale.closedAt) return false
+    const time = Date.parse(sale.closedAt)
     if (Number.isNaN(time)) return false
     const now = this.now()
     return time >= now - maxAgeDays * DAY_MS && time <= now - minAgeDays * DAY_MS
   }
 
-  private async loadWantedSale(saleRef: string): Promise<ArtcurialSale | null> {
-    try {
-      const sale = parseSalePage(await this.fetcher.fetchText(`https://www.artcurial.com/ventes/${saleRef}`))
-      return sale && isWantedSale(sale) ? sale : null
-    } catch (error) {
-      this.log(`sale ${saleRef} skipped: ${(error as Error).message}`)
-      return null
-    }
-  }
-
   private async ingestLot({ url, sale }: LotJob, report: IngestReport): Promise<void> {
     try {
-      const lot = parseLotPage(await this.fetcher.fetchText(url))
-      const input = lot ? toAuctionReference(lot, sale, url) : null
+      const input = await this.adapter.fetchLot(url, sale)
       if (!input) {
-        if (lot) report.lotsSkippedUnsold++
-        else report.lotsFailed++
+        report.lotsSkippedUnsold++
         return
       }
       const created = await this.repo.createAuctionLot(input)

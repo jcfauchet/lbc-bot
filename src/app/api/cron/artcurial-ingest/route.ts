@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { container } from '@/infrastructure/di/container'
-import type { IngestReport } from '@/infrastructure/artcurial/ArtcurialIngester'
+import type { IngestReport } from '@/infrastructure/auction/AuctionIngester'
 import { logError, logInfo } from '@/infrastructure/logger/logger'
 
 // Same ceiling as the sibling crons; the ingester stops starting lots after MAX_RUN_MS.

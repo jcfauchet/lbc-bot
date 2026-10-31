@@ -67,7 +67,8 @@ import { PrismaReferenceRepository } from '@/infrastructure/prisma/repositories/
 import { GeminiImageEmbeddingService } from '@/infrastructure/ai/Gemini/GeminiImageEmbeddingService'
 import { GeminiReferenceMatchVerifier } from '@/infrastructure/ai/Gemini/GeminiReferenceMatchVerifier'
 import { ArtcurialFetcher } from '@/infrastructure/artcurial/ArtcurialFetcher'
-import { ArtcurialIngester } from '@/infrastructure/artcurial/ArtcurialIngester'
+import { ArtcurialAdapter } from '@/infrastructure/artcurial/ArtcurialAdapter'
+import { AuctionIngester } from '@/infrastructure/auction/AuctionIngester'
 import { RunReferenceMatchUseCase } from '@/application/use-cases/RunReferenceMatchUseCase'
 
 export class Container {
@@ -114,7 +115,7 @@ export class Container {
   public readonly runFeedbackLearningUseCase: RunFeedbackLearningUseCase
   public readonly referenceRepository: PrismaReferenceRepository
   public readonly imageEmbeddingService: GeminiImageEmbeddingService
-  public readonly artcurialIngester: ArtcurialIngester
+  public readonly artcurialIngester: AuctionIngester
   public readonly runReferenceMatchUseCase: RunReferenceMatchUseCase
 
   private constructor() {
@@ -160,7 +161,7 @@ export class Container {
 
     this.referenceRepository = new PrismaReferenceRepository(this.prisma)
     this.imageEmbeddingService = new GeminiImageEmbeddingService(geminiApiKey)
-    this.artcurialIngester = new ArtcurialIngester(new ArtcurialFetcher(), this.referenceRepository, this.imageEmbeddingService, console.log)
+    this.artcurialIngester = new AuctionIngester(new ArtcurialAdapter(new ArtcurialFetcher(), console.log), this.referenceRepository, this.imageEmbeddingService, console.log)
     this.runReferenceMatchUseCase = new RunReferenceMatchUseCase(
       this.referenceRepository,
       this.imageEmbeddingService,

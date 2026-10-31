@@ -10,12 +10,14 @@
  */
 import { container } from '@/infrastructure/di/container'
 import { ArtcurialFetcher } from '@/infrastructure/artcurial/ArtcurialFetcher'
-import { ArtcurialIngester } from '@/infrastructure/artcurial/ArtcurialIngester'
+import { ArtcurialAdapter } from '@/infrastructure/artcurial/ArtcurialAdapter'
+import { AuctionIngester } from '@/infrastructure/auction/AuctionIngester'
 import { parseArtcurialIngestArgs } from './artcurial-ingest-args'
 
 async function main() {
   const options = parseArtcurialIngestArgs(process.argv.slice(2))
-  const ingester = new ArtcurialIngester(new ArtcurialFetcher(), container.referenceRepository, container.imageEmbeddingService, console.log)
+  const adapter = new ArtcurialAdapter(new ArtcurialFetcher(), console.log)
+  const ingester = new AuctionIngester(adapter, container.referenceRepository, container.imageEmbeddingService, console.log)
   const report = await ingester.ingest(options)
   console.log(JSON.stringify(report, null, 2))
   if (report.lotsFailed > 0) process.exitCode = 1
