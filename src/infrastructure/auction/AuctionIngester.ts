@@ -52,14 +52,18 @@ export class AuctionIngester {
       salesKept: [], lotsSeen: 0, lotsCreated: 0, lotsSkippedExisting: 0, lotsSkippedUnsold: 0, lotsFailed: 0, imagesEmbedded: 0, imagesFailed: 0, stoppedByBudget: false,
     }
     const startedAt = this.now()
-    const sales = await this.adapter.listSales(options.year)
     const jobs: LotJob[] = []
-    for (const sale of sales) {
-      if (options.saleRef && sale.ref !== options.saleRef) continue
+    // Iterated by hand so the budget is checked before the adapter fetches the next sale's page.
+    const sales = this.adapter.listSales(options.year, { saleRef: options.saleRef })[Symbol.asyncIterator]()
+    for (;;) {
       if (options.maxRunMs !== undefined && this.now() - startedAt >= options.maxRunMs) {
         report.stoppedByBudget = true
+        await sales.return?.()
         return report
       }
+      const { value: sale, done } = await sales.next()
+      if (done) break
+      if (options.saleRef && sale.ref !== options.saleRef) continue
       if (options.closedBetween && !this.isInWindow(sale, options.closedBetween)) continue
       let lotUrls: string[]
       try {
@@ -69,7 +73,7 @@ export class AuctionIngester {
         continue
       }
       report.salesKept.push(sale.ref)
-      this.log(`kept ${sale.ref} ${sale.name} ${sale.totalLots} lots`)
+      this.log(`kept ${sale.ref} ${sale.name} ${sale.totalLots} lots ${sale.label ?? ''}`)
       const existing = options.dryRun ? new Set<string>() : await this.repo.findExistingLotRefs(this.adapter.house, sale.ref)
       for (const url of lotUrls) {
         if (existing.has(this.adapter.lotRefFromUrl(url))) report.lotsSkippedExisting++

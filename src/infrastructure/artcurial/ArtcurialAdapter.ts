@@ -23,25 +23,25 @@ export class ArtcurialAdapter implements HouseAdapter {
     private readonly log: (line: string) => void = () => {},
   ) {}
 
-  /** Fetches the sitemap once, then each sale page in sitemap order, keeping the wanted sales. */
-  async listSales(year: number): Promise<HouseSale[]> {
+  /** Fetches the sitemap once, then one sale page per asked-for sale in sitemap order, yielding the wanted ones. */
+  async *listSales(year: number, filter: { saleRef?: string }): AsyncGenerator<HouseSale> {
     const { lotUrlsBySale } = parseSitemap(await this.fetcher.fetchText(`https://www.artcurial.com/sitemap/sales-${year}-fr.xml`))
     this.lotUrlsBySale = lotUrlsBySale
     this.salesByRef = new Map()
-    const sales: HouseSale[] = []
     for (const saleRef of lotUrlsBySale.keys()) {
+      if (filter.saleRef && saleRef !== filter.saleRef) continue
       const sale = await this.loadWantedSale(saleRef)
       if (!sale) continue
       this.salesByRef.set(saleRef, sale)
-      sales.push({
+      yield {
         ref: saleRef,
         name: sale.name,
         closedAt: sale.endDate ?? sale.beginDate,
         finished: sale.status === 'FINISHED',
         totalLots: sale.totalLots,
-      })
+        label: sale.specialties.join(','),
+      }
     }
-    return sales
   }
 
   async listLotUrls(sale: HouseSale): Promise<string[]> {

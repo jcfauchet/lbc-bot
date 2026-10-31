@@ -9,22 +9,35 @@ const DAY = 86_400_000
 const iso = (daysAgo: number) => new Date(NOW - daysAgo * DAY).toISOString()
 const lotUrl = (sale: string, n: number) => `https://auction.test/ventes/${sale}/lots/${n}-a`
 
-interface FakeSale { closedAt: string | null; finished?: boolean; lots?: number }
+interface FakeSale { closedAt: string | null; finished?: boolean; lots?: number; label?: string }
 
-/** A house whose sales and lots are described in memory; every lot is sold unless listed in `unsold` or `failing`. */
+/**
+ * A house whose sales and lots are described in memory; every lot is sold unless listed in `unsold` or `failing`.
+ * Sales are yielded lazily, like a house that fetches one sale page per sale; `yieldedSales` records them.
+ */
 function fakeAdapter(salesByRef: Record<string, FakeSale>, opts: {
   unsold?: string[]
   failing?: string[]
+  onYieldSale?: () => void
   onListLots?: () => void
   onFetchLot?: () => void
 } = {}) {
   const fetchedLots: string[] = []
+  const yieldedSales: string[] = []
   const sales: HouseSale[] = Object.entries(salesByRef).map(([ref, s]) => ({
     ref, name: `Sale ${ref}`, closedAt: s.closedAt, finished: s.finished ?? true, totalLots: s.lots ?? 2,
+    ...(s.label === undefined ? {} : { label: s.label }),
   }))
   const adapter: HouseAdapter = {
     house: 'ARTCURIAL',
-    listSales: vi.fn(async () => sales),
+    listSales: vi.fn((_year: number, filter: { saleRef?: string }) => (async function* () {
+      for (const sale of sales) {
+        if (filter.saleRef && sale.ref !== filter.saleRef) continue
+        opts.onYieldSale?.()
+        yieldedSales.push(sale.ref)
+        yield sale
+      }
+    })()),
     listLotUrls: vi.fn(async (sale: HouseSale) => {
       opts.onListLots?.()
       return Array.from({ length: sale.totalLots }, (_, i) => lotUrl(sale.ref, i + 1))
@@ -45,7 +58,7 @@ function fakeAdapter(salesByRef: Record<string, FakeSale>, opts: {
       }
     }),
   }
-  return { adapter, fetchedLots }
+  return { adapter, fetchedLots, yieldedSales }
 }
 
 function setup(salesByRef: Record<string, FakeSale>, opts: {
@@ -55,10 +68,11 @@ function setup(salesByRef: Record<string, FakeSale>, opts: {
   unsold?: string[]
   failing?: string[]
   clock?: () => number
+  onYieldSale?: () => void
   onListLots?: () => void
   onFetchLot?: () => void
 } = {}) {
-  const { adapter, fetchedLots } = fakeAdapter(salesByRef, opts)
+  const { adapter, fetchedLots, yieldedSales } = fakeAdapter(salesByRef, opts)
   let n = 0
   const repo = {
     createAuctionLot: vi.fn(async (input: NewAuctionLot) => {
@@ -78,18 +92,19 @@ function setup(salesByRef: Record<string, FakeSale>, opts: {
   }
   const lines: string[] = []
   const ingester = new AuctionIngester(adapter, repo, embedder, (l) => lines.push(l), opts.clock ?? (() => NOW))
-  return { ingester, adapter, repo, embedder, fetchedLots, lines }
+  return { ingester, adapter, repo, embedder, fetchedLots, yieldedSales, lines }
 }
 
-const ONE_SALE = { IT6064: { closedAt: iso(200), lots: 8 }, OTHER: { closedAt: iso(200), lots: 3 } }
+const ONE_SALE = { IT6064: { closedAt: iso(200), lots: 8, label: 'DESIGN,ART_DECO' }, OTHER: { closedAt: iso(200), lots: 3 } }
 const options: IngestOptions = { year: 2025, saleRef: 'IT6064', limit: 5, dryRun: false, concurrency: 2 }
 
 describe('AuctionIngester', () => {
   it('lists the sales once, keeps the wanted sale, creates sold lots and embeds their images', async () => {
-    const { ingester, adapter, repo, embedder, lines } = setup(ONE_SALE)
+    const { ingester, adapter, repo, embedder, yieldedSales, lines } = setup(ONE_SALE)
     const report = await ingester.ingest({ ...options, limit: undefined })
     expect(adapter.listSales).toHaveBeenCalledTimes(1)
-    expect(adapter.listSales).toHaveBeenCalledWith(2025)
+    expect(adapter.listSales).toHaveBeenCalledWith(2025, { saleRef: 'IT6064' })
+    expect(yieldedSales).toEqual(['IT6064'])
     expect(report.house).toBe('ARTCURIAL')
     expect(report.salesKept).toEqual(['IT6064'])
     expect(repo.createAuctionLot).toHaveBeenCalledTimes(8)
@@ -98,7 +113,15 @@ describe('AuctionIngester', () => {
     expect(embedder.embedImage).toHaveBeenCalledTimes(16)
     expect(repo.setReferenceImageEmbedding).toHaveBeenCalledTimes(16)
     expect(report.imagesEmbedded).toBe(16)
-    expect(lines.some((l) => l.startsWith('kept IT6064 '))).toBe(true)
+    expect(lines).toContain('kept IT6064 Sale IT6064 8 lots DESIGN,ART_DECO')
+  })
+  it('asks the house for every sale when no sale is given and logs a sale without a label', async () => {
+    const { ingester, adapter, yieldedSales, lines } = setup(ONE_SALE)
+    const report = await ingester.ingest({ ...options, saleRef: undefined, dryRun: true })
+    expect(adapter.listSales).toHaveBeenCalledWith(2025, { saleRef: undefined })
+    expect(yieldedSales).toEqual(['IT6064', 'OTHER'])
+    expect(report.salesKept).toEqual(['IT6064', 'OTHER'])
+    expect(lines).toContain('kept OTHER Sale OTHER 3 lots ')
   })
   it('skips existing lots without embedding anything', async () => {
     const { ingester, embedder } = setup(ONE_SALE, { existing: true })
@@ -202,6 +225,16 @@ describe('AuctionIngester cron options', () => {
     const { ingester, fetchedLots } = setup(sales, { clock: () => clock, onListLots: () => { clock += 600 } })
     const report = await ingester.ingest({ year, dryRun: false, concurrency: 1, maxRunMs: 1000 })
     expect(report.stoppedByBudget).toBe(true)
+    expect(report.lotsSeen).toBe(0)
+    expect(fetchedLots).toEqual([])
+  })
+  it('stops asking for sales once the budget is spent on slow sale pages', async () => {
+    let clock = NOW
+    const { ingester, yieldedSales, fetchedLots } = setup(sales, { clock: () => clock, onYieldSale: () => { clock += 600 } })
+    const report = await ingester.ingest({ year, dryRun: false, concurrency: 1, maxRunMs: 1000 })
+    expect(report.stoppedByBudget).toBe(true)
+    expect(yieldedSales).toEqual(['NEW1', 'MID10'])
+    expect(report.salesKept).toEqual(['NEW1', 'MID10'])
     expect(report.lotsSeen).toBe(0)
     expect(fetchedLots).toEqual([])
   })
