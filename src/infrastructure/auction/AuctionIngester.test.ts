@@ -18,14 +18,16 @@ interface FakeSale { closedAt: string | null; finished?: boolean; lots?: number;
 function fakeAdapter(salesByRef: Record<string, FakeSale>, opts: {
   unsold?: string[]
   failing?: string[]
+  unreadableSales?: string[]
   onYieldSale?: () => void
   onListLots?: () => void
   onFetchLot?: () => void
 } = {}) {
   const fetchedLots: string[] = []
   const yieldedSales: string[] = []
+  // totalLots stays 0, like a house that only learns the lot count from the catalogue.
   const sales: HouseSale[] = Object.entries(salesByRef).map(([ref, s]) => ({
-    ref, name: `Sale ${ref}`, closedAt: s.closedAt, finished: s.finished ?? true, totalLots: s.lots ?? 2,
+    ref, name: `Sale ${ref}`, closedAt: s.closedAt, finished: s.finished ?? true, totalLots: 0,
     ...(s.label === undefined ? {} : { label: s.label }),
   }))
   const adapter: HouseAdapter = {
@@ -40,7 +42,8 @@ function fakeAdapter(salesByRef: Record<string, FakeSale>, opts: {
     })()),
     listLotUrls: vi.fn(async (sale: HouseSale) => {
       opts.onListLots?.()
-      return Array.from({ length: sale.totalLots }, (_, i) => lotUrl(sale.ref, i + 1))
+      if (opts.unreadableSales?.includes(sale.ref)) throw new Error('catalogue total not found')
+      return Array.from({ length: salesByRef[sale.ref].lots ?? 2 }, (_, i) => lotUrl(sale.ref, i + 1))
     }),
     lotRefFromUrl: (url) => url.slice(url.lastIndexOf('/') + 1),
     fetchLot: vi.fn(async (url: string, sale: HouseSale): Promise<NewAuctionLot | null> => {
@@ -67,6 +70,7 @@ function setup(salesByRef: Record<string, FakeSale>, opts: {
   knownLotRefs?: string[]
   unsold?: string[]
   failing?: string[]
+  unreadableSales?: string[]
   clock?: () => number
   onYieldSale?: () => void
   onListLots?: () => void
@@ -175,6 +179,15 @@ describe('AuctionIngester', () => {
     expect(report.lotsSeen).toBe(3)
     expect(repo.createAuctionLot).toHaveBeenCalledTimes(3)
   })
+  it('skips a sale whose catalogue cannot be read, counts it as failed and goes on', async () => {
+    const { ingester, lines, fetchedLots } = setup(ONE_SALE, { unreadableSales: ['IT6064'] })
+    const report = await ingester.ingest({ ...options, saleRef: undefined, limit: undefined })
+    expect(report.salesKept).toEqual(['OTHER'])
+    expect(report.salesFailed).toBe(1)
+    expect(lines).toContain('sale IT6064 skipped: catalogue total not found')
+    expect(lines.some((l) => l.startsWith('kept IT6064'))).toBe(false)
+    expect(fetchedLots).toEqual([lotUrl('OTHER', 1), lotUrl('OTHER', 2), lotUrl('OTHER', 3)])
+  })
   it('logs progress every 25 lots', async () => {
     const { ingester, lines } = setup({ BIG: { closedAt: iso(200), lots: 30 } })
     await ingester.ingest({ year: 2025, dryRun: false, concurrency: 1 })
@@ -211,6 +224,7 @@ describe('AuctionIngester cron options', () => {
     const { ingester } = setup(sales)
     const report = await ingester.ingest({ year, dryRun: true, concurrency: 1 })
     expect(report.salesKept).toEqual(['NEW1', 'MID10', 'OLD60'])
+    expect(report.salesFailed).toBe(0)
     expect(report.stoppedByBudget).toBe(false)
   })
   it('stops starting new lots once maxRunMs is spent and says so in the report', async () => {

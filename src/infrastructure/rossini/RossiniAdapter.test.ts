@@ -46,6 +46,9 @@ function setup(pages: Record<string, string> = {}) {
   return { adapter: new RossiniAdapter(fetcher, (l) => logs.push(l), () => NOW), fetched, logs }
 }
 
+/** listLotUrls reads only the sale ref. */
+const catalogueSale = (ref: string): HouseSale => ({ ref, name: 'x', closedAt: '2025-12-31', finished: true, totalLots: 0 })
+
 const collect = async (sales: AsyncIterable<HouseSale>) => {
   const out: HouseSale[] = []
   for await (const sale of sales) out.push(sale)
@@ -79,14 +82,12 @@ describe('RossiniAdapter', () => {
 
   it('pages the catalogue at offsets 0, 50, 100 for a total of 138', async () => {
     const { adapter, fetched } = setup({
-      [YEAR_URL]: yearHtml,
-      [catalogueUrl('180689', 0)]: page1,
-      [catalogueUrl('180689', 50)]: page2,
-      [catalogueUrl('180689', 100)]: page3,
+      [catalogueUrl('186362', 0)]: page1,
+      [catalogueUrl('186362', 50)]: page2,
+      [catalogueUrl('186362', 100)]: page3,
     })
-    const [sale] = await collect(adapter.listSales(2025, { saleRef: '180689' }))
-    const urls = await adapter.listLotUrls(sale)
-    expect(fetched.slice(1)).toEqual([0, 50, 100].map((o) => catalogueUrl('180689', o)))
+    const urls = await adapter.listLotUrls(catalogueSale('186362'))
+    expect(fetched).toEqual([0, 50, 100].map((o) => catalogueUrl('186362', o)))
     expect(urls).toHaveLength(138)
     expect(new Set(urls).size).toBe(138)
     expect(urls[0]).toMatch(/^https:\/\/www\.rossini\.fr\/lot\/186362\/\d+$/)
@@ -100,11 +101,34 @@ describe('RossiniAdapter', () => {
     expect(await adapter.listLotUrls(sale)).toEqual([])
   })
 
-  it('treats a catalogue without a total as unreadable and logs it', async () => {
-    const { adapter, logs } = setup({ [YEAR_URL]: yearHtml, [catalogueUrl('180689', 0)]: '<html></html>' })
-    const [sale] = await collect(adapter.listSales(2025, { saleRef: '180689' }))
-    expect(await adapter.listLotUrls(sale)).toEqual([])
-    expect(logs).toHaveLength(1)
+  it('throws for a catalogue without a total, so the sale is skipped rather than kept empty', async () => {
+    const { adapter } = setup({ [catalogueUrl('180689', 0)]: '<html></html>' })
+    await expect(adapter.listLotUrls(catalogueSale('180689'))).rejects.toThrow(/catalogue total not found/)
+  })
+
+  it('ignores catalogue links to another sale', async () => {
+    const html = `Lots 1 à 6 sur 6 ${[1, 2, 3, 4, 5].map((n) => `<a href="/lot/180689/${n}-x">l</a>`).join('')}<a href="/lot/999/123-x">l</a>`
+    const { adapter } = setup({ [catalogueUrl('180689', 0)]: html })
+    const urls = await adapter.listLotUrls(catalogueSale('180689'))
+    expect(urls).toHaveLength(5)
+    expect(urls).not.toContain('https://www.rossini.fr/lot/999/123')
+  })
+
+  it('stops paging after 40 catalogue pages whatever the total claims', async () => {
+    const fetched: string[] = []
+    const logs: string[] = []
+    const fetcher: PageFetcher = {
+      fetchText: async (url) => {
+        fetched.push(url)
+        const offset = Number(new URL(url).searchParams.get('offset'))
+        return `Lots ${offset + 1} à ${offset + 50} sur 100000 <a href="/lot/180689/${offset + 1}-x">l</a>`
+      },
+    }
+    const adapter = new RossiniAdapter(fetcher, (l) => logs.push(l), () => NOW)
+    const urls = await adapter.listLotUrls(catalogueSale('180689'))
+    expect(fetched).toHaveLength(40)
+    expect(urls).toHaveLength(40)
+    expect(logs).toEqual(['sale 180689 catalogue capped at 40 pages (total 100000)'])
   })
 
   it('builds the reference of the RODIN lot', async () => {
@@ -127,6 +151,13 @@ describe('RossiniAdapter', () => {
     const { adapter } = setup({ [YEAR_URL]: yearHtml, [LOT_URL]: unsold })
     const [sale] = await collect(adapter.listSales(2025, { saleRef: '180689' }))
     expect(await adapter.fetchLot(LOT_URL, sale)).toBeNull()
+  })
+
+  it('throws when the lot page belongs to another sale', async () => {
+    const otherSaleUrl = 'https://www.rossini.fr/lot/190001/34122319'
+    const { adapter } = setup({ [YEAR_URL]: yearHtml, [otherSaleUrl]: lotHtml })
+    const [sale] = await collect(adapter.listSales(2025, { saleRef: '190001' }))
+    await expect(adapter.fetchLot(otherSaleUrl, sale)).rejects.toThrow(/belongs to sale 180689, not 190001/)
   })
 
   it('throws for a sale that was not listed', async () => {

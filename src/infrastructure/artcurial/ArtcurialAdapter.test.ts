@@ -144,6 +144,6 @@ describe('ArtcurialAdapter behind the AuctionIngester', () => {
     const report = await ingester.ingest({ year: 2025, saleRef: 'IT7002', dryRun: true, concurrency: 1 })
     expect(report.salesKept).toEqual(['IT7002'])
     expect(salePageFetches(fetched)).toEqual([saleUrl('IT7002')])
-    expect(lines.find((l) => l.startsWith('kept IT7002 '))).toMatch(/ 303 lots DESIGN,ART_DECO$/)
+    expect(lines.find((l) => l.startsWith('kept IT7002 '))).toMatch(/ 1 lots DESIGN,ART_DECO$/)
   })
 })

@@ -2,7 +2,7 @@ import { Listing } from '@/domain/entities/Listing'
 import { AiAnalysis } from '@/domain/entities/AiAnalysis'
 import { env } from '@/infrastructure/config/env'
 import type { PendingAlert } from '@/domain/repositories/IReferenceRepository'
-import { HOUSE_LABELS } from '@/domain/auction-houses'
+import { houseLabel } from '@/domain/auction-houses'
 import { referencesPageUrl } from './references-link'
 import type { WeeklyReport } from '@/application/use-cases/RunWeeklyReportUseCase'
 
@@ -181,7 +181,7 @@ export class EmailTemplates {
   /** One email per ad for every auction lot confirmed on it, closest lot first (sorted by the caller). */
   static auctionMatch(alerts: PendingAlert[]): { subject: string; html: string } {
     const [best] = alerts
-    const house = best.auction ? HOUSE_LABELS[best.auction.house] : ''
+    const house = best.auction ? houseLabel(best.auction.house) : ''
     const euros = (cents: number) => `${Math.round(cents / 100)} €`
     const day = (d: Date) =>
       `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${d.getUTCFullYear()}`

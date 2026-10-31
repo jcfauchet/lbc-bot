@@ -11,6 +11,8 @@ import type { RossiniSale } from './types'
 const BASE_URL = 'https://www.rossini.fr'
 const PAGE_SIZE = 50
 const MIN_SALE_LOTS = 5
+/** 2 000 lots: far above any real sale, it only bounds the fetches when the parsed total is bogus. */
+const MAX_CATALOGUE_PAGES = 40
 
 /**
  * Rossini: the year results page lists the sales, each catalogue (paged by 50) lists its
@@ -51,14 +53,17 @@ export class RossiniAdapter implements HouseAdapter {
     const urls = new Set<string>()
     let total = 0
     for (let offset = 0; offset === 0 || offset < total; offset += PAGE_SIZE) {
+      if (offset >= MAX_CATALOGUE_PAGES * PAGE_SIZE) {
+        this.log(`sale ${sale.ref} catalogue capped at ${MAX_CATALOGUE_PAGES} pages (total ${total})`)
+        break
+      }
       const page = parseCataloguePage(
         await this.fetcher.fetchText(`${BASE_URL}/catalogue/${sale.ref}?lang=fr&search=&offset=${offset}&max=${PAGE_SIZE}`),
+        sale.ref,
       )
       if (offset === 0) {
-        if (page.total === 0) {
-          this.log(`sale ${sale.ref} unreadable: catalogue total not found`)
-          return []
-        }
+        // Markup drift: thrown so the ingester skips the sale instead of keeping it with no lots.
+        if (page.total === 0) throw new Error('catalogue total not found')
         if (page.total < MIN_SALE_LOTS) return []
         total = page.total
       }
@@ -77,6 +82,7 @@ export class RossiniAdapter implements HouseAdapter {
     if (!rossiniSale) throw new Error(`sale ${sale.ref} was not listed`)
     const lot = parseLotPage(await this.fetcher.fetchText(url))
     if (!lot) throw new Error('unparseable lot page')
+    if (lot.saleId !== rossiniSale.id) throw new Error(`lot page belongs to sale ${lot.saleId}, not ${rossiniSale.id}`)
     return toAuctionReference(lot, rossiniSale)
   }
 }

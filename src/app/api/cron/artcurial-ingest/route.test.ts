@@ -18,7 +18,7 @@ import { GET } from './route'
 const request = (secret?: string) =>
   new Request('http://localhost/api/cron/artcurial-ingest', { headers: secret ? { authorization: `Bearer ${secret}` } : {} })
 
-const report = (house: string, overrides = {}) => ({ house, salesKept: [], lotsSeen: 0, lotsCreated: 0, lotsSkippedExisting: 0, lotsSkippedUnsold: 0, lotsFailed: 0, imagesEmbedded: 0, imagesFailed: 0, stoppedByBudget: false, ...overrides })
+const report = (house: string, overrides = {}) => ({ house, salesKept: [], salesFailed: 0, lotsSeen: 0, lotsCreated: 0, lotsSkippedExisting: 0, lotsSkippedUnsold: 0, lotsFailed: 0, imagesEmbedded: 0, imagesFailed: 0, stoppedByBudget: false, ...overrides })
 
 const window = { closedBetween: { minAgeDays: 2, maxAgeDays: 45 }, dryRun: false, concurrency: 3 }
 
@@ -79,13 +79,43 @@ describe('GET /api/cron/artcurial-ingest', () => {
     expect((await response.json()).reports.map((r: { house: string }) => r.house)).toEqual(['ARTCURIAL', 'ROSSINI', 'ARTCURIAL', 'ROSSINI'])
   })
 
+  it('shares one 600 s budget across the four January slots', async () => {
+    vi.setSystemTime(new Date('2026-01-10T04:00:00Z'))
+    // Each slot spends its whole budget.
+    const spend = async (options: { maxRunMs: number }) => {
+      vi.setSystemTime(Date.now() + options.maxRunMs)
+      return report('X')
+    }
+    artcurialIngest.mockImplementation(spend)
+    rossiniIngest.mockImplementation(spend)
+    await GET(request('secret'))
+    const budgets = [artcurialIngest.mock.calls[0], rossiniIngest.mock.calls[0], artcurialIngest.mock.calls[1], rossiniIngest.mock.calls[1]]
+      .map(([o]) => o.maxRunMs)
+    expect(budgets[0]).toBe(150_000)
+    expect(budgets).toEqual([150_000, 150_000, 150_000, 150_000])
+    expect(budgets.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(600_000)
+  })
+
+  it('gives the remaining slots no time once the first one overran the whole budget', async () => {
+    vi.setSystemTime(new Date('2026-01-10T04:00:00Z'))
+    artcurialIngest.mockImplementationOnce(async () => {
+      vi.setSystemTime(new Date('2026-01-10T04:11:40Z'))
+      return report('ARTCURIAL')
+    })
+    await GET(request('secret'))
+    expect(artcurialIngest.mock.calls[0][0].maxRunMs).toBe(150_000)
+    expect(rossiniIngest.mock.calls[0][0].maxRunMs).toBe(0)
+    expect(artcurialIngest.mock.calls[1][0].maxRunMs).toBe(0)
+    expect(rossiniIngest.mock.calls[1][0].maxRunMs).toBe(0)
+  })
+
   it('keeps going when a house throws, logs it and still answers 200', async () => {
     vi.setSystemTime(new Date('2026-10-30T04:00:00Z'))
     artcurialIngest.mockRejectedValueOnce(new Error('sitemap 404'))
     const response = await GET(request('secret'))
     expect(response.status).toBe(200)
     expect(rossiniIngest).toHaveBeenCalledTimes(1)
-    expect(logError).toHaveBeenCalledWith('CRON:artcurial-ingest', expect.any(Error))
+    expect(logError).toHaveBeenCalledWith('CRON:auction-ingest', expect.any(Error))
     expect(await response.json()).toEqual({ reports: [{ year: 2026, house: 'ARTCURIAL', error: 'Error: sitemap 404' }, report('ROSSINI')] })
   })
 

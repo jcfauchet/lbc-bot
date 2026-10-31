@@ -24,13 +24,19 @@ describe('rossini parsers', () => {
   })
 
   it('parses a catalogue page', () => {
-    const page1 = parseCataloguePage(cataloguePage1)
+    const page1 = parseCataloguePage(cataloguePage1, '186362')
     expect(page1.total).toBe(138)
     expect(page1.lotUrls).toHaveLength(50)
     for (const url of page1.lotUrls) expect(url).toMatch(/^\/lot\/186362\/\d+$/)
-    const page2 = parseCataloguePage(cataloguePage2)
+    const page2 = parseCataloguePage(cataloguePage2, '186362')
     expect(page2.lotUrls).toHaveLength(50)
     expect(page2.lotUrls.filter((u) => page1.lotUrls.includes(u))).toEqual([])
+  })
+
+  it('keeps only the lots of the given sale', () => {
+    const html = 'Lots 1 à 2 sur 2 <a href="/lot/186362/1-a">a</a><a href="https://www.rossini.fr/lot/999/123-b">b</a>'
+    expect(parseCataloguePage(html, '186362').lotUrls).toEqual(['/lot/186362/1'])
+    expect(parseCataloguePage(cataloguePage1, '999').lotUrls).toEqual([])
   })
 
   it('parses the lot page', () => {

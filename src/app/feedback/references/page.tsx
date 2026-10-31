@@ -5,7 +5,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { resizeImage } from './resize-image'
 import { isUploadTooHeavy, TOO_HEAVY_MESSAGE, uploadErrorMessage } from './upload-error'
 import { addPhotos, removePhoto, MAX_PHOTOS } from './photo-selection'
-import { HOUSE_LABELS, type AuctionHouse } from '@/domain/auction-houses'
+import { HOUSE_LABELS, houseLabel, type AuctionHouse } from '@/domain/auction-houses'
 
 /** French thousands grouping with a plain space: 4909 -> "4 909". */
 const formatCount = (n: number) => n.toLocaleString('fr-FR').replace(/\s/g, ' ')
@@ -13,7 +13,7 @@ const formatCount = (n: number) => n.toLocaleString('fr-FR').replace(/\s/g, ' ')
 /** Every known house, in HOUSE_LABELS order, 0 when it has no lot yet: "Artcurial 4 909, Rossini 0". */
 const houseCounts = (byHouse: Array<{ house: AuctionHouse; lots: number }>) =>
   (Object.keys(HOUSE_LABELS) as AuctionHouse[])
-    .map((house) => `${HOUSE_LABELS[house]} ${formatCount(byHouse.find((h) => h.house === house)?.lots ?? 0)}`)
+    .map((house) => `${houseLabel(house)} ${formatCount(byHouse.find((h) => h.house === house)?.lots ?? 0)}`)
     .join(', ')
 
 type Reference = {

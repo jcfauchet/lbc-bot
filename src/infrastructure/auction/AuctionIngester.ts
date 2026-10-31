@@ -21,6 +21,8 @@ export interface IngestOptions {
 export interface IngestReport {
   house: AuctionHouse
   salesKept: string[]
+  /** Sales whose lot list could not be read; they are not in salesKept. */
+  salesFailed: number
   lotsSeen: number
   lotsCreated: number
   lotsSkippedExisting: number
@@ -49,7 +51,7 @@ export class AuctionIngester {
   async ingest(options: IngestOptions): Promise<IngestReport> {
     const report: IngestReport = {
       house: this.adapter.house,
-      salesKept: [], lotsSeen: 0, lotsCreated: 0, lotsSkippedExisting: 0, lotsSkippedUnsold: 0, lotsFailed: 0, imagesEmbedded: 0, imagesFailed: 0, stoppedByBudget: false,
+      salesKept: [], salesFailed: 0, lotsSeen: 0, lotsCreated: 0, lotsSkippedExisting: 0, lotsSkippedUnsold: 0, lotsFailed: 0, imagesEmbedded: 0, imagesFailed: 0, stoppedByBudget: false,
     }
     const startedAt = this.now()
     const jobs: LotJob[] = []
@@ -69,11 +71,12 @@ export class AuctionIngester {
       try {
         lotUrls = await this.adapter.listLotUrls(sale)
       } catch (error) {
+        report.salesFailed++
         this.log(`sale ${sale.ref} skipped: ${(error as Error).message}`)
         continue
       }
       report.salesKept.push(sale.ref)
-      this.log(`kept ${sale.ref} ${sale.name} ${sale.totalLots} lots ${sale.label ?? ''}`)
+      this.log(`kept ${sale.ref} ${sale.name} ${lotUrls.length} lots ${sale.label ?? ''}`)
       const existing = options.dryRun ? new Set<string>() : await this.repo.findExistingLotRefs(this.adapter.house, sale.ref)
       for (const url of lotUrls) {
         if (existing.has(this.adapter.lotRefFromUrl(url))) report.lotsSkippedExisting++

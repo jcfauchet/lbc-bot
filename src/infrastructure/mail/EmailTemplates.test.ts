@@ -119,6 +119,13 @@ describe('EmailTemplates.auctionMatch', () => {
     expect(artcurial.html).toContain('🔨 Vu chez Artcurial')
     expect(artcurial.html).toContain('Lot Artcurial')
   })
+
+  it('falls back to the raw house code for a house without a label', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const other = EmailTemplates.auctionMatch([alertWithAuction({ house: 'OTHER' as any })])
+    expect(other.subject.startsWith('🔨 Vu chez OTHER à')).toBe(true)
+    expect(other.html).toContain('🔨 Vu chez OTHER')
+  })
 })
 
 describe('EmailTemplates match emails escape scraped text', () => {
