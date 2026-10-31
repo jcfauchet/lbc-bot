@@ -21,6 +21,12 @@ export const HOUSE_SLUGS: Record<string, AuctionHouse> = {
   artcurial: 'ARTCURIAL',
 }
 
+/**
+ * Order in which the daily cron ingests houses: the cheapest fetches first, so a
+ * slow house late in the list cannot starve the quick ones of the shared budget.
+ */
+export const CRON_HOUSE_ORDER: AuctionHouse[] = ['ROSSINI', 'OSENAT', 'PBA', 'GROS_DELETTREZ', 'ADER', 'ARTCURIAL']
+
 /** Display name of a house; the raw code for a house stored in the database but not labelled yet. */
 export function houseLabel(house: string): string {
   return HOUSE_LABELS[house as AuctionHouse] ?? house

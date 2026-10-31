@@ -1,5 +1,5 @@
 import { HOUSE_SLUGS, type AuctionHouse } from '@/domain/auction-houses'
-import { DROUOT_HOUSES } from '@/infrastructure/drouot/house-configs'
+import { concurrencyFor } from '@/infrastructure/auction/concurrency'
 import type { IngestOptions } from '@/infrastructure/auction/AuctionIngester'
 
 export interface AuctionIngestArgs {
@@ -10,10 +10,7 @@ export interface AuctionIngestArgs {
 
 const HOUSES = HOUSE_SLUGS
 
-/** A Drouot-platform house sets its own lot concurrency (PBA answers 429 above 1); other houses run 3 workers. */
-function defaultConcurrency(house: AuctionHouse): number {
-  return Object.values(DROUOT_HOUSES).find((config) => config.house === house)?.concurrency ?? 3
-}
+const defaultConcurrency = concurrencyFor
 
 export function parseAuctionIngestArgs(args: string[]): AuctionIngestArgs {
   const get = (flag: string): string | undefined => {
