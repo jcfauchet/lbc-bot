@@ -1,3 +1,5 @@
+import type { AuctionHouse } from '@/domain/auction-houses'
+
 export interface EvalAuctionReferencesArgs {
   /** Listings created in the last N days are replayed. */
   days: number
@@ -5,7 +7,11 @@ export interface EvalAuctionReferencesArgs {
   verify: number
   /** Similarity thresholds compared side by side. */
   thresholds: number[]
+  /** Only auction candidates of this house are counted ('all' keeps every house). */
+  house: AuctionHouse | 'all'
 }
+
+const HOUSES: Record<string, AuctionHouse | 'all'> = { artcurial: 'ARTCURIAL', rossini: 'ROSSINI', all: 'all' }
 
 export function parseEvalAuctionReferencesArgs(args: string[]): EvalAuctionReferencesArgs {
   const get = (flag: string): string | undefined => {
@@ -29,9 +35,13 @@ export function parseEvalAuctionReferencesArgs(args: string[]): EvalAuctionRefer
   }
   const days = get('--days')
   const verify = get('--verify')
+  const rawHouse = get('--house') ?? 'all'
+  const house = Object.hasOwn(HOUSES, rawHouse) ? HOUSES[rawHouse] : undefined
+  if (!house) throw new Error(`--house must be artcurial, rossini or all, got "${rawHouse}"`)
   return {
     days: days === undefined ? 14 : integer('--days', days, 1),
     verify: verify === undefined ? 0 : integer('--verify', verify, 0),
     thresholds: (get('--thresholds') ?? '0.75,0.78,0.8').split(',').map(threshold),
+    house,
   }
 }

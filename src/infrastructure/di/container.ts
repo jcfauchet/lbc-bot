@@ -68,7 +68,9 @@ import { GeminiImageEmbeddingService } from '@/infrastructure/ai/Gemini/GeminiIm
 import { GeminiReferenceMatchVerifier } from '@/infrastructure/ai/Gemini/GeminiReferenceMatchVerifier'
 import { ArtcurialFetcher } from '@/infrastructure/artcurial/ArtcurialFetcher'
 import { ArtcurialAdapter } from '@/infrastructure/artcurial/ArtcurialAdapter'
+import { RossiniAdapter } from '@/infrastructure/rossini/RossiniAdapter'
 import { AuctionIngester } from '@/infrastructure/auction/AuctionIngester'
+import type { AuctionHouse } from '@/domain/auction-houses'
 import { RunReferenceMatchUseCase } from '@/application/use-cases/RunReferenceMatchUseCase'
 
 export class Container {
@@ -115,7 +117,7 @@ export class Container {
   public readonly runFeedbackLearningUseCase: RunFeedbackLearningUseCase
   public readonly referenceRepository: PrismaReferenceRepository
   public readonly imageEmbeddingService: GeminiImageEmbeddingService
-  public readonly artcurialIngester: AuctionIngester
+  public readonly auctionIngesters: Record<AuctionHouse, AuctionIngester>
   public readonly runReferenceMatchUseCase: RunReferenceMatchUseCase
 
   private constructor() {
@@ -161,7 +163,12 @@ export class Container {
 
     this.referenceRepository = new PrismaReferenceRepository(this.prisma)
     this.imageEmbeddingService = new GeminiImageEmbeddingService(geminiApiKey)
-    this.artcurialIngester = new AuctionIngester(new ArtcurialAdapter(new ArtcurialFetcher(), console.log), this.referenceRepository, this.imageEmbeddingService, console.log)
+    // One fetcher serves both houses: per-URL timeout and one retry, nothing house-specific.
+    const auctionFetcher = new ArtcurialFetcher()
+    this.auctionIngesters = {
+      ARTCURIAL: new AuctionIngester(new ArtcurialAdapter(auctionFetcher, console.log), this.referenceRepository, this.imageEmbeddingService, console.log),
+      ROSSINI: new AuctionIngester(new RossiniAdapter(auctionFetcher, console.log), this.referenceRepository, this.imageEmbeddingService, console.log),
+    }
     this.runReferenceMatchUseCase = new RunReferenceMatchUseCase(
       this.referenceRepository,
       this.imageEmbeddingService,

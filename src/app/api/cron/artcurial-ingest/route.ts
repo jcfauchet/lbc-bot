@@ -1,12 +1,15 @@
 import { NextResponse } from 'next/server'
 import { container } from '@/infrastructure/di/container'
 import type { IngestReport } from '@/infrastructure/auction/AuctionIngester'
+import type { AuctionHouse } from '@/domain/auction-houses'
 import { logError, logInfo } from '@/infrastructure/logger/logger'
 
-// Same ceiling as the sibling crons; the ingester stops starting lots after MAX_RUN_MS.
 export const maxDuration = 800
 
+/** Time budget of one year, shared by the houses. */
 const MAX_RUN_MS = 600_000
+
+const HOUSES: AuctionHouse[] = ['ARTCURIAL', 'ROSSINI']
 
 export async function GET(request: Request) {
   const authHeader = request.headers.get('authorization')
@@ -17,25 +20,29 @@ export async function GET(request: Request) {
 
   const today = new Date()
   const currentYear = today.getUTCFullYear()
-  // Sales closed in late December are listed in the previous year's sitemap.
   const years = today.getUTCMonth() === 0 ? [currentYear - 1, currentYear] : [currentYear]
 
-  // A year that throws is logged and reported, and does not stop the next one.
-  const reports: Array<IngestReport | { year: number; error: string }> = []
+  const reports: Array<IngestReport | { year: number; house: AuctionHouse; error: string }> = []
   for (const year of years) {
-    try {
-      const report = await container.artcurialIngester.ingest({
-        year,
-        closedBetween: { minAgeDays: 2, maxAgeDays: 45 },
-        maxRunMs: MAX_RUN_MS,
-        dryRun: false,
-        concurrency: 3,
-      })
-      logInfo('CRON:artcurial-ingest', `Year ${year} done`, report)
-      reports.push(report)
-    } catch (err) {
-      logError('CRON:artcurial-ingest', err)
-      reports.push({ year, error: String(err) })
+    const startedAt = Date.now()
+    for (const [index, house] of HOUSES.entries()) {
+      // Even split of what is left, so a house finishing early hands its unused time to the next.
+      const remaining = Math.max(0, MAX_RUN_MS - (Date.now() - startedAt))
+      const maxRunMs = Math.floor(remaining / (HOUSES.length - index))
+      try {
+        const report = await container.auctionIngesters[house].ingest({
+          year,
+          closedBetween: { minAgeDays: 2, maxAgeDays: 45 },
+          maxRunMs,
+          dryRun: false,
+          concurrency: 3,
+        })
+        logInfo('CRON:artcurial-ingest', `${house} ${year} done`, report)
+        reports.push(report)
+      } catch (err) {
+        logError('CRON:artcurial-ingest', err)
+        reports.push({ year, house, error: String(err) })
+      }
     }
   }
 

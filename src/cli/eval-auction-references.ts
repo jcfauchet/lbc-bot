@@ -4,13 +4,15 @@
  * threshold and the price ratio on real data. Read-only: nothing is recorded.
  *
  * Usage:
- *   npx tsx src/cli/eval-auction-references.ts [--days 14] [--thresholds 0.75,0.78,0.8] [--verify 0]
+ *   npx tsx src/cli/eval-auction-references.ts [--days 14] [--thresholds 0.75,0.78,0.8] [--verify 0] [--house artcurial|rossini|all]
  *
  * Pairs already judged by the matching stage (rows in reference_matches) are
  * excluded by findCandidates, so they are missing from every count.
  *
  * --verify N runs the Gemini verifier on the first N price-gated pairs at the
  * default threshold (one Gemini call each).
+ *
+ * --house keeps only the auction candidates of one house (default all).
  */
 import { container } from '@/infrastructure/di/container'
 import { prisma } from '@/infrastructure/prisma/client'
@@ -29,11 +31,11 @@ const passesPriceGate = (listing: ListingToCheck, c: ReferenceCandidate) =>
   c.auction !== null && Math.round(listing.priceCents * env.AUCTION_ALERT_RATIO) <= c.auction.hammerPerUnitCents
 
 async function main() {
-  const { days, verify, thresholds } = parseEvalAuctionReferencesArgs(process.argv.slice(2))
+  const { days, verify, thresholds, house } = parseEvalAuctionReferencesArgs(process.argv.slice(2))
   const repo = container.referenceRepository
   const listings = await repo.findRecentListingsWithEmbeddedCover(days, MAX_LISTINGS)
   console.log('Note: pairs already judged by the matching stage are excluded from every count.')
-  console.log(`${listings.length} listings from the last ${days} days with an embedded cover; ratio ${env.AUCTION_ALERT_RATIO}`)
+  console.log(`${listings.length} listings from the last ${days} days with an embedded cover; ratio ${env.AUCTION_ALERT_RATIO}; house ${house}`)
 
   const defaultThreshold = env.REFERENCE_MATCH_MIN_SIMILARITY
   const gatedPairs: Array<{ listing: ListingToCheck; candidate: ReferenceCandidate }> = []
@@ -50,7 +52,7 @@ async function main() {
         keywordMinSimilarity: env.REFERENCE_MATCH_WIDEN_SIMILARITY,
         auctionLimit: AUCTION_LIMIT,
         includeAuction: true,
-      })).filter((c) => c.source !== 'MANUAL')
+      })).filter((c) => c.source !== 'MANUAL' && (house === 'all' || c.auction?.house === house))
       timings.push(Date.now() - started)
       if (candidates.length > 0) withCandidate++
       total += candidates.length
