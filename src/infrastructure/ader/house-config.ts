@@ -16,5 +16,5 @@ export const ADER_CONFIG = {
  * plus the shared minimum of 5 lots.
  */
 export function isWantedAderSale(sale: { title: string; totalLots: number }): boolean {
-  return isWantedSale({ title: sale.title.normalize('NFKC'), totalLots: sale.totalLots }, ADER_CONFIG.wantedTitle)
+  return isWantedSale({ title: sale.title.normalize('NFKC'), totalLots: sale.totalLots }, ADER_CONFIG)
 }

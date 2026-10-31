@@ -30,13 +30,24 @@ const toAuctionCandidate = (row: AuctionCandidateRow): ReferenceCandidate => ({
     house: row.house, saleRef: row.saleRef, lotRef: row.lotRef, lotUrl: row.lotUrl, saleName: row.saleName,
     soldAt: row.soldAt, title: row.title, artist: row.artist, hammerCents: row.hammerCents,
     quantity: row.quantity, hammerPerUnitCents: row.hammerPerUnitCents,
+    finalCents: row.finalCents, hammerIsEstimated: row.hammerIsEstimated,
   },
 })
+/**
+ * Artcurial stores a real hammer next to its final price; the other adapters set
+ * `finalCents` only when they derived the hammer from a fee-inclusive result.
+ */
+const HAMMER_HOUSE: AuctionHouse = 'ARTCURIAL'
+const isHammerEstimated = (house: string, finalCents: number | null): boolean =>
+  house !== HAMMER_HOUSE && finalCents !== null
 /** `house` is a plain string column; only known houses are ever written to it. */
-const toAuctionSummary = (lot: Omit<AuctionLotSummary, 'house'> & { house: string }): AuctionLotSummary => ({
+const toAuctionSummary = (
+  lot: Omit<AuctionLotSummary, 'house' | 'hammerIsEstimated'> & { house: string },
+): AuctionLotSummary => ({
   house: lot.house as AuctionHouse, saleRef: lot.saleRef, lotRef: lot.lotRef, lotUrl: lot.lotUrl, saleName: lot.saleName,
   soldAt: lot.soldAt, title: lot.title, artist: lot.artist, hammerCents: lot.hammerCents,
   quantity: lot.quantity, hammerPerUnitCents: lot.hammerPerUnitCents,
+  finalCents: lot.finalCents, hammerIsEstimated: isHammerEstimated(lot.house, lot.finalCents),
 })
 
 export class PrismaReferenceRepository implements IReferenceRepository {
@@ -166,7 +177,8 @@ export class PrismaReferenceRepository implements IReferenceRepository {
              COALESCE(nn.sim, 0) AS "similarity", ${KEYWORD_HIT_SQL} AS "textHit",
              (SELECT ARRAY_AGG("urlRemote" ORDER BY "createdAt", "id") FROM "reference_images" WHERE "referenceId" = r."id") AS "imageUrls",
              a."house", a."saleRef", a."lotRef", a."lotUrl", a."saleName", a."soldAt", a."title", a."artist",
-             a."hammerCents", a."quantity", a."hammerPerUnitCents"
+             a."hammerCents", a."quantity", a."hammerPerUnitCents", a."finalCents",
+             (a."house" <> ${HAMMER_HOUSE} AND a."finalCents" IS NOT NULL) AS "hammerIsEstimated"
       FROM "lbc_product_listings" p
       CROSS JOIN "photo_references" r
       JOIN "auction_lots" a ON a."referenceId" = r."id"

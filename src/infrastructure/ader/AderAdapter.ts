@@ -1,7 +1,7 @@
 import { HOUSE_LABELS } from '@/domain/auction-houses'
 import type { NewAuctionLot } from '@/domain/repositories/IReferenceRepository'
 import { ClientError, type PageFetcher } from '@/infrastructure/artcurial/ArtcurialFetcher'
-import type { HouseAdapter, HouseSale } from '@/infrastructure/auction/HouseAdapter'
+import type { HouseAdapter, HouseSale, SaleFilter } from '@/infrastructure/auction/HouseAdapter'
 import { parseQuantity } from '@/infrastructure/auction/quantity'
 import { feeInclusivePriceLine } from '@/infrastructure/drouot/to-auction-reference'
 import { ADER_CONFIG, isWantedAderSale } from './house-config'
@@ -14,6 +14,12 @@ const MAX_SALE_PAGES = 40
 /** Sitemap parts are numbered -01, -02, …; no year comes close to this many. */
 const MAX_SITEMAP_PARTS = 20
 const NOTE_DESCRIPTION_MAX = 400
+
+/** An entry without a readable lastmod is never skipped. */
+function isModifiedBefore(lastmod: string | null, since: Date): boolean {
+  const time = lastmod === null ? NaN : Date.parse(lastmod)
+  return !Number.isNaN(time) && time < since.getTime()
+}
 
 interface ListedSale extends AderSalePage {
   /** Sale page URL from the sitemap, paged with ?page=N */
@@ -36,7 +42,7 @@ export class AderAdapter implements HouseAdapter {
     private readonly now: () => number = Date.now,
   ) {}
 
-  async *listSales(year: number, filter: { saleRef?: string }): AsyncGenerator<HouseSale> {
+  async *listSales(year: number, filter: SaleFilter): AsyncGenerator<HouseSale> {
     this.salesById = new Map()
     const today = new Date(this.now()).toISOString().slice(0, 10)
     for (let part = 1; part <= MAX_SITEMAP_PARTS; part++) {
@@ -44,6 +50,8 @@ export class AderAdapter implements HouseAdapter {
       if (xml === null) return
       for (const entry of parseSalesSitemap(xml)) {
         if (filter.saleRef && entry.id !== filter.saleRef) continue
+        // Without this every sale page of the year would be fetched before the window filter.
+        if (filter.modifiedSince && isModifiedBefore(entry.lastmod, filter.modifiedSince)) continue
         const sale = await this.loadSale(entry.id, entry.url)
         if (!sale || !isWantedAderSale(sale)) continue
         this.salesById.set(sale.id, sale)

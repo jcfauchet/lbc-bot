@@ -3,7 +3,7 @@
  * Turns an auction house's sold lots into photo references (hammer price, photos, embeddings).
  *
  * Usage:
- *   pnpm auction:ingest --year 2025 [--house artcurial|rossini|osenat|pba|gros-delettrez] [--sale IT6064] [--limit 50] [--dry-run] [--concurrency 3]
+ *   pnpm auction:ingest --year 2025 [--house artcurial|rossini|osenat|pba|gros-delettrez|ader] [--sale IT6064] [--limit 50] [--dry-run] [--concurrency 3]
  *
  * --house defaults to artcurial (`pnpm artcurial:ingest` runs the same script).
  * --dry-run only lists the sales that would be ingested. Re-running is safe: lots already stored are skipped.

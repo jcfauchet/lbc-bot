@@ -74,12 +74,28 @@ const alertWithAuction = (lot: Partial<AuctionLotSummary> = {}, overrides: Parti
   auction: {
     house: 'ARTCURIAL', saleRef: 'IT6064', lotRef: '415-a', lotUrl: 'https://www.artcurial.com/ventes/IT6064/lots/415-a',
     saleName: 'Design italien', soldAt: new Date('2025-03-07T00:00:00Z'), title: 'Chaise pliante Plia', artist: 'Giancarlo Piretti',
-    hammerCents: 17000, quantity: 1, hammerPerUnitCents: 17000, ...lot,
+    hammerCents: 17000, quantity: 1, hammerPerUnitCents: 17000, finalCents: 21300, hammerIsEstimated: false, ...lot,
   },
   ...overrides,
 })
 
 describe('EmailTemplates.auctionMatch', () => {
+  it('marks a hammer derived from a fee-inclusive price as estimated, in the lot and the subject', () => {
+    const { subject, html } = EmailTemplates.auctionMatch([alertWithAuction({
+      house: 'OSENAT', hammerCents: 100000, hammerPerUnitCents: 100000, finalCents: 125000, hammerIsEstimated: true,
+    })])
+    expect(subject).toBe('🔨 Vu chez Osenat à ≈ 1000 € : Chaise pliante Plia')
+    expect(html).toContain('Adjugé ≈ 1000 € (estimé ; 1250 € frais compris) le 07/03/2025')
+  })
+
+  it('keeps the plain hammer text for an Artcurial lot with a final price', () => {
+    const { subject, html } = EmailTemplates.auctionMatch([alertWithAuction()])
+    expect(subject).toBe('🔨 Vu chez Artcurial à 170 € : Chaise pliante Plia')
+    expect(html).toContain('Adjugé 170 € le 07/03/2025')
+    expect(html).not.toContain('≈')
+    expect(html).not.toContain('estimé')
+  })
+
   it('auctionMatch shows the ad price, the hammer price and the per-unit price when the lot is a set', () => {
     const { subject, html } = EmailTemplates.auctionMatch([alertWithAuction({ hammerCents: 170000, quantity: 10, hammerPerUnitCents: 17000 })])
     expect(subject).toBe('🔨 Vu chez Artcurial à 1700 € : Chaise pliante Plia')

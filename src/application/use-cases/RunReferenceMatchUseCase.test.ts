@@ -17,7 +17,7 @@ const candidate = (referenceId: string, overrides: Partial<ReferenceCandidate> =
 const auctionSummary = (lotRef: string, hammerPerUnitCents: number): AuctionLotSummary => ({
   house: 'ARTCURIAL', saleRef: 'IT6064', lotRef, lotUrl: `https://www.artcurial.com/ventes/IT6064/lots/${lotRef}`,
   saleName: 'Design', soldAt: new Date('2025-03-12T00:00:00Z'), title: `lot ${lotRef}`, artist: null,
-  hammerCents: hammerPerUnitCents, quantity: 1, hammerPerUnitCents,
+  hammerCents: hammerPerUnitCents, quantity: 1, hammerPerUnitCents, finalCents: null, hammerIsEstimated: false,
 })
 const auctionCandidate = (referenceId: string, hammerPerUnitCents: number, overrides: Partial<ReferenceCandidate> = {}): ReferenceCandidate =>
   candidate(referenceId, { source: 'AUCTION', auction: auctionSummary(referenceId, hammerPerUnitCents), ...overrides })

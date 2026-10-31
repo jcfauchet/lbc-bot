@@ -15,6 +15,7 @@ describe('parseSalesSitemap', () => {
     expect(sales[0]).toEqual({
       id: '155653',
       url: 'https://ader-paris.fr/v/155653-judaica-hebraica-collection-elie-szapiro-livres-et-tableaux',
+      lastmod: '2025-02-27T17:58:57Z',
     })
     expect(sales.map((s) => s.id)).toContain('161958')
     expect(new Set(sales.map((s) => s.id)).size).toBe(20)
@@ -24,7 +25,7 @@ describe('parseSalesSitemap', () => {
     const xml = `<urlset><url><loc>https://ader-paris.fr/v/1-a</loc>
       <xhtml:link rel="alternate" hreflang="en" href="https://ader-paris.fr/en/v/1-a"/></url>
       <url><loc>https://ader-paris.fr/l/2-b</loc></url><url><loc>https://ader-paris.fr/v/1-a</loc></url></urlset>`
-    expect(parseSalesSitemap(xml)).toEqual([{ id: '1', url: 'https://ader-paris.fr/v/1-a' }])
+    expect(parseSalesSitemap(xml)).toEqual([{ id: '1', url: 'https://ader-paris.fr/v/1-a', lastmod: null }])
   })
 })
 

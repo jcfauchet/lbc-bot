@@ -22,13 +22,18 @@ export function feeInclusivePriceLine(resultEur: number, hammerCents: number, ho
 /**
  * Null when the lot was not sold or the sale date is unknown (no sold-at date to record).
  * A fee-inclusive result is stored as finalCents and the hammer is derived with the house's
- * premium rate; the lot's own label wins over the house default.
+ * premium rate; the lot's own label wins over the house default. Throws on a fee-inclusive
+ * result when the house has no premium rate to derive the hammer with.
  */
 export function toAuctionReference(lot: DrouotLot, sale: DrouotSale, config: DrouotHouseConfig): NewAuctionLot | null {
   if (lot.resultEur === null || !(lot.resultEur > 0) || sale.date === null) return null
   const label = HOUSE_LABELS[config.house]
   const soldAt = new Date(sale.date)
   const includesFees = lot.resultIncludesFees ?? config.resultIncludesFeesByDefault
+  // Storing the shown price as the hammer would inflate it: fail the lot so it is logged.
+  if (includesFees && config.premiumRate === 0) {
+    throw new Error(`fee-inclusive result but no premium rate configured for ${config.house}`)
+  }
   const shownCents = Math.round(lot.resultEur * 100)
   const finalCents = includesFees ? shownCents : null
   const hammerCents = includesFees ? Math.round(shownCents / (1 + config.premiumRate)) : shownCents

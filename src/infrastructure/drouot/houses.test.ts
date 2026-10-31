@@ -36,7 +36,10 @@ const CASES: HouseCase[] = [
     prefix: 'pba',
     saleId: '168549',
     keptTitles: ['Intérieur classique #5', 'Les appartements du XVIe #10', 'Intérieur Contemporain #7'],
-    droppedTitles: ['Montres #2', 'Livres, manuscrits & autographes #4', "Arts d'Asie #3 - Catalogue"],
+    droppedTitles: [
+      'Montres #2', 'Livres, manuscrits & autographes #4', "Arts d'Asie #3 - Catalogue",
+      'Montres de collection', 'Bijoux & Montres', 'Design & Horlogerie',
+    ],
     catalogueTotal: 61,
     lot: { id: '30846455', number: '1', resultEur: 4409, includesFees: true, hammerCents: 339154, finalCents: 440900 },
   },
@@ -65,9 +68,9 @@ describe.each(CASES)('$house fixtures', ({ house, prefix, saleId, keptTitles, dr
   })
 
   it('keeps furniture sales and drops jewellery, watch, wine and book sales', () => {
-    for (const title of keptTitles) expect(isWantedSale({ title }, config.wantedTitle), title).toBe(true)
-    for (const title of droppedTitles) expect(isWantedSale({ title }, config.wantedTitle), title).toBe(false)
-    const kept = sales.filter((s) => isWantedSale({ title: s.title }, config.wantedTitle))
+    for (const title of keptTitles) expect(isWantedSale({ title }, config), title).toBe(true)
+    for (const title of droppedTitles) expect(isWantedSale({ title }, config), title).toBe(false)
+    const kept = sales.filter((s) => isWantedSale({ title: s.title }, config))
     expect(kept.length).toBeGreaterThan(0)
     expect(kept.length).toBeLessThan(sales.length)
     expect(kept.map((s) => s.id)).toContain(saleId)

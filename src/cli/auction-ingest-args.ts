@@ -8,10 +8,6 @@ export interface AuctionIngestArgs {
   options: IngestOptions
 }
 
-const HOUSES = HOUSE_SLUGS
-
-const defaultConcurrency = concurrencyFor
-
 export function parseAuctionIngestArgs(args: string[]): AuctionIngestArgs {
   const get = (flag: string): string | undefined => {
     const i = args.indexOf(flag)
@@ -25,8 +21,8 @@ export function parseAuctionIngestArgs(args: string[]): AuctionIngestArgs {
     return value
   }
   const rawHouse = get('--house') ?? 'artcurial'
-  const house = Object.hasOwn(HOUSES, rawHouse) ? HOUSES[rawHouse] : undefined
-  if (!house) throw new Error(`--house must be one of ${Object.keys(HOUSES).join(', ')}, got "${rawHouse}"`)
+  const house = Object.hasOwn(HOUSE_SLUGS, rawHouse) ? HOUSE_SLUGS[rawHouse] : undefined
+  if (!house) throw new Error(`--house must be one of ${Object.keys(HOUSE_SLUGS).join(', ')}, got "${rawHouse}"`)
   const limit = get('--limit')
   const concurrency = get('--concurrency')
   return {
@@ -36,7 +32,7 @@ export function parseAuctionIngestArgs(args: string[]): AuctionIngestArgs {
       saleRef: get('--sale'),
       limit: limit === undefined ? undefined : positiveInt('--limit', limit),
       dryRun: args.includes('--dry-run'),
-      concurrency: concurrency === undefined ? defaultConcurrency(house) : positiveInt('--concurrency', concurrency),
+      concurrency: concurrency === undefined ? concurrencyFor(house) : positiveInt('--concurrency', concurrency),
     },
   }
 }

@@ -63,6 +63,23 @@ describe('AderAdapter.listSales', () => {
     'https://ader-paris.fr/v/4-design': salePage('4', 'Design', 'Jeudi 5 novembre 2026 à 14h00', 80),
   }
 
+  it('skips a sitemap entry modified before modifiedSince without fetching its page', async () => {
+    const entry = (url: string, lastmod?: string) =>
+      `<url><loc>${url}</loc>${lastmod ? `<lastmod>${lastmod}</lastmod>` : ''}</url>`
+    const { adapter, fetched } = setup({
+      [sitemapUrl(2026, 1)]: `<urlset>${[
+        entry('https://ader-paris.fr/v/4-design', '2026-10-01T09:00:00Z'),
+        entry('https://ader-paris.fr/v/5-old', '2026-08-01T09:00:00Z'),
+        entry('https://ader-paris.fr/v/6-nodate'),
+      ].join('')}</urlset>`,
+      'https://ader-paris.fr/v/4-design': salePage('4', 'Design', 'Jeudi 1 octobre 2026 à 14h00', 80),
+      'https://ader-paris.fr/v/6-nodate': salePage('6', 'Mobilier', 'Jeudi 1 octobre 2026 à 14h00', 80),
+    }, [sitemapUrl(2026, 2)])
+    const sales = await collect(adapter.listSales(2026, { modifiedSince: new Date('2026-09-16T10:00:00Z') }))
+    expect(sales.map((s) => s.ref)).toEqual(['4', '6'])
+    expect(fetched).not.toContain('https://ader-paris.fr/v/5-old')
+  })
+
   it('reads every sitemap part and keeps the wanted sales of 5 lots or more', async () => {
     const { adapter, fetched } = setup(yearPages, [sitemapUrl(2026, 3)])
     const sales = await collect(adapter.listSales(2026, {}))

@@ -1,11 +1,14 @@
 import { stripHtml } from '../artcurial/parse-lot-page'
 import type { DrouotLot } from './types'
 
+/** CDN size variants a lot page may link; the host id and the hashes are read from the same set. */
+const PHOTO_VARIANTS = '(?:phare|small|full|fullHD)'
+
 const toNumber = (digits: string): number => Number(digits.replace(/[\s ]/g, ''))
 
 /** "avec" -> true, "sans" -> false, no label -> null. Read from the lot's result block only. */
 function parseFeesLabel(html: string): boolean | null {
-  const label = /class="explicationResultats"[^>]*>\s*Résultats?\s+(avec|sans)\s+frais/i.exec(html)?.[1]
+  const label = /class="[^"]*\bexplicationResultats\b[^"]*"[^>]*>\s*Résultats?\s+(avec|sans)\s+frais/i.exec(html)?.[1]
   return label === undefined ? null : label.toLowerCase() === 'avec'
 }
 
@@ -28,11 +31,11 @@ export function parseLotPage(html: string): DrouotLot | null {
   // The CDN house id comes from the photos of the lot's own sale; ids of other sales
   // (related lots, banners) are ignored.
   const photoHostId =
-    new RegExp(`cdn\\.drouot\\.com/d/lot/(?:phare|small|fullHD)/(\\d+)/${saleId}/[0-9a-f]{32}`).exec(html)?.[1] ?? null
+    new RegExp(`cdn\\.drouot\\.com/d/lot/${PHOTO_VARIANTS}/(\\d+)/${saleId}/[0-9a-f]{32}`).exec(html)?.[1] ?? null
   const photoHashes = new Set<string>()
   if (photoHostId) {
     const photoPattern = new RegExp(
-      `cdn\\.drouot\\.com/d/lot/(?:phare|small)/${photoHostId}/${saleId}/([0-9a-f]{32})`,
+      `cdn\\.drouot\\.com/d/lot/${PHOTO_VARIANTS}/${photoHostId}/${saleId}/([0-9a-f]{32})`,
       'g',
     )
     for (const match of html.matchAll(photoPattern)) photoHashes.add(match[1])

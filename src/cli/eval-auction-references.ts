@@ -4,7 +4,7 @@
  * threshold and the price ratio on real data. Read-only: nothing is recorded.
  *
  * Usage:
- *   npx tsx src/cli/eval-auction-references.ts [--days 14] [--thresholds 0.75,0.78,0.8] [--verify 0] [--house artcurial|rossini|all]
+ *   npx tsx src/cli/eval-auction-references.ts [--days 14] [--thresholds 0.75,0.78,0.8] [--verify 0] [--house artcurial|rossini|osenat|pba|gros-delettrez|ader|all]
  *
  * Pairs already judged by the matching stage (rows in reference_matches) are
  * excluded by findCandidates, so they are missing from every count.

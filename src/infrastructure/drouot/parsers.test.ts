@@ -13,7 +13,7 @@ const yearHtml = fixture('year-2025.html')
 const cataloguePage1 = fixture('catalogue-186362-p1.html')
 const cataloguePage2 = fixture('catalogue-186362-p2.html')
 const lotHtml = fixture('lot-180689-34122319.html')
-const ROSSINI_WANTED = DROUOT_HOUSES.ROSSINI.wantedTitle
+const ROSSINI_WANTED = DROUOT_HOUSES.ROSSINI
 
 describe('drouot-platform parsers (rossini fixtures)', () => {
   it('parses the sales of a year page', () => {
@@ -101,6 +101,22 @@ describe('drouot-platform parsers (rossini fixtures)', () => {
     expect(lot.photoHashes).toEqual([])
   })
 
+  it('reads the fees label when its block carries other classes', () => {
+    const html = lotHtml.replace('class="explicationResultats"', 'class="explicationResultats foo"')
+    expect(html).not.toBe(lotHtml)
+    expect(parseLotPage(html.replace('Résultats sans frais', 'Résultats avec frais'))!.resultIncludesFees).toBe(true)
+  })
+
+  it('reads the host id and the hashes from a page linking only fullHD photos', () => {
+    const hashes = ['a'.repeat(32), 'c'.repeat(32)]
+    const html = lotHtml
+      .replace(/cdn\.drouot\.com\/d\/lot\/(phare|small|full|fullHD)\/62\/180689\/[0-9a-f]{32}/g, '')
+      .replace('</body>', `${hashes.map((h) => `<img src="https://cdn.drouot.com/d/lot/fullHD/62/180689/${h}">`).join('')}</body>`)
+    const lot = parseLotPage(html)!
+    expect(lot.photoHostId).toBe('62')
+    expect(lot.photoHashes).toEqual(hashes)
+  })
+
   it('returns a null result when the lot has no Résultat line', () => {
     const html = lotHtml.replace(/Résultat\s*:\s*<nobr>[^<]*<\/nobr>/, '')
     expect(html).not.toBe(lotHtml)
@@ -131,5 +147,13 @@ describe('drouot-platform parsers (rossini fixtures)', () => {
     expect(isWantedSale({ title: 'Art Moderne & Intérieurs contemporains' }, ROSSINI_WANTED)).toBe(true)
     expect(isWantedSale({ title: 'Mobilier', totalLots: 3 }, ROSSINI_WANTED)).toBe(false)
     expect(isWantedSale({ title: 'Mobilier', totalLots: 5 }, ROSSINI_WANTED)).toBe(true)
+  })
+
+  it('vetoes a kept title naming an unwanted specialty unless it names furniture or art objects', () => {
+    expect(isWantedSale({ title: 'Design & Montres' }, ROSSINI_WANTED)).toBe(false)
+    expect(isWantedSale({ title: 'Intérieurs, Vins & Spiritueux' }, ROSSINI_WANTED)).toBe(false)
+    expect(isWantedSale({ title: "Livres, Timbres, Mobilier, Objets d'Art" }, ROSSINI_WANTED)).toBe(true)
+    expect(isWantedSale({ title: "Bijoux & Objets d'art" }, ROSSINI_WANTED)).toBe(true)
+    expect(isWantedSale({ title: 'Design moderne' }, ROSSINI_WANTED)).toBe(true)
   })
 })

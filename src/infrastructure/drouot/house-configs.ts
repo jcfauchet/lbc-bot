@@ -13,9 +13,18 @@ export interface DrouotHouseConfig {
   resultIncludesFeesByDefault: boolean
   /** A sale is kept when its title matches. */
   wantedTitle: RegExp
+  /** Vetoes a kept title, except one naming "mobilier" or "objets d'art" (see isWantedSale). */
+  unwantedTitle?: RegExp
   /** Lot-level concurrency hint for the ingest. */
   concurrency: number
 }
+
+/**
+ * Watch, jewellery, wine, book, coin, poster, fashion, car and toy sales. Word-bounded so
+ * "mode" does not veto "Art Moderne" nor "vins" a "Provins" sale.
+ */
+const UNWANTED_TITLE =
+  /\b(?:montres?|horlogerie|bijoux|joaillerie|vins?|spiritueux|numismatique|monnaies|timbres|autographes|livres|affiches|photographies?|mode|maroquinerie|automobiles?|jouets)\b/i
 
 export type DrouotHouse = 'ROSSINI' | 'OSENAT' | 'PBA' | 'GROS_DELETTREZ'
 
@@ -36,6 +45,7 @@ export const DROUOT_HOUSES: Record<DrouotHouse, DrouotHouseConfig> = {
     // sale whose cognac bottles became references. Mixed sales still qualify through
     // the other words ("Livres, Timbres, Mobilier, Objets d'Art & Arts de la Table").
     wantedTitle: /mobilier|objets? d.art|intérieurs?|design|classiques de rossini|collections classiques/i,
+    unwantedTitle: UNWANTED_TITLE,
     concurrency: 3,
   },
   OSENAT: {
@@ -45,6 +55,7 @@ export const DROUOT_HOUSES: Record<DrouotHouse, DrouotHouseConfig> = {
     premiumRate: 0.28,
     resultIncludesFeesByDefault: true,
     wantedTitle: /mobilier|objets? d.art|intérieurs?|esprit du xi?xe|grands siècles|empire|royauté|design|arts? décoratifs/i,
+    unwantedTitle: UNWANTED_TITLE,
     concurrency: 3,
   },
   PBA: {
@@ -53,7 +64,9 @@ export const DROUOT_HOUSES: Record<DrouotHouse, DrouotHouseConfig> = {
     resultsPath: 'resultats',
     premiumRate: 0.3,
     resultIncludesFeesByDefault: true,
-    wantedTitle: /intérieur|appartements|mobilier|objets? d.art|design|arts? décoratifs|collection/i,
+    // No bare "collection": it kept "Montres de collection" and the like.
+    wantedTitle: /intérieur|appartements|mobilier|objets? d.art|design|arts? décoratifs/i,
+    unwantedTitle: UNWANTED_TITLE,
     // PBA answered 429 during the recon: one lot at a time.
     concurrency: 1,
   },
@@ -64,6 +77,7 @@ export const DROUOT_HOUSES: Record<DrouotHouse, DrouotHouseConfig> = {
     premiumRate: 0.3,
     resultIncludesFeesByDefault: true,
     wantedTitle: /arts? décoratifs|mobilier|objets? d.art|design/i,
+    unwantedTitle: UNWANTED_TITLE,
     concurrency: 3,
   },
 }

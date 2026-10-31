@@ -1,7 +1,7 @@
 import type { AuctionHouse } from '@/domain/auction-houses'
 import type { IReferenceRepository } from '@/domain/repositories/IReferenceRepository'
 import type { IImageEmbeddingService } from '@/domain/services/IImageEmbeddingService'
-import type { HouseAdapter, HouseSale } from './HouseAdapter'
+import type { HouseAdapter, HouseSale, SaleFilter } from './HouseAdapter'
 
 export interface IngestOptions {
   year: number
@@ -56,7 +56,10 @@ export class AuctionIngester {
     const startedAt = this.now()
     const jobs: LotJob[] = []
     // Iterated by hand so the budget is checked before the adapter fetches the next sale's page.
-    const sales = this.adapter.listSales(options.year, { saleRef: options.saleRef })[Symbol.asyncIterator]()
+    const filter: SaleFilter = { saleRef: options.saleRef }
+    // A sale untouched since before the window opened cannot have closed inside it.
+    if (options.closedBetween) filter.modifiedSince = new Date(startedAt - options.closedBetween.maxAgeDays * DAY_MS)
+    const sales = this.adapter.listSales(options.year, filter)[Symbol.asyncIterator]()
     for (;;) {
       if (options.maxRunMs !== undefined && this.now() - startedAt >= options.maxRunMs) {
         report.stoppedByBudget = true

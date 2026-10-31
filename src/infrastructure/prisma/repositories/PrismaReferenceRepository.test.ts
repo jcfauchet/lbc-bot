@@ -26,7 +26,7 @@ const auctionRow = {
   similarity: 0.74, textHit: true, imageUrls: ['https://ref/a1.jpg'],
   house: 'ARTCURIAL', saleRef: 'IT6064', lotRef: '278-a', lotUrl: 'https://lot', saleName: 'Design',
   soldAt: new Date('2026-05-12T00:00:00Z'), title: 'Paire de fauteuils', artist: 'Jean Royère',
-  hammerCents: 220000, quantity: 2, hammerPerUnitCents: 110000,
+  hammerCents: 220000, quantity: 2, hammerPerUnitCents: 110000, finalCents: 275000, hammerIsEstimated: false,
 }
 
 describe('PrismaReferenceRepository', () => {
@@ -93,9 +93,47 @@ describe('PrismaReferenceRepository', () => {
     expect(res[1].auction).toEqual({
       house: 'ARTCURIAL', saleRef: 'IT6064', lotRef: '278-a', lotUrl: 'https://lot', saleName: 'Design',
       soldAt: new Date('2026-05-12T00:00:00Z'), title: 'Paire de fauteuils', artist: 'Jean Royère',
-      hammerCents: 220000, quantity: 2, hammerPerUnitCents: 110000,
+      hammerCents: 220000, quantity: 2, hammerPerUnitCents: 110000, finalCents: 275000, hammerIsEstimated: false,
     })
     expect(res[1].similarity).toBe(0.74)
+    expect(auctionSql).toContain(`a."finalCents" IS NOT NULL) AS "hammerIsEstimated"`)
+    expect(queryRaw.mock.calls[1]).toContain('ARTCURIAL')
+  })
+
+  it('findCandidates maps an estimated hammer from the auction query', async () => {
+    const queryRaw = vi.fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ ...auctionRow, house: 'OSENAT', finalCents: 125000, hammerIsEstimated: true }])
+    const res = await new PrismaReferenceRepository({ $queryRaw: queryRaw } as any).findCandidates('l1', { minSimilarity: 0.78, keywordMinSimilarity: 0.7, auctionLimit: 3, includeAuction: true })
+    expect(res[0].auction).toMatchObject({ house: 'OSENAT', finalCents: 125000, hammerIsEstimated: true })
+  })
+
+  describe('findPendingAlerts', () => {
+    const match = (auctionLot: Record<string, unknown>) => ({
+      id: 'm1', listingId: 'l1', reason: 'same frame', similarity: 0.8,
+      reference: { name: 'ref', source: 'AUCTION', images: [], auctionLot },
+      listing: { title: 'Fauteuil', url: 'https://lbc/l1', priceCents: 12000, city: 'Lyon', images: [] },
+    })
+    const lot = { ...newLot().lot, id: 'lot1', referenceId: 'a1' }
+    const alertsFor = async (auctionLot: Record<string, unknown>) => {
+      const findMany = vi.fn(async () => [match(auctionLot)])
+      return new PrismaReferenceRepository({ referenceMatch: { findMany } } as any).findPendingAlerts()
+    }
+
+    it('keeps an Artcurial hammer as real even with a final price', async () => {
+      const [alert] = await alertsFor(lot)
+      expect(alert.auction).toMatchObject({ house: 'ARTCURIAL', finalCents: 275000, hammerIsEstimated: false })
+    })
+
+    it('flags a hammer derived from a fee-inclusive price as estimated', async () => {
+      const [alert] = await alertsFor({ ...lot, house: 'OSENAT', finalCents: 125000 })
+      expect(alert.auction).toMatchObject({ house: 'OSENAT', finalCents: 125000, hammerIsEstimated: true })
+    })
+
+    it('keeps a hammer-only result from another house as real', async () => {
+      const [alert] = await alertsFor({ ...lot, house: 'ROSSINI', finalCents: null })
+      expect(alert.auction).toMatchObject({ house: 'ROSSINI', finalCents: null, hammerIsEstimated: false })
+    })
   })
 
   it('countAuctionVerificationsSince counts matches of every non-manual reference', async () => {

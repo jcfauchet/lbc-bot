@@ -14,6 +14,16 @@ export interface HouseSale {
   label?: string
 }
 
+export interface SaleFilter {
+  saleRef?: string
+  /**
+   * Sales whose listing entry says they were last modified before this date cannot have
+   * closed after it; an adapter that can tell (Ader's sitemap `<lastmod>`) skips them
+   * without fetching their page. Others may ignore it.
+   */
+  modifiedSince?: Date
+}
+
 /** Everything house-specific the AuctionIngester needs: which sales to take, their lots, and how to read a lot page. */
 export interface HouseAdapter {
   readonly house: AuctionHouse
@@ -23,7 +33,7 @@ export interface HouseAdapter {
    * stops iterating (time budget) stops fetching. A sale whose ref differs from `filter.saleRef`
    * is skipped before any fetch; a sale page that fails is logged and skipped.
    */
-  listSales(year: number, filter: { saleRef?: string }): AsyncIterable<HouseSale>
+  listSales(year: number, filter: SaleFilter): AsyncIterable<HouseSale>
   /** Lot page URLs of a sale yielded by the current `listSales` iteration. */
   listLotUrls(sale: HouseSale): Promise<string[]>
   lotRefFromUrl(url: string): string

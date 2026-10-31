@@ -15,6 +15,13 @@ export interface AuctionLotSummary {
   hammerCents: number
   quantity: number
   hammerPerUnitCents: number
+  /** Fee-inclusive price as published, or null when the house only published the hammer. */
+  finalCents: number | null
+  /**
+   * True when `hammerCents` was derived from a fee-inclusive price (any house but
+   * Artcurial with a `finalCents`); Artcurial publishes both a real hammer and a final price.
+   */
+  hammerIsEstimated: boolean
 }
 export interface PhotoReferenceSummary {
   id: string
@@ -70,12 +77,11 @@ export interface NewAuctionLot {
   note: string
   keywords: string[]
   imageUrls: string[]
-  lot: AuctionLotSummary & {
+  lot: Omit<AuctionLotSummary, 'hammerIsEstimated'> & {
     artistYears: string | null
     description: string
     estimateLowCents: number | null
     estimateHighCents: number | null
-    finalCents: number | null
   }
 }
 export interface AuctionFundStats {

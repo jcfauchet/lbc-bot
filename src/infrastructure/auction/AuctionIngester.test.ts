@@ -205,6 +205,17 @@ describe('AuctionIngester cron options', () => {
     expect(report.salesKept).toEqual(['MID10'])
     expect(fetchedLots).toEqual([lotUrl('MID10', 1), lotUrl('MID10', 2)])
   })
+  it('asks the adapter for sales modified since the window opened', async () => {
+    const { ingester, adapter } = setup(sales)
+    await ingester.ingest({ year, dryRun: true, concurrency: 1, closedBetween: { minAgeDays: 2, maxAgeDays: 45 } })
+    expect(adapter.listSales).toHaveBeenCalledWith(year, { saleRef: undefined, modifiedSince: new Date(NOW - 45 * DAY) })
+  })
+  it('passes no modification date when no window is given', async () => {
+    const { ingester, adapter } = setup(sales)
+    await ingester.ingest({ year, dryRun: true, concurrency: 1 })
+    const filter = vi.mocked(adapter.listSales).mock.calls[0][1]
+    expect(filter.modifiedSince).toBeUndefined()
+  })
   it('skips sales without a date when a window is given', async () => {
     const { ingester } = setup({ NEW1: { closedAt: null }, MID10: { closedAt: iso(10) }, OLD60: { closedAt: iso(60) } })
     const report = await ingester.ingest({ year, dryRun: false, concurrency: 1, closedBetween: { minAgeDays: 2, maxAgeDays: 45 } })

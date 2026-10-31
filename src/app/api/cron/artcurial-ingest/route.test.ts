@@ -85,9 +85,16 @@ describe('GET /api/cron/artcurial-ingest', () => {
 
   it('gives later houses what an early one left unused', async () => {
     vi.setSystemTime(new Date('2026-10-30T04:00:00Z'))
+    ingest.ROSSINI.mockImplementationOnce(async () => {
+      vi.setSystemTime(new Date('2026-10-30T04:00:30Z'))
+      return report('ROSSINI')
+    })
     await GET(request('secret'))
-    const budgets = calls().map((c) => c.options.maxRunMs)
-    expect(budgets.at(-1)).toBe(600_000)
+    const [rossini, osenat] = calls()
+    expect(rossini.house).toBe('ROSSINI')
+    expect(osenat.house).toBe('OSENAT')
+    // 600 000 ms minus the 30 s ROSSINI spent, shared by the 5 houses left.
+    expect(osenat.options.maxRunMs).toBe(114_000)
   })
 
   it('gives the remaining slots no time once the first one overran the whole budget', async () => {

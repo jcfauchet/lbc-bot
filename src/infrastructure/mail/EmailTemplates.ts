@@ -1,7 +1,7 @@
 import { Listing } from '@/domain/entities/Listing'
 import { AiAnalysis } from '@/domain/entities/AiAnalysis'
 import { env } from '@/infrastructure/config/env'
-import type { PendingAlert } from '@/domain/repositories/IReferenceRepository'
+import type { AuctionLotSummary, PendingAlert } from '@/domain/repositories/IReferenceRepository'
 import { houseLabel } from '@/domain/auction-houses'
 import { referencesPageUrl } from './references-link'
 import type { WeeklyReport } from '@/application/use-cases/RunWeeklyReportUseCase'
@@ -185,14 +185,20 @@ export class EmailTemplates {
     const euros = (cents: number) => `${Math.round(cents / 100)} €`
     const day = (d: Date) =>
       `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${d.getUTCFullYear()}`
+    // A hammer derived from a fee-inclusive price is an estimate, never shown as the real one.
+    const hammerText = (lot: AuctionLotSummary) =>
+      lot.hammerIsEstimated ? `≈ ${euros(lot.hammerCents)}` : euros(lot.hammerCents)
     const lots = alerts.map((alert) => {
       const lot = alert.auction
       if (!lot) return ''
       const perUnit = lot.quantity > 1 ? ` (${euros(lot.hammerPerUnitCents)} la pièce, lot de ${lot.quantity})` : ''
+      const estimated = lot.hammerIsEstimated && lot.finalCents !== null
+        ? ` (estimé ; ${euros(lot.finalCents)} frais compris)`
+        : ''
       return `
   <div style="margin: 12px 0; padding: 12px; border: 1px solid #eee; border-radius: 8px;">
     <p style="margin: 0; font-weight: bold;">${escapeHtml(lot.artist ? `${lot.artist}, ${lot.title}` : lot.title)}</p>
-    <p style="margin: 2px 0;">Adjugé ${euros(lot.hammerCents)} le ${day(lot.soldAt)}${perUnit}</p>
+    <p style="margin: 2px 0;">Adjugé ${hammerText(lot)}${estimated} le ${day(lot.soldAt)}${perUnit}</p>
     <p style="margin: 2px 0; color: #666;">${escapeHtml(lot.saleName)}</p>
     <p style="margin: 2px 0;"><a href="${escapeUrl(lot.lotUrl)}" style="color: #0066cc; text-decoration: none;">Voir le lot</a></p>
     ${alert.reason ? `<p style="margin: 6px 0 0 0; color: #333;"><strong>Pourquoi :</strong> ${escapeHtml(alert.reason)}</p>` : ''}
@@ -221,7 +227,7 @@ export class EmailTemplates {
   ${EmailTemplates.matchVoteLine(best.listingId)}
 </body>
 </html>`
-    const hammer = best.auction ? euros(best.auction.hammerCents) : ''
+    const hammer = best.auction ? hammerText(best.auction) : ''
     return { subject: `🔨 Vu chez ${house} à ${hammer} : ${best.listingTitle}`, html }
   }
 

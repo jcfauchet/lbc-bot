@@ -39,7 +39,7 @@ export class DrouotPlatformAdapter implements HouseAdapter {
     const today = new Date(this.now()).toISOString().slice(0, 10)
     for (const sale of sales) {
       if (filter.saleRef && sale.id !== filter.saleRef) continue
-      if (!isWantedSale({ title: sale.title }, this.config.wantedTitle)) continue
+      if (!isWantedSale({ title: sale.title }, this.config)) continue
       this.salesById.set(sale.id, sale)
       yield {
         ref: sale.id,
