@@ -3,9 +3,9 @@ import type { DrouotLot } from './types'
 
 const toNumber = (digits: string): number => Number(digits.replace(/[\s ]/g, ''))
 
-/** "avec" -> true, "sans" -> false, no label -> null. */
+/** "avec" -> true, "sans" -> false, no label -> null. Read from the lot's result block only. */
 function parseFeesLabel(html: string): boolean | null {
-  const label = /Résultats?\s+(avec|sans)\s+frais/i.exec(html)?.[1]
+  const label = /class="explicationResultats"[^>]*>\s*Résultats?\s+(avec|sans)\s+frais/i.exec(html)?.[1]
   return label === undefined ? null : label.toLowerCase() === 'avec'
 }
 

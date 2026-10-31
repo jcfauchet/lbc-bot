@@ -4,7 +4,8 @@
  */
 export function parseCataloguePage(html: string, saleId: string): { lotUrls: string[]; total: number } {
   const lotUrls = new Set<string>()
-  for (const match of html.matchAll(/href="(?:https:\/\/www\.rossini\.fr)?\/lot\/(\d+)\/(\d+)[^"]*"/g)) {
+  // Relative or absolute (any host) links; the sale id guard is what keeps other sales out.
+  for (const match of html.matchAll(/href="(?:https?:\/\/[^\/"]+)?\/lot\/(\d+)\/(\d+)[^"]*"/g)) {
     if (match[1] === saleId) lotUrls.add(`/lot/${match[1]}/${match[2]}`)
   }
   const total = /Lots\s+\d+\s+à\s+\d+\s+sur\s+([\d\s ]+)/.exec(html)

@@ -17,6 +17,20 @@ describe('parseAuctionIngestArgs', () => {
   it('parses --house artcurial', () => {
     expect(parseAuctionIngestArgs(['--year', '2025', '--house', 'artcurial']).house).toBe('ARTCURIAL')
   })
+  it.each([
+    ['osenat', 'OSENAT'],
+    ['pba', 'PBA'],
+    ['gros-delettrez', 'GROS_DELETTREZ'],
+    ['rossini', 'ROSSINI'],
+    ['artcurial', 'ARTCURIAL'],
+  ])('parses --house %s', (slug, house) => {
+    expect(parseAuctionIngestArgs(['--year', '2025', '--house', slug]).house).toBe(house)
+  })
+  it('defaults the concurrency to the house config (PBA 1, others 3) unless --concurrency is given', () => {
+    expect(parseAuctionIngestArgs(['--year', '2025', '--house', 'pba']).options.concurrency).toBe(1)
+    expect(parseAuctionIngestArgs(['--year', '2025', '--house', 'osenat']).options.concurrency).toBe(3)
+    expect(parseAuctionIngestArgs(['--year', '2025', '--house', 'pba', '--concurrency', '2']).options.concurrency).toBe(2)
+  })
   it('rejects an unknown --house', () => {
     expect(() => parseAuctionIngestArgs(['--year', '2025', '--house', 'foo'])).toThrow(/--house/)
   })

@@ -1,4 +1,4 @@
-import type { AuctionHouse } from '@/domain/auction-houses'
+import { HOUSE_SLUGS, type AuctionHouse } from '@/domain/auction-houses'
 
 export interface EvalAuctionReferencesArgs {
   /** Listings created in the last N days are replayed. */
@@ -11,7 +11,7 @@ export interface EvalAuctionReferencesArgs {
   house: AuctionHouse | 'all'
 }
 
-const HOUSES: Record<string, AuctionHouse | 'all'> = { artcurial: 'ARTCURIAL', rossini: 'ROSSINI', all: 'all' }
+const HOUSES: Record<string, AuctionHouse | 'all'> = { ...HOUSE_SLUGS, all: 'all' }
 
 export function parseEvalAuctionReferencesArgs(args: string[]): EvalAuctionReferencesArgs {
   const get = (flag: string): string | undefined => {
@@ -37,7 +37,7 @@ export function parseEvalAuctionReferencesArgs(args: string[]): EvalAuctionRefer
   const verify = get('--verify')
   const rawHouse = get('--house') ?? 'all'
   const house = Object.hasOwn(HOUSES, rawHouse) ? HOUSES[rawHouse] : undefined
-  if (!house) throw new Error(`--house must be artcurial, rossini or all, got "${rawHouse}"`)
+  if (!house) throw new Error(`--house must be one of ${Object.keys(HOUSES).join(', ')}, got "${rawHouse}"`)
   return {
     days: days === undefined ? 14 : integer('--days', days, 1),
     verify: verify === undefined ? 0 : integer('--verify', verify, 0),

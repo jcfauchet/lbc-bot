@@ -1,4 +1,5 @@
-import type { AuctionHouse } from '@/domain/auction-houses'
+import { HOUSE_SLUGS, type AuctionHouse } from '@/domain/auction-houses'
+import { DROUOT_HOUSES } from '@/infrastructure/drouot/house-configs'
 import type { IngestOptions } from '@/infrastructure/auction/AuctionIngester'
 
 export interface AuctionIngestArgs {
@@ -7,7 +8,12 @@ export interface AuctionIngestArgs {
   options: IngestOptions
 }
 
-const HOUSES: Record<string, AuctionHouse> = { artcurial: 'ARTCURIAL', rossini: 'ROSSINI' }
+const HOUSES = HOUSE_SLUGS
+
+/** A Drouot-platform house sets its own lot concurrency (PBA answers 429 above 1); other houses run 3 workers. */
+function defaultConcurrency(house: AuctionHouse): number {
+  return Object.values(DROUOT_HOUSES).find((config) => config.house === house)?.concurrency ?? 3
+}
 
 export function parseAuctionIngestArgs(args: string[]): AuctionIngestArgs {
   const get = (flag: string): string | undefined => {
@@ -23,7 +29,7 @@ export function parseAuctionIngestArgs(args: string[]): AuctionIngestArgs {
   }
   const rawHouse = get('--house') ?? 'artcurial'
   const house = Object.hasOwn(HOUSES, rawHouse) ? HOUSES[rawHouse] : undefined
-  if (!house) throw new Error(`--house must be artcurial or rossini, got "${rawHouse}"`)
+  if (!house) throw new Error(`--house must be one of ${Object.keys(HOUSES).join(', ')}, got "${rawHouse}"`)
   const limit = get('--limit')
   const concurrency = get('--concurrency')
   return {
@@ -33,7 +39,7 @@ export function parseAuctionIngestArgs(args: string[]): AuctionIngestArgs {
       saleRef: get('--sale'),
       limit: limit === undefined ? undefined : positiveInt('--limit', limit),
       dryRun: args.includes('--dry-run'),
-      concurrency: concurrency === undefined ? 3 : positiveInt('--concurrency', concurrency),
+      concurrency: concurrency === undefined ? defaultConcurrency(house) : positiveInt('--concurrency', concurrency),
     },
   }
 }

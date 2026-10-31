@@ -18,6 +18,13 @@ describe('parseEvalAuctionReferencesArgs', () => {
     expect(parseEvalAuctionReferencesArgs(['--house', 'all']).house).toBe('all')
   })
   it.each([
+    ['osenat', 'OSENAT'],
+    ['pba', 'PBA'],
+    ['gros-delettrez', 'GROS_DELETTREZ'],
+  ])('parses --house %s', (slug, house) => {
+    expect(parseEvalAuctionReferencesArgs(['--house', slug]).house).toBe(house)
+  })
+  it.each([
     [['--house', 'foo']],
     [['--days', 'abc']],
     [['--days', '0']],

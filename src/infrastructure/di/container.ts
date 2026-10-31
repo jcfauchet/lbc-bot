@@ -169,7 +169,14 @@ export class Container {
     const auctionFetcher = new ArtcurialFetcher()
     this.auctionIngesters = {
       ARTCURIAL: new AuctionIngester(new ArtcurialAdapter(auctionFetcher, console.log), this.referenceRepository, this.imageEmbeddingService, console.log),
-      ROSSINI: new AuctionIngester(new DrouotPlatformAdapter(DROUOT_HOUSES.ROSSINI, auctionFetcher, console.log), this.referenceRepository, this.imageEmbeddingService, console.log),
+    }
+    for (const config of Object.values(DROUOT_HOUSES)) {
+      this.auctionIngesters[config.house] = new AuctionIngester(
+        new DrouotPlatformAdapter(config, auctionFetcher, console.log),
+        this.referenceRepository,
+        this.imageEmbeddingService,
+        console.log,
+      )
     }
     this.runReferenceMatchUseCase = new RunReferenceMatchUseCase(
       this.referenceRepository,

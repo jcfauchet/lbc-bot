@@ -41,6 +41,23 @@ describe('drouot-platform parsers (rossini fixtures)', () => {
     expect(parseCataloguePage(cataloguePage1, '999').lotUrls).toEqual([])
   })
 
+  it('accepts absolute lot links on any host, still only for the given sale', () => {
+    const html =
+      'Lots 1 à 3 sur 3 <a href="https://www.osenat.com/lot/5/1-a">a</a><a href="https://www.pba-auctions.com/lot/5/2-b">b</a>' +
+      '<a href="/lot/5/3-c">c</a><a href="https://www.osenat.com/lot/6/9-d">d</a>'
+    expect(parseCataloguePage(html, '5').lotUrls).toEqual(['/lot/5/1', '/lot/5/2', '/lot/5/3'])
+  })
+
+  it('reads the fees label from the lot result block only, not from page chrome', () => {
+    const chrome = '<nav>Résultats avec frais</nav>'
+    const withoutBlock = lotHtml.replace(/<div class="explicationResultats">[\s\S]*?<\/div>/, '')
+    expect(withoutBlock).not.toBe(lotHtml)
+    const withChrome = (html: string) => html.replace(/<body[^>]*>/, (tag) => tag + chrome)
+    expect(withChrome(withoutBlock)).toContain(chrome)
+    expect(parseLotPage(withChrome(withoutBlock))!.resultIncludesFees).toBeNull()
+    expect(parseLotPage(withChrome(lotHtml))!.resultIncludesFees).toBe(false)
+  })
+
   it('parses the lot page', () => {
     const lot = parseLotPage(lotHtml)!
     expect(lot).toMatchObject({
