@@ -17,6 +17,7 @@ export const HOUSE_SLUGS: Record<string, AuctionHouse> = {
   osenat: 'OSENAT',
   pba: 'PBA',
   'gros-delettrez': 'GROS_DELETTREZ',
+  ader: 'ADER',
   artcurial: 'ARTCURIAL',
 }
 

@@ -67,10 +67,8 @@ import { PrismaReferenceRepository } from '@/infrastructure/prisma/repositories/
 import { GeminiImageEmbeddingService } from '@/infrastructure/ai/Gemini/GeminiImageEmbeddingService'
 import { GeminiReferenceMatchVerifier } from '@/infrastructure/ai/Gemini/GeminiReferenceMatchVerifier'
 import { ArtcurialFetcher } from '@/infrastructure/artcurial/ArtcurialFetcher'
-import { ArtcurialAdapter } from '@/infrastructure/artcurial/ArtcurialAdapter'
-import { DrouotPlatformAdapter } from '@/infrastructure/drouot/DrouotPlatformAdapter'
-import { DROUOT_HOUSES } from '@/infrastructure/drouot/house-configs'
-import { AuctionIngester } from '@/infrastructure/auction/AuctionIngester'
+import { buildAuctionIngesters } from '@/infrastructure/di/auction-ingesters'
+import type { AuctionIngester } from '@/infrastructure/auction/AuctionIngester'
 import type { AuctionHouse } from '@/domain/auction-houses'
 import { RunReferenceMatchUseCase } from '@/application/use-cases/RunReferenceMatchUseCase'
 
@@ -118,8 +116,8 @@ export class Container {
   public readonly runFeedbackLearningUseCase: RunFeedbackLearningUseCase
   public readonly referenceRepository: PrismaReferenceRepository
   public readonly imageEmbeddingService: GeminiImageEmbeddingService
-  /** Houses whose ingester is wired; Osenat, PBA, Gros & Delettrez and Ader are not wired yet. */
-  public readonly auctionIngesters: Partial<Record<AuctionHouse, AuctionIngester>>
+  /** One ingester per auction house. */
+  public readonly auctionIngesters: Record<AuctionHouse, AuctionIngester>
   public readonly runReferenceMatchUseCase: RunReferenceMatchUseCase
 
   private constructor() {
@@ -165,19 +163,12 @@ export class Container {
 
     this.referenceRepository = new PrismaReferenceRepository(this.prisma)
     this.imageEmbeddingService = new GeminiImageEmbeddingService(geminiApiKey)
-    // One fetcher serves every house: per-URL timeout, one retry (after 5 s on 429), nothing house-specific.
-    const auctionFetcher = new ArtcurialFetcher()
-    this.auctionIngesters = {
-      ARTCURIAL: new AuctionIngester(new ArtcurialAdapter(auctionFetcher, console.log), this.referenceRepository, this.imageEmbeddingService, console.log),
-    }
-    for (const config of Object.values(DROUOT_HOUSES)) {
-      this.auctionIngesters[config.house] = new AuctionIngester(
-        new DrouotPlatformAdapter(config, auctionFetcher, console.log),
-        this.referenceRepository,
-        this.imageEmbeddingService,
-        console.log,
-      )
-    }
+    this.auctionIngesters = buildAuctionIngesters({
+      fetcher: new ArtcurialFetcher(),
+      repo: this.referenceRepository,
+      embedder: this.imageEmbeddingService,
+      log: console.log,
+    })
     this.runReferenceMatchUseCase = new RunReferenceMatchUseCase(
       this.referenceRepository,
       this.imageEmbeddingService,

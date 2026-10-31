@@ -14,6 +14,11 @@ function formatDate(date: Date): string {
 
 const toCents = (eur: number | null): number | null => (eur === null ? null : Math.round(eur * 100))
 
+/** Note line of a fee-inclusive result: the published price as published, then the derived hammer. */
+export function feeInclusivePriceLine(resultEur: number, hammerCents: number, houseLabel: string, saleTitle: string): string {
+  return `Résultat ${resultEur} € frais compris (≈ ${Math.round(hammerCents / 100)} € au marteau), ${houseLabel} ${saleTitle}`
+}
+
 /**
  * Null when the lot was not sold or the sale date is unknown (no sold-at date to record).
  * A fee-inclusive result is stored as finalCents and the hammer is derived with the house's
@@ -29,7 +34,7 @@ export function toAuctionReference(lot: DrouotLot, sale: DrouotSale, config: Dro
   const hammerCents = includesFees ? Math.round(shownCents / (1 + config.premiumRate)) : shownCents
   const quantity = Math.max(1, parseQuantity(lot.title))
   const priceLine = includesFees
-    ? `Résultat ${lot.resultEur} € frais compris (≈ ${Math.round(hammerCents / 100)} € au marteau), ${label} ${sale.title}`
+    ? feeInclusivePriceLine(lot.resultEur, hammerCents, label, sale.title)
     : `Adjugé ${lot.resultEur} € le ${formatDate(soldAt)}, ${label} ${sale.title}`
   const description = lot.description.slice(0, NOTE_DESCRIPTION_MAX)
   return {
