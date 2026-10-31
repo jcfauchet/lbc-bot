@@ -23,7 +23,7 @@ export interface DrouotHouseConfig {
  * Watch, jewellery, wine, book, coin, poster, fashion, car and toy sales. Word-bounded so
  * "mode" does not veto "Art Moderne" nor "vins" a "Provins" sale.
  */
-const UNWANTED_TITLE =
+export const UNWANTED_TITLE =
   /\b(?:montres?|horlogerie|bijoux|joaillerie|vins?|spiritueux|numismatique|monnaies|timbres|autographes|livres|affiches|photographies?|mode|maroquinerie|automobiles?|jouets)\b/i
 
 export type DrouotHouse = 'ROSSINI' | 'OSENAT' | 'PBA' | 'GROS_DELETTREZ'

@@ -1,3 +1,4 @@
+import { UNWANTED_TITLE } from '@/infrastructure/drouot/house-configs'
 import { isWantedSale } from '@/infrastructure/drouot/is-wanted-sale'
 
 export const ADER_CONFIG = {
@@ -9,6 +10,8 @@ export const ADER_CONFIG = {
   // Drafted from the 2025/2026 sale titles seen in the recon; the rollout dry run lists the kept
   // sales and the regex is corrected before the real ingest.
   wantedTitle: /xxe|design|arts? décoratifs|mobilier|objets? d.art|intérieur|verre|céramique/i,
+  /** Same veto as the Drouot houses: the 2026 dry run kept "Livres Online : … Design …" through "design". */
+  unwantedTitle: UNWANTED_TITLE,
 } as const
 
 /**

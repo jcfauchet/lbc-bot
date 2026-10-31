@@ -115,6 +115,7 @@ describe('Ader keep rule', () => {
   })
 
   it('drops a wanted sale under 5 lots', () => {
+    expect(isWantedAderSale({ title: 'Livres Online : Beaux-Arts, Photographie, Design, Bibliophilie...', totalLots: 282 })).toBe(false)
     expect(isWantedAderSale({ title: 'Côté XXᵉ', totalLots: 4 })).toBe(false)
     expect(isWantedAderSale({ title: 'Côté XXᵉ', totalLots: 5 })).toBe(true)
   })
