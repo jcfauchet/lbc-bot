@@ -47,6 +47,39 @@ Ader (ader-paris.fr):
 - `src/domain/auction-houses.ts` lists the six houses and labels; `container.auctionIngesters` is built from a `HOUSE_CONFIGS` table; the CLI `--house` accepts the new values; the cron iterates `Object.keys(container.auctionIngesters)`.
 - `IngestOptions.concurrency` default comes from the adapter's hint when the CLI flag is absent.
 
+## Builder questions, settled (my calls)
+
+- **Ader sale facts**: the sale page `/v/<id>-<slug>` carries the title, a date line
+  (`Vendredi 23 octobre 2026 à 11h00`, parsed with the existing French date parser),
+  the lot count (`360 lots`) and `?page=N` pagination; its id equals the CDN sale id
+  (`cdn.drouot.com/d/lot/fullHD/97/182231/…` on sale 182231). `saleRef` = that id,
+  `lotRef` = the `/l/<id>` number. Sales are listed from `sitemap-sales-past-<year>-fr-01.xml`;
+  the keep regex applies to the sale title read on the sale page. The lot page links
+  back to its sale (`href="/v/<id>-…"`): `fetchLot` throws when it differs.
+- **Fees label**: read per lot page. "Résultats avec frais" → `finalCents` = shown price,
+  hammer derived with the house rate; "Résultats sans frais" → hammer. A sold lot with
+  no label uses the house's configured default (`resultIncludesFees` in the config:
+  false for Rossini, true for the others), so a missing label never silently inflates
+  a hammer. Ader always shows `Frais de vente NN%`, used as the rate when present.
+- **What is shown**: matching and the ratio gate use `hammerCents` (unchanged). The
+  note shows the published price as published: `Adjugé N €` for hammer houses,
+  `Résultat N € frais compris (≈ M € au marteau)` for fee-inclusive ones. The email
+  already shows `hammerCents`; it adds "estimé" after the hammer when `finalCents`
+  is set and differs.
+- **429**: the shared fetcher retries once after 5 s on 429 (all houses; a 429 is
+  never permanent). Concurrency is lot-level only, as today; PBA's hint is 1.
+- **Cron**: houses in a fixed order, cheapest first (ROSSINI, OSENAT, PBA,
+  GROS_DELETTREZ, ADER, ARTCURIAL); budget split as today. The 2–45 day window keeps
+  the daily volume small; a house cut by the budget resumes next day through the
+  pre-fetch skip of stored lots.
+- **Keep regexes**: drafted per house in the config from the 2025/2026 titles seen
+  in the recon, then checked by a dry run per house during rollout (the dry run lists
+  kept sales; the regex is corrected before the real ingest). `isWantedSale` becomes
+  config-driven.
+- **CLI slugs**: `rossini`, `osenat`, `pba`, `gros-delettrez`, `ader`, `artcurial`.
+- **Photo host id**: taken from the `phare`/`fullHD` URLs whose sale id equals the
+  lot's sale; other ids on the page are ignored.
+
 ## Non-goals
 
 - Re-pricing existing Rossini rows or changing their photo URLs.
