@@ -82,6 +82,7 @@ describe('rossini parsers', () => {
     ).toBe(true)
     expect(isWantedSale({ title: 'Numismatique, Bijoux & Montres' })).toBe(false)
     expect(isWantedSale({ title: 'Affiches, Lithographies & Œuvres papier' })).toBe(false)
+    expect(isWantedSale({ title: 'Vente de Noël - Partie II : Vins & Spiritueux, Arts de la Table' })).toBe(false)
     expect(isWantedSale({ title: 'Art Moderne & Intérieurs contemporains' })).toBe(true)
     expect(isWantedSale({ title: 'Mobilier', totalLots: 3 })).toBe(false)
     expect(isWantedSale({ title: 'Mobilier', totalLots: 5 })).toBe(true)
