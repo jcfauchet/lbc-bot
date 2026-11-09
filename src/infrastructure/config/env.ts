@@ -1,5 +1,9 @@
-import 'dotenv/config'
+import dotenv from 'dotenv'
 import { z } from 'zod'
+
+// Same precedence as Next.js: .env.local wins over .env (dotenv never overrides already-set vars).
+dotenv.config({ path: '.env.local', quiet: true })
+dotenv.config({ quiet: true })
 
 export const envSchema = z.object({
   DATABASE_URL: z.string().url(),

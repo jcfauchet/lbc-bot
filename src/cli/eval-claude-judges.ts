@@ -17,8 +17,8 @@
  * - ranking: has Claude rank shuffled shortlists of voted listings and reports how many
  *   👍 land in its top picks against the shortlist base rate.
  *
- * Needs ANTHROPIC_API_KEY, plus GOOGLE_GEMINI_API_KEY for a Gemini replay (dotenv only
- * reads .env, so export keys kept in .env.local).
+ * Needs ANTHROPIC_API_KEY, plus GOOGLE_GEMINI_API_KEY for a Gemini replay (read from
+ * .env.local or .env).
  * Costs Opus calls: roughly $0.07 per comp/reference case, $0.20 per ranking shortlist.
  */
 import { writeFileSync } from 'node:fs'
