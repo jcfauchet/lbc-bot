@@ -3,6 +3,7 @@ import type { IImageEmbeddingService } from '@/domain/services/IImageEmbeddingSe
 import type { IReferenceMatchVerifier, ReferenceVerdict } from '@/domain/services/IReferenceMatchVerifier'
 import type { IMailer } from '@/infrastructure/mail/IMailer'
 import { EmailTemplates } from '@/infrastructure/mail/EmailTemplates'
+import { isCopy } from '@/domain/auction-match-scope'
 
 export interface ReferenceMatchConfig {
   /** Cosine similarity from which Gemini is asked to confirm; a keyword hit skips this gate. */
@@ -31,6 +32,8 @@ export interface ReferenceMatchConfig {
   auctionEnabled: boolean
   /** An auction lot is worth checking only when its per-unit hammer is at least the ad price times this. */
   auctionAlertRatio: number
+  /** Above this many times the ad price the lot is not checked: the ad is a lookalike, not the model. */
+  auctionMaxRatio: number
   /** Auction verifications per UTC day, across runs: the fund must not eat the Gemini budget. */
   auctionVerificationsPerDay: number
   /**
@@ -55,6 +58,8 @@ const REFERENCE_IMAGE_RETRY_BATCH = 20
 export const VERIFIER_LISTING_PHOTOS = 4
 /** Every reference photo is inlined in the vision call: an auction lot can carry a dozen. */
 const VERIFIER_REFERENCE_PHOTOS = 4
+/** Auction pairs are many and cheap to get wrong: two photos a side keep each call small. */
+export const AUCTION_VERIFIER_PHOTOS = 2
 
 /** A 4xx on the photo means the ad (or its image) is gone: retrying cannot help. */
 function isPermanentImageError(err: unknown): boolean {
@@ -211,15 +216,21 @@ export class RunReferenceMatchUseCase {
   /** False when the candidate was left unjudged because today's auction cap is spent. */
   private async judge(listing: ListingToCheck, candidate: ReferenceCandidate, budget: RunBudget, result: ReferenceMatchResult): Promise<boolean> {
     let verifier: IReferenceMatchVerifier
+    let listingPhotos = VERIFIER_LISTING_PHOTOS
+    let referencePhotos = VERIFIER_REFERENCE_PHOTOS
     if (candidate.source !== 'MANUAL') {
       // Never handed to the manual verifier: that one may call Claude.
       if (!candidate.auction) return true
+      if (isCopy(listing.title)) return true
       // Rounded to whole cents so a ratio like 1.1 cannot tip the boundary by a float error.
       const minHammerCents = Math.round(listing.priceCents * this.config.auctionAlertRatio)
-      if (minHammerCents > candidate.auction.hammerPerUnitCents) return true
+      const maxHammerCents = Math.round(listing.priceCents * this.config.auctionMaxRatio)
+      const hammer = candidate.auction.hammerPerUnitCents
+      if (hammer < minHammerCents || hammer > maxHammerCents) return true
       if (budget.auctionLeft <= 0) return false
       budget.auctionLeft--
       verifier = this.verifiers.auction
+      listingPhotos = referencePhotos = AUCTION_VERIFIER_PHOTOS
     } else {
       if (candidate.maxPriceCents !== null && listing.priceCents > candidate.maxPriceCents) return true
       verifier = this.verifiers.manual
@@ -229,9 +240,9 @@ export class RunReferenceMatchUseCase {
     let verdict: ReferenceVerdict
     try {
       verdict = await verifier.verify({
-        listingImageUrls: listing.images.slice(0, VERIFIER_LISTING_PHOTOS).map((i) => i.url),
+        listingImageUrls: listing.images.slice(0, listingPhotos).map((i) => i.url),
         listingTitle: listing.title,
-        referenceImageUrls: candidate.imageUrls.slice(0, VERIFIER_REFERENCE_PHOTOS),
+        referenceImageUrls: candidate.imageUrls.slice(0, referencePhotos),
         referenceName: candidate.name,
         referenceNote: candidate.note,
       })

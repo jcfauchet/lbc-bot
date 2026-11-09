@@ -11,6 +11,7 @@ describe('categoryOf', () => {
     ['Bronze animalier, épreuve à patine brune', 'SCULPTURE'],
     ['Ménagère en argent, 120 pièces', 'SILVER'],
     ['Edmond LACHENAL (1855-1930)', 'OTHER'],
+    ['CANAPÉ D’ÉPOQUE EMPIRE', 'FURNITURE'],
   ])('%s → %s', (title, category) => {
     expect(categoryOf(title)).toBe(category)
   })

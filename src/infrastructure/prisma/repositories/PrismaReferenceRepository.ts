@@ -4,7 +4,10 @@ import type {
   NewAuctionLot, NewPhotoReference, PendingAlert, PhotoReferenceSummary, RecordedMatch, ReferenceCandidate,
   ReferenceSource, AuctionLotQuery, AuctionLotListItem,
 } from '@/domain/repositories/IReferenceRepository'
-import { categorySqlConditions } from '@/domain/lot-category'
+import { categorySqlConditions, DESCRIPTION_HEAD } from '@/domain/lot-category'
+import { MATCHABLE_LOT_SQL } from '@/domain/auction-match-scope'
+
+const MATCHABLE_CATEGORY_PATTERN = MATCHABLE_LOT_SQL.categories.join('|')
 
 const toVector = (embedding: number[]) => `[${embedding.join(',')}]`
 
@@ -187,6 +190,10 @@ export class PrismaReferenceRepository implements IReferenceRepository {
       WHERE p."id" = ${listingId} AND r."isActive" AND r."source" <> 'MANUAL'
         AND NOT EXISTS (SELECT 1 FROM "reference_matches" m WHERE m."referenceId" = r."id" AND m."listingId" = p."id")
         AND (COALESCE(nn.sim, 0) >= ${gates.minSimilarity} OR (${KEYWORD_HIT_SQL} AND COALESCE(nn.sim, 0) >= ${gates.keywordMinSimilarity}))
+        -- Same scope as isMatchableLot.
+        AND (a."title" || ' ' || left(a."description", ${DESCRIPTION_HEAD})) ~* ${MATCHABLE_CATEGORY_PATTERN}
+        AND NOT (a."quantity" = 1 AND a."title" ~* ${MATCHABLE_LOT_SQL.collective})
+        AND a."title" !~* ${MATCHABLE_LOT_SQL.copy}
       ORDER BY "textHit" DESC, "similarity" DESC
       LIMIT ${gates.auctionLimit}
     `

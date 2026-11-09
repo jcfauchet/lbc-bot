@@ -66,7 +66,7 @@ function setup(opts: {
   const useCase = new RunReferenceMatchUseCase(repo as any, embedder, { manual: verifier, auction: auctionVerifier }, mailer, {
     minSimilarity: 0.78, widenSimilarity: 0.7, maxListingsPerRun: 60, backfillDays: 7, emailTo: ['her@example.com'], emailFrom: 'bot@example.com',
     maxRunMs: 120_000, maxVerificationsPerRun: 20, maxCandidatesPerListing: 3, maxBackfillPerReference: 15,
-    auctionEnabled: true, auctionAlertRatio: 1.5, auctionVerificationsPerDay: 300, auctionMinSimilarity: 0.78,
+    auctionEnabled: true, auctionAlertRatio: 1.5, auctionMaxRatio: 15, auctionVerificationsPerDay: 300, auctionMinSimilarity: 0.78,
     ...opts.config,
   }, opts.now)
   return { repo, embedder, verifier, auctionVerifier, mailer, useCase, recorded }
@@ -353,6 +353,42 @@ describe('RunReferenceMatchUseCase', () => {
       expect(verifier.verify).not.toHaveBeenCalled()
       expect(recorded).toEqual([{ referenceId: 'a1', listingId: 'l1', similarity: 0.8, confirmed: true, reason: 'same lot' }])
       expect(repo.markListingChecked).toHaveBeenCalledWith('l1')
+    })
+
+    it('skips an auction lot priced past the max ratio: the ad is a lookalike', async () => {
+      // 20 000 × 15 = 300 000 < 300 001
+      const { auctionVerifier, recorded, repo, useCase } = setup({
+        listings: [listing('l1', 20000)], candidates: { l1: [auctionCandidate('a1', 300001), auctionCandidate('a2', 300000)] },
+      })
+      await useCase.execute()
+      expect(auctionVerifier.verify).toHaveBeenCalledOnce()
+      expect(recorded.map((m) => m.referenceId)).toEqual(['a2'])
+      expect(repo.markListingChecked).toHaveBeenCalledWith('l1')
+    })
+
+    it('never checks auction lots for an ad selling a copy', async () => {
+      const copy = { ...listing('l1', 20000), title: 'Reproduction du célèbre ours Pompon' }
+      const { auctionVerifier, verifier, useCase } = setup({
+        listings: [copy], candidates: { l1: [auctionCandidate('a1', 60000), candidate('m1')] },
+      })
+      await useCase.execute()
+      expect(auctionVerifier.verify).not.toHaveBeenCalled()
+      expect(verifier.verify).toHaveBeenCalledOnce()
+    })
+
+    it('sends two photos a side for an auction lot, four for a manual reference', async () => {
+      const lot = auctionCandidate('a1', 60000, { imageUrls: ['r1', 'r2', 'r3', 'r4'] })
+      const mine = candidate('m1', { imageUrls: ['m1', 'm2', 'm3', 'm4'] })
+      const { auctionVerifier, verifier, useCase } = setup({
+        listings: [listing('l1', 20000, true, 4)], candidates: { l1: [lot, mine] },
+      })
+      await useCase.execute()
+      const auctionInput = auctionVerifier.verify.mock.calls[0][0]
+      expect(auctionInput.listingImageUrls).toHaveLength(2)
+      expect(auctionInput.referenceImageUrls).toEqual(['r1', 'r2'])
+      const manualInput = verifier.verify.mock.calls[0][0]
+      expect(manualInput.listingImageUrls).toHaveLength(4)
+      expect(manualInput.referenceImageUrls).toHaveLength(4)
     })
 
     it('verifies a Rossini lot with the auction verifier like any auction lot', async () => {

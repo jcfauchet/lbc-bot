@@ -28,7 +28,8 @@ export const LOT_CATEGORY_LABELS: Record<LotCategory, string> = {
 }
 
 const JS: Record<Exclude<LotCategory, 'OTHER'>, RegExp> = Object.fromEntries(
-  Object.entries(WORDS).map(([k, w]) => [k, new RegExp(`\\b(?:${w})\\b`, 'i')]),
+  // Letter-aware bounds, like PostgreSQL's \m \M: JS \b sees no word end after "canapé".
+  Object.entries(WORDS).map(([k, w]) => [k, new RegExp(`(?<![\\p{L}\\p{N}_])(?:${w})(?![\\p{L}\\p{N}_])`, 'iu')]),
 ) as Record<Exclude<LotCategory, 'OTHER'>, RegExp>
 
 /** Characters of the description read with the title: short titles ("Edmond LACHENAL (1855-1930)") name the object there. */

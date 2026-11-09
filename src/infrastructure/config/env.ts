@@ -111,10 +111,14 @@ export const envSchema = z.object({
   AUCTION_ALERT_RATIO: z.coerce.number().min(1).default(1.5),
   // Spike finding: with ~15k lots a 0.78 similarity yields about 1 candidate per ad, so verifier cost stays bounded.
   AUCTION_REFERENCES_ENABLED: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
-  // Eval of 30 Oct 2026 (500 ads vs one sale, scaled to ~15k lots): ~1 candidate per ad at 0.80, ~5 at 0.78.
-  AUCTION_MIN_SIMILARITY: z.coerce.number().min(0).max(1).default(0.8),
-  // ~720 ads/day and ~1 candidate per ad at 0.80: 800 a day covers them with margin (Gemini Flash, a few euros a day).
-  AUCTION_VERIFICATIONS_PER_DAY: z.coerce.number().int().min(0).default(800),
+  // Replaying the 1–9 Nov 2026 pairs under the matchable scope and price band:
+  // ~260 verifications/day at 0.80, ~107 at 0.82, ~38 at 0.84.
+  AUCTION_MIN_SIMILARITY: z.coerce.number().min(0).max(1).default(0.84),
+  // Lookalike guard: 1–9 Nov 2026 alerts at 57× to 1,600× the ad price were all wrong models.
+  AUCTION_MAX_RATIO: z.coerce.number().min(1).default(15),
+  // 800 a day cost several euros of Gemini a day for 12 useless alerts (1–9 Nov 2026);
+  // with the narrower scope 100 is a ceiling, not a target.
+  AUCTION_VERIFICATIONS_PER_DAY: z.coerce.number().int().min(0).default(100),
 }).transform((e) => ({
   ...e,
   LENS_DAILY_BUDGET: e.LENS_DAILY_BUDGET ?? (e.APIFY_TOKEN ? 24 : 8),
