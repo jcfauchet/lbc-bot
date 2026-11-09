@@ -30,7 +30,8 @@
     "funnel": "pnpm scrape && pnpm prefilter && pnpm triage && pnpm analyze",
     "test": "vitest --run",
     "test:live": "RUN_LIVE=1 vitest --run **/*.live.test.ts",
-    "test:ui": "vitest --ui"
+    "test:ui": "vitest --ui",
+    "eval:comp-tiers": "tsx src/cli/eval-comp-tiers.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.1.0",

@@ -8,7 +8,7 @@ vi.mock('./fetch-image', () => ({
   }),
 }))
 
-import { buildCompVerifyRequest, compCandidates, parseCompVerdicts } from './comp-verify-prompt'
+import { buildCompVerifyRequest, compCandidates, parseCompVerdicts, parseTieredCompVerdicts, weakerTier } from './comp-verify-prompt'
 
 const comp = (link: string, extra: Partial<CompMatch> = {}): CompMatch => ({ title: link, link, source: 'pamono', isValueDomain: true, ...extra })
 const layout = (parts: Awaited<ReturnType<typeof buildCompVerifyRequest>>) =>
@@ -60,5 +60,27 @@ describe('parseCompVerdicts', () => {
   it('confirms nothing on garbage, so a broken answer never inflates an estimate', () => {
     expect(parseCompVerdicts('no idea', 2)).toEqual([false, false])
     expect(parseCompVerdicts('{"confirmed": "all"}', 2)).toEqual([false, false])
+  })
+})
+
+describe('parseTieredCompVerdicts', () => {
+  it('reads one tier per candidate', () => {
+    expect(parseTieredCompVerdicts('{"same_model":[2],"same_line":[1],"resemblance":[4]}', 4))
+      .toEqual(['same_line', 'same_model', 'none', 'resemblance'])
+  })
+  it('keeps the best tier of a number listed twice', () => {
+    expect(parseTieredCompVerdicts('{"same_model":[1],"resemblance":[1]}', 1)).toEqual(['same_model'])
+  })
+  it('ignores out-of-range numbers and grades nothing on garbage', () => {
+    expect(parseTieredCompVerdicts('{"same_line":[0,3,1.5]}', 2)).toEqual(['none', 'none'])
+    expect(parseTieredCompVerdicts('no json', 2)).toEqual(['none', 'none'])
+  })
+})
+
+describe('weakerTier', () => {
+  it('keeps the tier both graders reach', () => {
+    expect(weakerTier('same_model', 'same_line')).toBe('same_line')
+    expect(weakerTier('resemblance', 'same_model')).toBe('resemblance')
+    expect(weakerTier('same_line', 'none')).toBe('none')
   })
 })
