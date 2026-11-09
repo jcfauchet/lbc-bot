@@ -45,6 +45,19 @@ describe('EmailTemplates.goodDealsDigest comp check badge', () => {
   }
   const candidate = (link: string, confirmed: boolean) => ({ title: 't', link, source: 'selency.fr', priceEur: 500, confirmed })
 
+  it('puts one "à vérifier" heading above the first deal with no confirmed comparable', () => {
+    const confirmed = withCheck({ confirmedCount: 1, candidates: [candidate('https://www.selency.fr/a', true)] })
+    const none = () => withCheck({ confirmedCount: 0, candidates: [candidate('https://www.pamono.fr/b', false)] })
+    const html = EmailTemplates.goodDealsDigest([confirmed, none(), none()])
+    expect(html.split('À vérifier').length - 1).toBe(1)
+    expect(html.indexOf('1 comparable confirmé')).toBeLessThan(html.indexOf('À vérifier'))
+  })
+
+  it('adds no heading when every deal has a confirmed comparable or was not checked', () => {
+    const html = EmailTemplates.goodDealsDigest([deal(), withCheck({ confirmedCount: 1, candidates: [candidate('https://www.selency.fr/a', true)] })])
+    expect(html).not.toContain('À vérifier')
+  })
+
   it('says how many comparables were confirmed and links them', () => {
     const html = EmailTemplates.goodDealsDigest([withCheck({
       confirmedCount: 2,

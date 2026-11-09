@@ -87,6 +87,9 @@ export class RunNotificationUseCase {
 
     listingsWithAnalysis.sort(
       (a, b) =>
+        // Votes 13 Oct–9 Nov 2026: 31% good with no comp confirmed vs 69% with one or more.
+        // Kept in the email (4 of 13 good deals had none) but listed last.
+        Number(a.analysis.hasNoConfirmedComp) - Number(b.analysis.hasNoConfirmedComp) ||
         computeDealScore({
           priceCents: b.listing.price.getCents(),
           estMinCents: b.analysis.estimatedMinPrice.getCents(),

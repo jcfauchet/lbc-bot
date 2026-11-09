@@ -59,9 +59,16 @@ export class EmailTemplates {
   static goodDealsDigest(
     listings: Array<{ listing: Listing; analysis: AiAnalysis; imageUrl?: string }>
   ): string {
+    // Callers list unconfirmed deals last; a heading marks where they start.
+    const firstUnconfirmed = listings.findIndex((item) => item.analysis.hasNoConfirmedComp)
     const listingRows = listings
-      .map((item) => {
+      .map((item, index) => {
         const { listing, analysis, imageUrl } = item
+        const heading = index === firstUnconfirmed
+          ? `<tr><td style="padding: 16px 20px 4px; background: #fffbeb; color: #b45309; font-weight: bold;">
+               ⚠️ À vérifier : aucun comparable confirmé visuellement
+             </td></tr>`
+          : ''
         const imageHtml = imageUrl
           ? `<div style="margin-bottom: 15px;">
               <a href="${listing.url}">
@@ -69,7 +76,7 @@ export class EmailTemplates {
               </a>
             </div>`
           : ''
-        return `
+        return `${heading}
           <tr style="border-bottom: 1px solid #eee;">
             <td style="padding: 20px;">
               ${imageHtml}

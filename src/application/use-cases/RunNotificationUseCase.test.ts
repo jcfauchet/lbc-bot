@@ -116,6 +116,25 @@ describe('RunNotificationUseCase', () => {
     expect(d.savedNotifications[0].listingId).toBe('reliable')
   })
 
+  it('lists a deal with no confirmed comparable after the others, whatever its score', async () => {
+    const unconfirmed = AiAnalysis.create({
+      listingId: 'reliable', estimatedMinPrice: Money.fromEuros(1000), estimatedMaxPrice: Money.fromEuros(1500),
+      margin: Money.fromEuros(900), description: 'd', confidence: 0.9, provider: 'serpapi', bestMatchSource: 'Selency',
+      compCheck: { confirmedCount: 0, candidates: [] },
+    })
+    // Without the check, 'reliable' (Selency) would rank above 'shaky' (1stdibs).
+    const d = deps([unconfirmed, analysis('shaky', 0.9, 1000, 1500, 'https://www.1stdibs.com/furniture/x')])
+    const useCase = new RunNotificationUseCase(
+      d.listingRepository, d.aiAnalysisRepository, d.notificationRepository,
+      d.mailer, ['to@x.fr'], 'from@x.fr', 60,
+    )
+
+    const res = await useCase.execute()
+
+    expect(res.sent).toBe(2)
+    expect(d.savedNotifications.map((n) => n.listingId)).toEqual(['shaky', 'reliable'])
+  })
+
   it('sends nothing when every deal is below the confidence threshold', async () => {
     const d = deps([analysis('shaky', 0.6)])
     const useCase = new RunNotificationUseCase(

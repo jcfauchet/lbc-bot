@@ -116,5 +116,10 @@ export class AiAnalysis {
   get compCheck(): CompCheck | undefined {
     return this.props.compCheck
   }
+
+  /** The visual check ran and confirmed none of the comparables. An unchecked analysis is not unconfirmed. */
+  get hasNoConfirmedComp(): boolean {
+    return this.props.compCheck?.confirmedCount === 0
+  }
 }
 
