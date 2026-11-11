@@ -52,11 +52,11 @@ export function renderCandidateList(candidates: RankingCandidate[]): string {
  * feedback. The lessons that nuance triage scoring apply just as well to breaking
  * ties between qualified candidates.
  */
-export function buildRankingPrompt(guidance?: string | null): string {
+export function buildRankingPrompt(guidance?: string | null, basePrompt = RANKING_PROMPT): string {
   const trimmed = guidance?.trim()
-  if (!trimmed) return RANKING_PROMPT
+  if (!trimmed) return basePrompt
   return [
-    RANKING_PROMPT,
+    basePrompt,
     '',
     'Lessons learned from past feedback (listings the user later judged worth it or not). Apply them when ranking:',
     trimmed.slice(0, MAX_GUIDANCE_CHARS),

@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import type { ISelectionRanker, RankingCandidate, RankedPick } from '@/domain/services/ISelectionRanker'
-import { buildRankingPrompt, parseRanking, renderCandidateList } from '../ranking-prompt'
+import { buildRankingPrompt, parseRanking, RANKING_PROMPT, renderCandidateList } from '../ranking-prompt'
 import { CLAUDE_JUDGE_MODEL, imageBlock, responseText } from './claude-message'
 import { claudeUsage, recordAiUsage } from '../ai-usage'
 
@@ -8,7 +8,7 @@ export class ClaudeSelectionRanker implements ISelectionRanker {
   readonly providerName = 'claude'
   private readonly client: Anthropic
 
-  constructor(apiKey: string, private readonly model = CLAUDE_JUDGE_MODEL) {
+  constructor(apiKey: string, private readonly model = CLAUDE_JUDGE_MODEL, private readonly basePrompt = RANKING_PROMPT) {
     this.client = new Anthropic({ apiKey })
   }
 
@@ -35,7 +35,7 @@ export class ClaudeSelectionRanker implements ISelectionRanker {
       output_config: { effort: 'medium' },
       messages: [{
         role: 'user',
-        content: [{ type: 'text', text: `${buildRankingPrompt(guidance)}\n\n${renderCandidateList(usable)}` }, ...imageParts],
+        content: [{ type: 'text', text: `${buildRankingPrompt(guidance, this.basePrompt)}\n\n${renderCandidateList(usable)}` }, ...imageParts],
       }],
     })
     recordAiUsage('ranking', this.model, claudeUsage(response.usage))
