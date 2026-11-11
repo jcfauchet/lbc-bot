@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import type { IReferenceMatchVerifier, ReferenceMatchInput, ReferenceVerdict } from '@/domain/services/IReferenceMatchVerifier'
 import { buildReferenceMatchPrompt, parseReferenceVerdict } from '../reference-match-prompt'
 import { CLAUDE_JUDGE_MODEL, imageBlock, responseText } from './claude-message'
+import { claudeUsage, recordAiUsage } from '../ai-usage'
 
 export class ClaudeReferenceMatchVerifier implements IReferenceMatchVerifier {
   private readonly client: Anthropic
@@ -26,6 +27,7 @@ export class ClaudeReferenceMatchVerifier implements IReferenceMatchVerifier {
       output_config: { effort: 'medium' },
       messages: [{ role: 'user', content: [{ type: 'text', text: prompt }, ...listingImages, ...referenceImages] }],
     })
+    recordAiUsage('reference_match', this.model, claudeUsage(response.usage))
     return parseReferenceVerdict(responseText(response, 'the reference match'))
   }
 }

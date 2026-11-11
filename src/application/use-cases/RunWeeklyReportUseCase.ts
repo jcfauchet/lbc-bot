@@ -24,6 +24,12 @@ export interface AppraisalRunRow {
   costUsd: number
 }
 
+export interface AiStageCost {
+  stage: string
+  calls: number
+  costUsd: number
+}
+
 export interface WeeklyReport {
   mails: number
   voted: number
@@ -36,6 +42,14 @@ export interface WeeklyReport {
   appraisalCostUsd: number
   /** Agent spend divided by emails sent, null without emails. */
   costPerMailUsd: number | null
+  /** Model spend of the other stages (triage, ranking, comp check…), costliest first. */
+  aiStages: AiStageCost[]
+  /** Agent plus the other stages. Lens searches and hosting are not in it. */
+  totalAiCostUsd: number
+  totalAiCostPerMailUsd: number | null
+  /** Total model spend divided by the emails voted good, null without one. */
+  aiCostPerGoodUsd: number | null
+  lensCalls: number
   scrapeAttempts: number
   scrapeBlocked: number
   /** The hours (Paris time) with the highest block rate, worst first, with at least one block. */
@@ -50,10 +64,17 @@ function median(values: number[]): number | null {
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
 }
 
-export function buildWeeklyReport(mails: ReportedMail[], appraisals: AppraisalRunRow[], scrapes: ScrapeAttemptRow[]): WeeklyReport {
+export function buildWeeklyReport(
+  mails: ReportedMail[],
+  appraisals: AppraisalRunRow[],
+  scrapes: ScrapeAttemptRow[],
+  aiStages: AiStageCost[] = [],
+  lensCalls = 0,
+): WeeklyReport {
   const voted = mails.filter((m) => m.isGood !== null)
   const good = voted.filter((m) => m.isGood).length
   const appraisalCostUsd = appraisals.reduce((sum, a) => sum + a.costUsd, 0)
+  const totalAiCostUsd = appraisalCostUsd + aiStages.reduce((sum, s) => sum + s.costUsd, 0)
 
   const byHour = new Map<number, { hour: number; attempts: number; blocked: number }>()
   for (const s of scrapes) {
@@ -73,6 +94,11 @@ export function buildWeeklyReport(mails: ReportedMail[], appraisals: AppraisalRu
     zeroCompAppraisals: appraisals.filter((a) => a.compCount === 0).length,
     appraisalCostUsd,
     costPerMailUsd: mails.length ? appraisalCostUsd / mails.length : null,
+    aiStages: [...aiStages].sort((a, b) => b.costUsd - a.costUsd),
+    totalAiCostUsd,
+    totalAiCostPerMailUsd: mails.length ? totalAiCostUsd / mails.length : null,
+    aiCostPerGoodUsd: good ? totalAiCostUsd / good : null,
+    lensCalls,
     scrapeAttempts: scrapes.length,
     scrapeBlocked: scrapes.filter((s) => s.blocked).length,
     worstScrapeHours: [...byHour.values()]
@@ -122,10 +148,18 @@ export class RunWeeklyReportUseCase {
              outcome = 'blocked' AS blocked
       FROM scrape_attempts WHERE "createdAt" >= ${since}`
 
+    const aiStages = await this.prisma.$queryRaw<Array<{ stage: string; calls: number; costUsd: number }>>`
+      SELECT "stage", SUM("calls")::int AS "calls", SUM("costUsd")::float AS "costUsd"
+      FROM "ai_usage" WHERE "day" >= ${since}::date GROUP BY "stage"`
+
+    const lensCalls = await this.prisma.lensCall.count({ where: { createdAt: { gte: since } } })
+
     const report = buildWeeklyReport(
       mails.map((m) => ({ ...m, delayHours: m.delayHours === null ? null : Number(m.delayHours) })),
       appraisals,
       scrapes,
+      aiStages,
+      lensCalls,
     )
 
     if (this.to.length > 0) {

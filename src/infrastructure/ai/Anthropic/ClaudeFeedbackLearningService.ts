@@ -3,6 +3,7 @@ import type { IFeedbackLearningService } from '@/domain/services/IFeedbackLearni
 import type { FeedbackDigestItem } from '@/domain/repositories/IFeedbackRepository'
 import { buildDistilRequest } from '../feedback-distil-prompt'
 import { CLAUDE_JUDGE_MODEL, responseText } from './claude-message'
+import { claudeUsage, recordAiUsage } from '../ai-usage'
 
 export class ClaudeFeedbackLearningService implements IFeedbackLearningService {
   private readonly client: Anthropic
@@ -21,6 +22,7 @@ export class ClaudeFeedbackLearningService implements IFeedbackLearningService {
       output_config: { effort: 'medium' },
       messages: [{ role: 'user', content: request }],
     })
+    recordAiUsage('feedback_learning', this.model, claudeUsage(response.usage))
     return responseText(response, 'the feedback distillation').trim()
   }
 }

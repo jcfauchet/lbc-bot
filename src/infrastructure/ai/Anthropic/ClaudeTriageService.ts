@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import type { ITriageService, TriageInput, TriageResult } from '@/domain/services/ITriageService'
 import { buildTriagePrompt, parseTriageScore, renderListingContext } from '../triage-prompt'
 import { imageBlock, responseText } from './claude-message'
+import { claudeUsage, recordAiUsage } from '../ai-usage'
 
 export interface ClaudeTriageOptions {
   model?: string
@@ -36,6 +37,7 @@ export class ClaudeTriageService implements ITriageService {
         ],
       }],
     })
+    recordAiUsage('triage', this.model, claudeUsage(response.usage))
     return parseTriageScore(responseText(response, `triage for "${input.title}"`))
   }
 }

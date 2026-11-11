@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import type { ISelectionRanker, RankingCandidate, RankedPick } from '@/domain/services/ISelectionRanker'
 import { buildRankingPrompt, parseRanking, renderCandidateList } from '../ranking-prompt'
 import { CLAUDE_JUDGE_MODEL, imageBlock, responseText } from './claude-message'
+import { claudeUsage, recordAiUsage } from '../ai-usage'
 
 export class ClaudeSelectionRanker implements ISelectionRanker {
   readonly providerName = 'claude'
@@ -37,6 +38,7 @@ export class ClaudeSelectionRanker implements ISelectionRanker {
         content: [{ type: 'text', text: `${buildRankingPrompt(guidance)}\n\n${renderCandidateList(usable)}` }, ...imageParts],
       }],
     })
+    recordAiUsage('ranking', this.model, claudeUsage(response.usage))
 
     const picks = parseRanking(responseText(response, 'the ranking'), usable)
     if (picks === null) throw new Error('Ranking response could not be parsed')

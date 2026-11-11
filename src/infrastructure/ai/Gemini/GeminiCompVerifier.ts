@@ -2,6 +2,7 @@ import { GoogleGenAI } from '@google/genai'
 import type { CompMatch } from '@/domain/services/ICompService'
 import type { CompVerifyInput, ICompVerifier } from '@/domain/services/ICompVerifier'
 import { buildCompVerifyRequest, compCandidates, parseCompVerdicts } from '../comp-verify-prompt'
+import { geminiUsage, recordAiUsage } from '../ai-usage'
 
 /**
  * Looks at the ad photos next to each comparable's photos and keeps only the
@@ -25,6 +26,7 @@ export class GeminiCompVerifier implements ICompVerifier {
       model: this.model,
       contents: parts.map((p) => ('text' in p ? { text: p.text } : { inlineData: p.image })),
     })
+    recordAiUsage('comp_check', this.model, geminiUsage(response.usageMetadata))
     const flags = parseCompVerdicts(response.text ?? '', candidates.length)
     return candidates.filter((_, i) => flags[i])
   }

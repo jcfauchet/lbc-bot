@@ -1,4 +1,5 @@
 import OpenAI from 'openai'
+import { recordAiUsage } from './ai-usage'
 
 export class EmbeddingService {
   private client: OpenAI
@@ -12,6 +13,7 @@ export class EmbeddingService {
       model: 'text-embedding-3-small',
       input: text,
     })
+    recordAiUsage('text_embedding', 'text-embedding-3-small', { inputTokens: response.usage?.prompt_tokens ?? 0 })
     return response.data[0].embedding
   }
 }

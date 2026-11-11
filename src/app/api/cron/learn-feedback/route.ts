@@ -16,6 +16,7 @@ export async function GET(request: Request) {
     logInfo('CRON:learn-feedback', 'Starting feedback learning job')
 
     const result = await container.runFeedbackLearningUseCase.execute()
+    await container.aiUsage.flush()
 
     logInfo(
       'CRON:learn-feedback',

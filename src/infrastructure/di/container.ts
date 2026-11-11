@@ -10,6 +10,8 @@ import { PrismaNotificationRepository } from '@/infrastructure/prisma/repositori
 import { PrismaFeedbackRepository } from '@/infrastructure/prisma/repositories/PrismaFeedbackRepository'
 import { PrismaTriageGuidanceRepository } from '@/infrastructure/prisma/repositories/PrismaTriageGuidanceRepository'
 import { EmbeddingService } from '@/infrastructure/ai/EmbeddingService'
+import { setAiUsageSink } from '@/infrastructure/ai/ai-usage'
+import { AiUsageBuffer } from '@/infrastructure/ai/AiUsageBuffer'
 import { GeminiFeedbackLearningService } from '@/infrastructure/ai/Gemini/GeminiFeedbackLearningService'
 
 import { LeBonCoinListingScraper } from '@/infrastructure/scraping/listings/LeBonCoinListingScraper'
@@ -120,6 +122,9 @@ export class Container {
   public readonly auctionIngesters: Record<AuctionHouse, AuctionIngester>
   public readonly runReferenceMatchUseCase: RunReferenceMatchUseCase
 
+  /** AI spend waiting to be written; cron routes flush it when a job ends. */
+  public readonly aiUsage: AiUsageBuffer
+
   private constructor() {
     const openAiApiKey = env.OPENAI_API_KEY ?? 'missing-openai-api-key'
     const geminiApiKey = env.GOOGLE_GEMINI_API_KEY ?? 'missing-google-gemini-api-key'
@@ -132,6 +137,20 @@ export class Container {
       anthropicApiKey ? withFallback(claude(anthropicApiKey), gemini, label) : gemini
 
     this.prisma = prisma
+
+    this.aiUsage = new AiUsageBuffer(async (rows) => {
+      for (const r of rows) {
+        await this.prisma.$executeRaw`
+          INSERT INTO "ai_usage" ("day", "stage", "model", "calls", "inputTokens", "outputTokens", "costUsd")
+          VALUES (CURRENT_DATE, ${r.stage}, ${r.model}, ${r.calls}, ${r.inputTokens}, ${r.outputTokens}, ${r.costUsd})
+          ON CONFLICT ("day", "stage", "model") DO UPDATE SET
+            "calls" = "ai_usage"."calls" + EXCLUDED."calls",
+            "inputTokens" = "ai_usage"."inputTokens" + EXCLUDED."inputTokens",
+            "outputTokens" = "ai_usage"."outputTokens" + EXCLUDED."outputTokens",
+            "costUsd" = "ai_usage"."costUsd" + EXCLUDED."costUsd"`
+      }
+    })
+    setAiUsageSink((event) => this.aiUsage.add(event))
 
     this.listingRepository = new PrismaLbcProductListingRepository(this.prisma)
     this.searchRepository = new PrismaSearchRepository(this.prisma)
@@ -346,6 +365,7 @@ export class Container {
 
   async cleanup(): Promise<void> {
     await this.scraper.close()
+    await this.aiUsage.flush()
     await this.prisma.$disconnect()
   }
 }

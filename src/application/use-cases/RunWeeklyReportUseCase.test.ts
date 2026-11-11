@@ -29,6 +29,28 @@ describe('buildWeeklyReport', () => {
     expect(report.costPerMailUsd).toBeCloseTo(0.2)
   })
 
+  it('adds every stage to the agent spend and divides it by mails and by good votes', () => {
+    const report = buildWeeklyReport(
+      [mail('a', true), mail('b', false), mail('c', null), mail('d', null)],
+      [{ compCount: 2, costUsd: 1 }],
+      [],
+      [{ stage: 'triage', calls: 500, costUsd: 0.5 }, { stage: 'ranking', calls: 40, costUsd: 2.5 }],
+      30,
+    )
+
+    expect(report.aiStages.map((s) => s.stage)).toEqual(['ranking', 'triage'])
+    expect(report.totalAiCostUsd).toBeCloseTo(4)
+    expect(report.totalAiCostPerMailUsd).toBeCloseTo(1)
+    expect(report.aiCostPerGoodUsd).toBeCloseTo(4)
+    expect(report.lensCalls).toBe(30)
+  })
+
+  it('leaves the cost per good vote empty when nothing was voted good', () => {
+    const report = buildWeeklyReport([mail('a', false)], [], [], [{ stage: 'triage', calls: 1, costUsd: 0.5 }])
+
+    expect(report.aiCostPerGoodUsd).toBeNull()
+  })
+
   it('ranks the scrape hours by block rate, leaving out hours never blocked', () => {
     const report = buildWeeklyReport([], [], [
       { hour: 9, blocked: true }, { hour: 9, blocked: false },

@@ -6,6 +6,7 @@ import {
   TIERED_COMP_VERIFY_INSTRUCTIONS, type CompTier,
 } from '../comp-verify-prompt'
 import { CLAUDE_JUDGE_MODEL, responseText } from './claude-message'
+import { claudeUsage, recordAiUsage } from '../ai-usage'
 
 type ImageMediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
 
@@ -45,6 +46,7 @@ export class ClaudeCompVerifier implements ICompVerifier {
           : { type: 'image', source: { type: 'base64', media_type: p.image.mimeType as ImageMediaType, data: p.image.data } })),
       }],
     })
+    recordAiUsage('comp_check', this.model, claudeUsage(response.usage))
     return responseText(response, 'the comp check')
   }
 }

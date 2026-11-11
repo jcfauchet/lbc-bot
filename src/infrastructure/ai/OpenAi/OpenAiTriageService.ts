@@ -1,4 +1,5 @@
 import OpenAI from 'openai'
+import { recordAiUsage } from '../ai-usage'
 import type { ITriageService, TriageInput, TriageResult } from '@/domain/services/ITriageService'
 import { buildTriagePrompt, parseTriageScore, renderListingContext } from '../triage-prompt'
 
@@ -23,6 +24,7 @@ export class OpenAiTriageService implements ITriageService {
         ],
       }],
     })
+    recordAiUsage('triage', this.model, { inputTokens: completion.usage?.prompt_tokens ?? 0, outputTokens: completion.usage?.completion_tokens ?? 0 })
     return parseTriageScore(completion.choices[0]?.message?.content ?? '')
   }
 }

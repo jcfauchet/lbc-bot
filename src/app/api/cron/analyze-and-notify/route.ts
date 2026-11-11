@@ -19,6 +19,8 @@ async function runStage<T>(name: string, fn: () => Promise<T>): Promise<T | { er
   } catch (err) {
     logError(`CRON:analyze:${name}`, err)
     return { error: err instanceof Error ? err.message : 'unknown error' }
+  } finally {
+    await container.aiUsage.flush()
   }
 }
 

@@ -1,5 +1,6 @@
 import type { IImageEmbeddingService } from '@/domain/services/IImageEmbeddingService'
 import { fetchImage, IMAGE_FETCH_TIMEOUT_MS } from '../fetch-image'
+import { recordAiUsage } from '../ai-usage'
 
 export const IMAGE_EMBEDDING_DIMENSIONS = 768
 
@@ -33,6 +34,7 @@ export class GeminiImageEmbeddingService implements IImageEmbeddingService {
     if (!response.ok || !json.embedding?.values) {
       throw new Error(`Gemini embedContent ${response.status}: ${json.error?.message ?? 'no embedding returned'}`)
     }
+    recordAiUsage('image_embedding', this.model, { images: 1 })
     return json.embedding.values
   }
 }

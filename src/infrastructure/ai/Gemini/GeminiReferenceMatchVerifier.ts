@@ -2,6 +2,7 @@ import { GoogleGenAI } from '@google/genai'
 import type { IReferenceMatchVerifier, ReferenceMatchInput, ReferenceVerdict } from '@/domain/services/IReferenceMatchVerifier'
 import { buildReferenceMatchPrompt, parseReferenceVerdict } from '../reference-match-prompt'
 import { fetchImage } from '../fetch-image'
+import { geminiUsage, recordAiUsage } from '../ai-usage'
 
 async function toInlinePart(url: string) {
   return { inlineData: await fetchImage(url) }
@@ -28,6 +29,7 @@ export class GeminiReferenceMatchVerifier implements IReferenceMatchVerifier {
       model: this.model,
       contents: [{ text: prompt }, ...listingParts, ...referenceParts],
     })
+    recordAiUsage('reference_match', this.model, geminiUsage(response.usageMetadata))
     return parseReferenceVerdict(response.text ?? '')
   }
 }

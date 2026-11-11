@@ -1,6 +1,7 @@
 import { GoogleGenAI } from '@google/genai'
 import type { ISelectionRanker, RankingCandidate, RankedPick } from '@/domain/services/ISelectionRanker'
 import { buildRankingPrompt, parseRanking, renderCandidateList } from '../ranking-prompt'
+import { geminiUsage, recordAiUsage } from '../ai-usage'
 
 export class GeminiSelectionRanker implements ISelectionRanker {
   readonly providerName = 'gemini'
@@ -40,6 +41,7 @@ export class GeminiSelectionRanker implements ISelectionRanker {
         ...imageParts,
       ],
     })
+    recordAiUsage('ranking', this.model, geminiUsage(response.usageMetadata))
 
     const picks = parseRanking(response.text ?? '', usable)
     // Unparseable output is a broken call, not an abstention. Throwing lets the use

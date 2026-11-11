@@ -6,6 +6,17 @@ import { houseLabel } from '@/domain/auction-houses'
 import { referencesPageUrl } from './references-link'
 import type { WeeklyReport } from '@/application/use-cases/RunWeeklyReportUseCase'
 
+/** French labels of the funnel stages in the weekly report. */
+const AI_STAGE_LABELS: Record<string, string> = {
+  triage: 'du tri',
+  ranking: 'du classement',
+  comp_check: 'de la vérification des comparables',
+  reference_match: 'des références et enchères',
+  image_embedding: 'des empreintes de photos',
+  text_embedding: 'des empreintes de texte',
+  feedback_learning: 'de l\'apprentissage des votes',
+}
+
 /** Scraped and model-written text goes into the HTML as text, never as markup. */
 function escapeHtml(text: string): string {
   return text
@@ -317,6 +328,11 @@ export class EmailTemplates {
     ${row('… sans aucun comparable', `${report.zeroCompAppraisals} (${pct(report.zeroCompAppraisals, report.appraisals)})`)}
     ${row('Coût de l\'agent', usd(report.appraisalCostUsd))}
     ${row('Coût de l\'agent par mail', usd(report.costPerMailUsd))}
+    ${report.aiStages.map((s) => row(`Coût ${AI_STAGE_LABELS[s.stage] ?? s.stage} (${s.calls} appels)`, usd(s.costUsd))).join('')}
+    ${row('Coût IA total', usd(report.totalAiCostUsd))}
+    ${row('Coût IA par mail', usd(report.totalAiCostPerMailUsd))}
+    ${row('Coût IA par 👍', usd(report.aiCostPerGoodUsd))}
+    ${row('Recherches Lens (non comptées dans le coût)', String(report.lensCalls))}
     ${row('Recherches Leboncoin bloquées', `${report.scrapeBlocked}/${report.scrapeAttempts} (${pct(report.scrapeBlocked, report.scrapeAttempts)})`)}
     ${worstHours ? row('Heures les plus bloquées', worstHours) : ''}
   </table>

@@ -136,6 +136,20 @@ model ScrapeAttempt {
   @@map("scrape_attempts")
 }
 
+/// AI spend per day, funnel stage and model; the appraisal agent is in appraisal_runs.
+model AiUsage {
+  day          DateTime @db.Date
+  stage        String
+  model        String
+  calls        Int      @default(0)
+  inputTokens  BigInt   @default(0)
+  outputTokens BigInt   @default(0)
+  costUsd      Float    @default(0)
+
+  @@id([day, stage, model])
+  @@map("ai_usage")
+}
+
 /// One row per appraisal agent run, including the ones that found no comparable.
 model AppraisalRun {
   id        String   @id @default(cuid())

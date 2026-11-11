@@ -1,6 +1,7 @@
 import { GoogleGenAI } from '@google/genai'
 import type { ITriageService, TriageInput, TriageResult } from '@/domain/services/ITriageService'
 import { buildTriagePrompt, parseTriageScore, renderListingContext } from '../triage-prompt'
+import { geminiUsage, recordAiUsage } from '../ai-usage'
 
 export interface GeminiTriageOptions {
   model?: string
@@ -36,6 +37,7 @@ export class GeminiTriageService implements ITriageService {
       ],
       ...(this.thinkingBudget === undefined ? {} : { config: { thinkingConfig: { thinkingBudget: this.thinkingBudget } } }),
     })
+    recordAiUsage('triage', this.model, geminiUsage(response.usageMetadata))
     return parseTriageScore(response.text ?? '')
   }
 }
