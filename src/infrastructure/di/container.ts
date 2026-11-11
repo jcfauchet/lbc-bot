@@ -298,6 +298,8 @@ export class Container {
       0.8,
       // Gate emails on a conservative (worst-case) margin, in cents.
       env.MIN_CONSERVATIVE_MARGIN_IN_EUR * 100,
+      undefined,
+      env.NOTIFY_MAX_ANALYSIS_AGE_HOURS,
     )
 
     this.runCleanupUseCase = new RunCleanupUseCase(

@@ -22,7 +22,11 @@ export const envSchema = z.object({
   CLOUDINARY_CLOUD_NAME: z.string().optional(),
   CLOUDINARY_API_KEY: z.string().optional(),
   CLOUDINARY_API_SECRET: z.string().optional(),
+  // Votes through Nov 2026: 37% good at 100–199 € of margin (43/117) vs 21% at
+  // 400 € and more (36/174). A big predicted margin mostly signals a wrong estimate.
   MIN_MARGIN_IN_EUR: z.coerce.number().min(50).default(100),
+  // Analyses older than this are never emailed.
+  NOTIFY_MAX_ANALYSIS_AGE_HOURS: z.coerce.number().positive().default(72),
   // Worst-case-still-profitable floor: emails require (estMin − price) ≥ this.
   // Lower than MIN_MARGIN_IN_EUR because it is measured at the low end of the
   // estimate band. 0 disables the gate.

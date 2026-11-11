@@ -41,14 +41,18 @@ export class RunNotificationUseCase {
     // An estimate band wider than this max/min ratio is noise, not an estimate.
     // Backtest over 240 human judgements: good finds average a 1.71x band, bad
     // finds 4.39x. See src/domain/services/DealScoring.ts.
-    private maxRangeRatio: number = DEFAULT_MAX_RANGE_RATIO
+    private maxRangeRatio: number = DEFAULT_MAX_RANGE_RATIO,
+    // Analyses older than this are never emailed: the ad is likely sold, and a
+    // lower margin floor must not release the whole backlog (June 2026: 642 emails).
+    private maxAnalysisAgeHours: number = 72,
   ) {}
 
   async execute(): Promise<{ sent: number; errors: number }> {
     // One query returns exactly what the digest needs: analyses above the
     // margin floor, never notified, with their listing and thumbnail attached.
     const deals = await this.aiAnalysisRepository.findNotifiableByMinMargin(
-      this.minMargin
+      this.minMargin,
+      new Date(Date.now() - this.maxAnalysisAgeHours * 3_600_000),
     )
 
     const listingsWithAnalysis: NotifiableDeal[] = deals.filter(

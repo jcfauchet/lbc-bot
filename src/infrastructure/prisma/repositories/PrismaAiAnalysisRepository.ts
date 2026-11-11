@@ -51,10 +51,11 @@ export class PrismaAiAnalysisRepository implements IAiAnalysisRepository {
     return analyses.map((a) => this.toDomain(a))
   }
 
-  async findNotifiableByMinMargin(minMargin: number): Promise<NotifiableDeal[]> {
+  async findNotifiableByMinMargin(minMargin: number, since: Date): Promise<NotifiableDeal[]> {
     const rows = await this.prisma.aiAnalysis.findMany({
       where: {
         marginCents: { gte: minMargin * 100 },
+        createdAt: { gte: since },
         listing: {
           notifications: { none: { status: NotificationStatus.SENT } },
         },

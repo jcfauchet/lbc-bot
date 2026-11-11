@@ -135,6 +135,22 @@ describe('RunNotificationUseCase', () => {
     expect(d.savedNotifications.map((n) => n.listingId)).toEqual(['shaky', 'reliable'])
   })
 
+  it('asks only for analyses younger than the age limit', async () => {
+    const d = deps([analysis('reliable', 0.9)])
+    const useCase = new RunNotificationUseCase(
+      d.listingRepository, d.aiAnalysisRepository, d.notificationRepository,
+      d.mailer, ['to@x.fr'], 'from@x.fr', 100, 0.8, 0, undefined, 72,
+    )
+    const before = Date.now()
+
+    await useCase.execute()
+
+    const [minMargin, since] = d.aiAnalysisRepository.findNotifiableByMinMargin.mock.calls[0]
+    expect(minMargin).toBe(100)
+    expect(before - since.getTime()).toBeGreaterThanOrEqual(72 * 3_600_000 - 1000)
+    expect(before - since.getTime()).toBeLessThanOrEqual(72 * 3_600_000 + 1000)
+  })
+
   it('sends nothing when every deal is below the confidence threshold', async () => {
     const d = deps([analysis('shaky', 0.6)])
     const useCase = new RunNotificationUseCase(
